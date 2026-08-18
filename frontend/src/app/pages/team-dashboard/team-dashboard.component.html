@@ -1,0 +1,149 @@
+<ng-container *ngIf="loading">
+  <p class="muted">Chargement…</p>
+</ng-container>
+
+<ng-container *ngIf="!loading && loadError">
+  <div class="alert alert-error">{{ loadError }}</div>
+</ng-container>
+
+<ng-container *ngIf="!loading && !loadError && tournament && !myTeam">
+  <div class="alert alert-error">Équipe introuvable dans ce tournoi. Vérifiez le lien.</div>
+</ng-container>
+
+<ng-container *ngIf="!loading && !loadError && tournament && myTeam as team">
+  <p class="muted">
+    <a [routerLink]="['/tournaments', tournamentId]">← Voir le tableau des scores complet</a>
+  </p>
+
+  <div class="alert alert-error" *ngIf="actionError">{{ actionError }}</div>
+
+  <section class="card">
+    <h1>{{ team.name }}</h1>
+    <form (ngSubmit)="saveProfile()">
+      <div class="field">
+        <label for="edit-name">Nom de l'équipe</label>
+        <input id="edit-name" name="editName" [(ngModel)]="editName" required />
+      </div>
+      <div class="field">
+        <label for="edit-coach">Nom du coach</label>
+        <input id="edit-coach" name="editCoach" [(ngModel)]="editCoachName" required />
+      </div>
+      <div class="field">
+        <label for="edit-race">Race</label>
+        <select id="edit-race" name="editRace" [(ngModel)]="editRace" required>
+          <option *ngFor="let r of races" [value]="r">{{ r }}</option>
+        </select>
+      </div>
+      <button type="submit" class="btn" [disabled]="savingProfile">
+        {{ savingProfile ? 'Enregistrement…' : 'Enregistrer' }}
+      </button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Défier un adversaire</h2>
+    <div class="field" *ngIf="otherTeams.length > 0">
+      <label for="opponent">Adversaire</label>
+      <select id="opponent" name="opponent" [(ngModel)]="challengeOpponentId">
+        <option value="" disabled selected>Choisir une équipe</option>
+        <option *ngFor="let o of otherTeams" [value]="o.id">{{ o.name }} ({{ o.coachName }})</option>
+      </select>
+    </div>
+    <p class="muted" *ngIf="otherTeams.length === 0">Aucune autre équipe inscrite pour le moment.</p>
+    <button type="button" class="btn btn-primary" [disabled]="actionBusy || !challengeOpponentId" (click)="sendChallenge()">
+      Défier
+    </button>
+  </section>
+
+  <section class="card">
+    <h2>Mes défis ({{ myChallenges.length }})</h2>
+
+    <p class="muted" *ngIf="myChallenges.length === 0">Aucun défi pour l'instant.</p>
+
+    <div class="challenge" *ngFor="let c of myChallenges">
+      <div class="challenge-head">
+        <strong>vs {{ teamName(opponentId(c)) }}</strong>
+        <span class="badge" [ngClass]="'badge-' + c.status">{{ c.status }}</span>
+      </div>
+
+      <ng-container [ngSwitch]="c.status">
+        <div class="actions" *ngSwitchCase="'pending'">
+          <ng-container *ngIf="!isChallenger(c)">
+            <button type="button" class="btn btn-primary" [disabled]="actionBusy" (click)="respond(c.id, 'accept')">
+              Accepter
+            </button>
+            <button type="button" class="btn btn-danger" [disabled]="actionBusy" (click)="respond(c.id, 'decline')">
+              Refuser
+            </button>
+          </ng-container>
+          <ng-container *ngIf="isChallenger(c)">
+            <span class="muted">En attente de réponse de l'adversaire</span>
+            <button type="button" class="btn" [disabled]="actionBusy" (click)="respond(c.id, 'cancel')">
+              Annuler le défi
+            </button>
+          </ng-container>
+        </div>
+
+        <div *ngSwitchCase="'accepted'">
+          <p class="muted">Match accepté, prêt à être joué.</p>
+          <button type="button" class="btn btn-primary" (click)="toggleResultForm(c.id)">
+            {{ editingResultChallengeId === c.id ? 'Fermer' : 'Remplir la feuille de match' }}
+          </button>
+          <app-match-result-form
+            *ngIf="editingResultChallengeId === c.id"
+            [team1Id]="c.team1Id"
+            [team2Id]="c.team2Id"
+            [team1Name]="teamName(c.team1Id)"
+            [team2Name]="teamName(c.team2Id)"
+            [busy]="actionBusy"
+            (submitResult)="submitResult(c.id, $event)"
+          ></app-match-result-form>
+        </div>
+
+        <div *ngSwitchCase="'awaiting_confirmation'">
+          <p *ngIf="c.result">
+            Score soumis par {{ teamName(c.result.submittedByTeamId) }} :
+            <strong>{{ c.result.team1Td }} - {{ c.result.team2Td }}</strong>
+            (casualties {{ c.result.team1Cas }} - {{ c.result.team2Cas }})
+          </p>
+
+          <div class="actions" *ngIf="iSubmittedLast(c)">
+            <span class="muted">En attente de confirmation de {{ teamName(opponentId(c)) }}</span>
+          </div>
+          <div class="actions" *ngIf="!iSubmittedLast(c)">
+            <button type="button" class="btn btn-primary" [disabled]="actionBusy" (click)="confirmResult(c.id)">
+              Confirmer ce score
+            </button>
+          </div>
+
+          <button type="button" class="btn" (click)="toggleResultForm(c.id)">
+            {{ editingResultChallengeId === c.id ? 'Fermer' : 'Proposer une correction' }}
+          </button>
+          <app-match-result-form
+            *ngIf="editingResultChallengeId === c.id"
+            [team1Id]="c.team1Id"
+            [team2Id]="c.team2Id"
+            [team1Name]="teamName(c.team1Id)"
+            [team2Name]="teamName(c.team2Id)"
+            [initial]="c.result"
+            submitLabel="Envoyer la correction"
+            [busy]="actionBusy"
+            (submitResult)="submitResult(c.id, $event)"
+          ></app-match-result-form>
+        </div>
+
+        <div *ngSwitchCase="'completed'">
+          <p *ngIf="c.result">
+            Résultat final : <strong>{{ c.result.team1Td }} - {{ c.result.team2Td }}</strong>
+            (casualties {{ c.result.team1Cas }} - {{ c.result.team2Cas }})
+          </p>
+          <p class="muted" *ngIf="c.result">
+            Points gagnés : {{ c.team1Id === teamId ? c.result.team1Points : c.result.team2Points }}
+          </p>
+        </div>
+
+        <p class="muted" *ngSwitchDefault>Ce défi est {{ c.status }}.</p>
+      </ng-container>
+    </div>
+  </section>
+</ng-container>

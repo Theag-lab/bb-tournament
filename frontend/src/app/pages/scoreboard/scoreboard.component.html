@@ -1,0 +1,146 @@
+<ng-container *ngIf="loading">
+  <p class="muted">Chargement…</p>
+</ng-container>
+
+<ng-container *ngIf="!loading && error">
+  <div class="alert alert-error">{{ error }}</div>
+</ng-container>
+
+<ng-container *ngIf="!loading && tournament as t">
+  <section class="card">
+    <h1>{{ t.name }}</h1>
+    <div class="link-copy">
+      <button type="button" class="btn" (click)="copyShareLink()">
+        {{ shareCopied ? 'Lien copié !' : 'Copier le lien de ce tableau' }}
+      </button>
+      <button type="button" class="btn btn-primary" (click)="showJoinForm = !showJoinForm" *ngIf="!createdTeam">
+        {{ showJoinForm ? 'Annuler' : "S'inscrire avec une équipe" }}
+      </button>
+    </div>
+  </section>
+
+  <section class="card" *ngIf="showJoinForm && !createdTeam">
+    <h2>Inscrire une équipe</h2>
+    <div class="alert alert-error" *ngIf="joinError">{{ joinError }}</div>
+    <form (ngSubmit)="submitJoin()">
+      <div class="field">
+        <label for="team-name">Nom de l'équipe</label>
+        <input id="team-name" name="teamName" [(ngModel)]="joinName" required />
+      </div>
+      <div class="field">
+        <label for="coach-name">Nom du coach</label>
+        <input id="coach-name" name="coachName" [(ngModel)]="joinCoachName" required />
+      </div>
+      <div class="field">
+        <label for="race">Race</label>
+        <select id="race" name="race" [(ngModel)]="joinRace" required>
+          <option value="" disabled selected>Choisir une race</option>
+          <option *ngFor="let r of races" [value]="r">{{ r }}</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary" [disabled]="joinBusy">
+        {{ joinBusy ? 'Inscription…' : "S'inscrire" }}
+      </button>
+    </form>
+  </section>
+
+  <section class="card" *ngIf="createdTeam">
+    <h2>Équipe inscrite 🎉</h2>
+    <div class="alert alert-info">
+      Conservez ce lien : c'est le <strong>seul</strong> moyen de gérer votre équipe (défis, feuilles de match). Il
+      ne sera plus jamais affiché.
+    </div>
+    <div class="field">
+      <label>Votre lien d'équipe</label>
+      <div class="link-copy">
+        <input type="text" [value]="createdTeamUrl" readonly />
+        <button type="button" class="btn" (click)="copyCreatedTeamLink()">{{ copied ? 'Copié !' : 'Copier' }}</button>
+      </div>
+    </div>
+    <button type="button" class="btn btn-primary" (click)="goToMyTeam()">Gérer mon équipe</button>
+  </section>
+
+  <section class="card">
+    <h2>Classement</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Équipe</th>
+            <th>Coach</th>
+            <th>Pts</th>
+            <th>V-N-D</th>
+            <th>TD +/-</th>
+            <th>Cas +/-</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let s of t.standings; let i = index">
+            <td>{{ i + 1 }}</td>
+            <td>{{ teamName(s.teamId) }}</td>
+            <td class="muted">{{ teamCoach(s.teamId) }}</td>
+            <td>{{ s.points }}</td>
+            <td>{{ s.wins }}-{{ s.draws }}-{{ s.losses }}</td>
+            <td>{{ s.tdFor }} / {{ s.tdAgainst }}</td>
+            <td>{{ s.casFor }} / {{ s.casAgainst }}</td>
+          </tr>
+          <tr *ngIf="t.standings.length === 0">
+            <td colspan="7" class="muted">Aucune équipe inscrite pour le moment.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Équipes ({{ t.teams.length }})</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Équipe</th>
+            <th>Coach</th>
+            <th>Race</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let team of t.teams">
+            <td>{{ team.name }}</td>
+            <td>{{ team.coachName }}</td>
+            <td>{{ team.race }}</td>
+          </tr>
+          <tr *ngIf="t.teams.length === 0">
+            <td colspan="3" class="muted">Aucune équipe inscrite pour le moment.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Défis ({{ t.challenges.length }})</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Défi</th>
+            <th>Statut</th>
+            <th>Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let c of t.challenges">
+            <td>{{ teamName(c.team1Id) }} vs {{ teamName(c.team2Id) }}</td>
+            <td><span class="badge" [ngClass]="'badge-' + c.status">{{ c.status }}</span></td>
+            <td *ngIf="c.result">{{ c.result.team1Td }} - {{ c.result.team2Td }}</td>
+            <td *ngIf="!c.result" class="muted">—</td>
+          </tr>
+          <tr *ngIf="t.challenges.length === 0">
+            <td colspan="3" class="muted">Aucun défi pour le moment.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</ng-container>

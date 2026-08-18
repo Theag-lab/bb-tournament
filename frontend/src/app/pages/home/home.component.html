@@ -1,0 +1,48 @@
+<section class="card" *ngIf="!createdAdminLink">
+  <h1>Créer un tournoi Blood Bowl</h1>
+  <p class="muted">
+    Format libre à la Ladder : chaque coach inscrit son équipe puis défie qui il veut. Feuille de match complète
+    (touchdowns, casualties, concession) inspirée du règlement NAF World Cup.
+  </p>
+
+  <div class="alert alert-error" *ngIf="error">{{ error }}</div>
+
+  <form (ngSubmit)="create()">
+    <div class="field">
+      <label for="tournament-name">Nom du tournoi</label>
+      <input id="tournament-name" name="name" [(ngModel)]="name" placeholder="Ex : Coupe d'automne 2026" required />
+    </div>
+    <button type="submit" class="btn btn-primary" [disabled]="busy || !name.trim()">
+      {{ busy ? 'Création…' : 'Créer le tournoi' }}
+    </button>
+  </form>
+</section>
+
+<section class="card" *ngIf="createdAdminLink">
+  <h1>Tournoi créé 🎉</h1>
+  <div class="alert alert-info">
+    Conservez précieusement ce lien d'administration : c'est le <strong>seul</strong> moyen de gérer le tournoi.
+    Il ne sera plus jamais affiché.
+  </div>
+
+  <div class="field">
+    <label>Lien admin</label>
+    <div class="link-copy">
+      <input type="text" [value]="createdAdminLink" readonly />
+      <button type="button" class="btn" (click)="copyAdminLink()">{{ copied ? 'Copié !' : 'Copier' }}</button>
+    </div>
+  </div>
+
+  <button type="button" class="btn btn-primary" (click)="goToScoreboard()">Voir le tableau des scores</button>
+</section>
+
+<section class="card">
+  <h2>Rejoindre un tournoi existant</h2>
+  <div class="field">
+    <label for="join-id">Identifiant du tournoi</label>
+    <input id="join-id" name="joinId" [(ngModel)]="joinTournamentId" placeholder="Collez l'identifiant ou l'URL" />
+  </div>
+  <button type="button" class="btn" (click)="joinExisting()" [disabled]="!joinTournamentId.trim()">
+    Ouvrir le tableau des scores
+  </button>
+</section>

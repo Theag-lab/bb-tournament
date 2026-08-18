@@ -1,0 +1,111 @@
+<ng-container *ngIf="loading">
+  <p class="muted">Chargement…</p>
+</ng-container>
+
+<ng-container *ngIf="!loading && loadError">
+  <div class="alert alert-error">{{ loadError }}</div>
+</ng-container>
+
+<ng-container *ngIf="!loading && !loadError && tournament as t">
+  <p class="muted">
+    <a [routerLink]="['/tournaments', tournamentId]">← Voir le tableau des scores public</a>
+  </p>
+
+  <div class="alert alert-error" *ngIf="actionError">{{ actionError }}</div>
+
+  <section class="card">
+    <h1>Administration : {{ t.name }}</h1>
+    <button type="button" class="btn" (click)="copyScoreboardLink()">
+      {{ scoreboardCopied ? 'Lien copié !' : 'Copier le lien public du tableau des scores' }}
+    </button>
+  </section>
+
+  <section class="card">
+    <h2>Équipes ({{ t.teams.length }})</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Équipe</th>
+            <th>Coach</th>
+            <th>Race</th>
+            <th>Lien participant</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let team of t.teams">
+            <td>{{ team.name }}</td>
+            <td>{{ team.coachName }}</td>
+            <td>{{ team.race }}</td>
+            <td>
+              <button type="button" class="btn" (click)="copyTeamLink(team.id, team.participantToken)">
+                {{ copiedTeamId === team.id ? 'Copié !' : 'Copier le lien' }}
+              </button>
+            </td>
+            <td>
+              <button
+                type="button"
+                class="btn btn-danger"
+                [disabled]="actionBusy || teamHasChallenges(team.id)"
+                [title]="teamHasChallenges(team.id) ? 'Impossible : cette équipe a des défis' : ''"
+                (click)="deleteTeam(team.id)"
+              >
+                Supprimer
+              </button>
+            </td>
+          </tr>
+          <tr *ngIf="t.teams.length === 0">
+            <td colspan="5" class="muted">Aucune équipe inscrite pour le moment.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Défis ({{ t.challenges.length }})</h2>
+
+    <div class="challenge" *ngFor="let c of t.challenges">
+      <div class="challenge-head">
+        <strong>{{ teamName(c.team1Id) }} vs {{ teamName(c.team2Id) }}</strong>
+        <span class="badge" [ngClass]="'badge-' + c.status">{{ c.status }}</span>
+      </div>
+
+      <p *ngIf="c.result" class="muted">
+        Score : {{ c.result.team1Td }} - {{ c.result.team2Td }} (casualties {{ c.result.team1Cas }} -
+        {{ c.result.team2Cas }})
+        <span *ngIf="c.result.finalizedByAdmin">— forcé par l'admin</span>
+      </p>
+
+      <div class="actions" *ngIf="c.status === 'pending'">
+        <button type="button" class="btn" [disabled]="actionBusy" (click)="challengeAction(c.id, 'accept')">
+          Forcer acceptation
+        </button>
+        <button type="button" class="btn" [disabled]="actionBusy" (click)="challengeAction(c.id, 'decline')">
+          Refuser
+        </button>
+        <button type="button" class="btn" [disabled]="actionBusy" (click)="challengeAction(c.id, 'cancel')">
+          Annuler
+        </button>
+      </div>
+
+      <button type="button" class="btn" (click)="toggleResultForm(c.id)">
+        {{ editingResultChallengeId === c.id ? 'Fermer' : 'Forcer le résultat' }}
+      </button>
+      <app-match-result-form
+        *ngIf="editingResultChallengeId === c.id"
+        [team1Id]="c.team1Id"
+        [team2Id]="c.team2Id"
+        [team1Name]="teamName(c.team1Id)"
+        [team2Name]="teamName(c.team2Id)"
+        [initial]="c.result"
+        submitLabel="Forcer ce résultat"
+        [busy]="actionBusy"
+        (submitResult)="forceResult(c.id, $event)"
+      ></app-match-result-form>
+    </div>
+
+    <p class="muted" *ngIf="t.challenges.length === 0">Aucun défi pour le moment.</p>
+  </section>
+</ng-container>

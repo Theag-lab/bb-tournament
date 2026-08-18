@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.angular/
+cdk.out/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+.vscode/
+.idea/
+coverage/

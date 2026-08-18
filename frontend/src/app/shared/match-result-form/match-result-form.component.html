@@ -1,0 +1,35 @@
+<form class="result-form" (ngSubmit)="submit()">
+  <div class="field">
+    <label>Concession</label>
+    <select name="concededBy" [(ngModel)]="concededBy">
+      <option value="">Aucune, match joué jusqu'au bout</option>
+      <option value="team1">{{ team1Name }} concède (3-0 pour {{ team2Name }})</option>
+      <option value="team2">{{ team2Name }} concède (3-0 pour {{ team1Name }})</option>
+    </select>
+  </div>
+
+  <div class="score-grid" *ngIf="!isConcession">
+    <div class="field">
+      <label>Touchdowns {{ team1Name }}</label>
+      <input type="number" min="0" name="team1Td" [(ngModel)]="team1Td" />
+    </div>
+    <div class="field">
+      <label>Touchdowns {{ team2Name }}</label>
+      <input type="number" min="0" name="team2Td" [(ngModel)]="team2Td" />
+    </div>
+    <div class="field">
+      <label>Casualties infligées par {{ team1Name }}</label>
+      <input type="number" min="0" name="team1Cas" [(ngModel)]="team1Cas" />
+    </div>
+    <div class="field">
+      <label>Casualties infligées par {{ team2Name }}</label>
+      <input type="number" min="0" name="team2Cas" [(ngModel)]="team2Cas" />
+    </div>
+  </div>
+
+  <p class="muted" *ngIf="isConcession">
+    Score forcé à 3-0 (touchdowns et casualties) en faveur de l'équipe non-concédante, conformément au règlement.
+  </p>
+
+  <button type="submit" class="btn btn-primary" [disabled]="busy">{{ submitLabel }}</button>
+</form>

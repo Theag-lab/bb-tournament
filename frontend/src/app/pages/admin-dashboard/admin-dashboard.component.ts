@@ -67,12 +67,12 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     return this.tournament?.challenges.some((c) => c.team1Id === teamId || c.team2Id === teamId) ?? false;
   }
 
-  participantLink(teamId: string, token: string): string {
-    return participantUrl(this.tournamentId, teamId, token);
+  participantLink(teamId: string, password: string): string {
+    return participantUrl(this.tournamentId, teamId, password);
   }
 
-  async copyTeamLink(teamId: string, token: string): Promise<void> {
-    const ok = await copyToClipboard(this.participantLink(teamId, token));
+  async copyTeamLink(teamId: string, password: string): Promise<void> {
+    const ok = await copyToClipboard(this.participantLink(teamId, password));
     this.copiedTeamId = ok ? teamId : null;
   }
 
@@ -96,7 +96,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     this.actionBusy = true;
     this.actionError = null;
     try {
-      const pub = await this.api.adminActionChallenge(this.tournamentId, challengeId, this.token, action);
+      const pub = await this.api.actionChallenge(this.tournamentId, challengeId, { token: this.token }, action);
       this.tournament = { ...this.tournament!, challenges: pub.challenges, standings: pub.standings };
     } catch (err) {
       this.actionError = extractErrorMessage(err);

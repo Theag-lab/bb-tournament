@@ -2,10 +2,10 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { RACES, type PublicTournament } from '@bb-tournament/shared';
+import { RACES, type PublicTeam, type PublicTournament } from '@bb-tournament/shared';
 import { ApiService } from '../../core/api.service';
 import { extractErrorMessage } from '../../core/http-error';
-import { copyToClipboard, participantUrl, scoreboardUrl } from '../../core/links';
+import { copyToClipboard, participantUrl, rosterImageUrl, scoreboardUrl } from '../../core/links';
 
 const POLL_INTERVAL_MS = 15000;
 
@@ -35,10 +35,19 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   joinName = '';
   joinCoachName = '';
   joinRace = '';
+  joinPassword = '';
 
-  createdTeam: { teamId: string; token: string } | null = null;
+  createdTeam: { teamId: string; password: string } | null = null;
   copied = false;
   shareCopied = false;
+
+  showFindForm = false;
+  findCoachName = '';
+  findPassword = '';
+  findBusy = false;
+  findError: string | null = null;
+
+  selectedRosterTeam: PublicTeam | null = null;
 
   async ngOnInit(): Promise<void> {
     this.tournamentId = this.route.snapshot.paramMap.get('tournamentId')!;
@@ -74,12 +83,13 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     const name = this.joinName.trim();
     const coachName = this.joinCoachName.trim();
     const race = this.joinRace.trim();
-    if (!name || !coachName || !race) return;
+    const password = this.joinPassword.trim();
+    if (!name || !coachName || !race || !password) return;
     this.joinBusy = true;
     this.joinError = null;
     try {
-      const res = await this.api.createTeam(this.tournamentId, { name, coachName, race });
-      this.createdTeam = { teamId: res.teamId, token: res.participantToken };
+      const res = await this.api.createTeam(this.tournamentId, { name, coachName, race, password });
+      this.createdTeam = { teamId: res.teamId, password };
       await this.load(true);
     } catch (err) {
       this.joinError = extractErrorMessage(err);
@@ -90,7 +100,7 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
 
   get createdTeamUrl(): string {
     if (!this.createdTeam) return '';
-    return participantUrl(this.tournamentId, this.createdTeam.teamId, this.createdTeam.token);
+    return participantUrl(this.tournamentId, this.createdTeam.teamId, this.createdTeam.password);
   }
 
   async copyCreatedTeamLink(): Promise<void> {
@@ -103,6 +113,47 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
 
   goToMyTeam(): void {
     if (!this.createdTeam) return;
-    this.router.navigate(['/tournaments', this.tournamentId, 'team', this.createdTeam.teamId, this.createdTeam.token]);
+    this.router.navigate([
+      '/tournaments',
+      this.tournamentId,
+      'team',
+      this.createdTeam.teamId,
+      this.createdTeam.password,
+    ]);
+  }
+
+  async submitFind(): Promise<void> {
+    const coachName = this.findCoachName.trim();
+    const password = this.findPassword.trim();
+    if (!coachName || !password) return;
+    this.findBusy = true;
+    this.findError = null;
+    try {
+      const res = await this.api.findMyTeam(this.tournamentId, coachName, password);
+      this.router.navigate(['/tournaments', this.tournamentId, 'team', res.teamId, password]);
+    } catch (err) {
+      this.findError = extractErrorMessage(err);
+    } finally {
+      this.findBusy = false;
+    }
+  }
+
+  openRoster(team: PublicTeam): void {
+    this.selectedRosterTeam = team;
+  }
+
+  openRosterById(teamId: string): void {
+    const team = this.tournament?.teams.find((t) => t.id === teamId);
+    if (team) this.selectedRosterTeam = team;
+  }
+
+  closeRoster(): void {
+    this.selectedRosterTeam = null;
+  }
+
+  selectedRosterImageUrl(): string | null {
+    const team = this.selectedRosterTeam;
+    if (!team?.rosterImage) return null;
+    return rosterImageUrl(this.tournamentId, team.id, team.rosterImage.updatedAt);
   }
 }

@@ -3,6 +3,10 @@ import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core
 import { FormsModule } from '@angular/forms';
 import type { MatchResult, SubmitResultRequest } from '@bb-tournament/shared';
 
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 @Component({
   selector: 'app-match-result-form',
   standalone: true,
@@ -21,6 +25,7 @@ export class MatchResultFormComponent implements OnChanges {
 
   @Output() submitResult = new EventEmitter<SubmitResultRequest>();
 
+  playedAt = todayIsoDate();
   team1Td = 0;
   team2Td = 0;
   team1Cas = 0;
@@ -29,6 +34,7 @@ export class MatchResultFormComponent implements OnChanges {
 
   ngOnChanges(): void {
     if (this.initial) {
+      this.playedAt = this.initial.playedAt;
       this.team1Td = this.initial.team1Td;
       this.team2Td = this.initial.team2Td;
       this.team1Cas = this.initial.team1Cas;
@@ -49,6 +55,7 @@ export class MatchResultFormComponent implements OnChanges {
     const concededByTeamId =
       this.concededBy === 'team1' ? this.team1Id : this.concededBy === 'team2' ? this.team2Id : null;
     this.submitResult.emit({
+      playedAt: this.playedAt,
       team1Td: this.team1Td,
       team2Td: this.team2Td,
       team1Cas: this.team1Cas,

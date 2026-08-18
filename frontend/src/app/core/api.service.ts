@@ -9,10 +9,28 @@ import type {
   CreateTeamResponse,
   CreateTournamentResponse,
   PublicTournament,
+  ResolveTeamResponse,
+  RosterImageUploadUrlRequest,
+  RosterImageUploadUrlResponse,
   SubmitResultRequest,
 } from '@bb-tournament/shared';
 
 const API_BASE = '/api';
+
+/** A team's own id + password, or the tournament admin token — never both are required at once. */
+export interface Auth {
+  teamId?: string;
+  password?: string;
+  token?: string;
+}
+
+function authParams(auth: Auth): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (auth.teamId) params['teamId'] = auth.teamId;
+  if (auth.password) params['password'] = auth.password;
+  if (auth.token) params['token'] = auth.token;
+  return params;
+}
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -38,10 +56,28 @@ export class ApiService {
     );
   }
 
-  updateTeam(tournamentId: string, teamId: string, token: string, body: Partial<CreateTeamRequest>) {
+  /** "Find my team": look up by coach name + password when the participant has no saved link. */
+  findMyTeam(tournamentId: string, coachName: string, password: string) {
+    return firstValueFrom(
+      this.http.get<ResolveTeamResponse>(`${API_BASE}/tournaments/${tournamentId}/teams/find`, {
+        params: { coachName, password },
+      })
+    );
+  }
+
+  /** Confirms a teamId + password pair from a saved/bookmarked management link. */
+  verifyTeamAccess(tournamentId: string, teamId: string, password: string) {
+    return firstValueFrom(
+      this.http.get<ResolveTeamResponse>(`${API_BASE}/tournaments/${tournamentId}/teams/${teamId}/verify`, {
+        params: { password },
+      })
+    );
+  }
+
+  updateTeam(tournamentId: string, teamId: string, auth: Auth, body: Partial<CreateTeamRequest>) {
     return firstValueFrom(
       this.http.patch<PublicTournament>(`${API_BASE}/tournaments/${tournamentId}/teams/${teamId}`, body, {
-        params: { token },
+        params: authParams(auth),
       })
     );
   }
@@ -54,40 +90,40 @@ export class ApiService {
     );
   }
 
-  createChallenge(tournamentId: string, token: string, body: CreateChallengeRequest) {
+  createChallenge(tournamentId: string, auth: Auth, body: CreateChallengeRequest) {
     return firstValueFrom(
       this.http.post<PublicTournament>(`${API_BASE}/tournaments/${tournamentId}/challenges`, body, {
-        params: { token },
+        params: authParams(auth),
       })
     );
   }
 
-  actionChallenge(tournamentId: string, challengeId: string, token: string, action: ChallengeAction) {
+  actionChallenge(tournamentId: string, challengeId: string, auth: Auth, action: ChallengeAction) {
     return firstValueFrom(
       this.http.patch<PublicTournament>(
         `${API_BASE}/tournaments/${tournamentId}/challenges/${challengeId}`,
         { action },
-        { params: { token } }
+        { params: authParams(auth) }
       )
     );
   }
 
-  submitResult(tournamentId: string, challengeId: string, token: string, body: SubmitResultRequest) {
+  submitResult(tournamentId: string, challengeId: string, auth: Auth, body: SubmitResultRequest) {
     return firstValueFrom(
       this.http.put<PublicTournament>(
         `${API_BASE}/tournaments/${tournamentId}/challenges/${challengeId}/result`,
         body,
-        { params: { token } }
+        { params: authParams(auth) }
       )
     );
   }
 
-  confirmResult(tournamentId: string, challengeId: string, token: string) {
+  confirmResult(tournamentId: string, challengeId: string, auth: Auth) {
     return firstValueFrom(
       this.http.post<PublicTournament>(
         `${API_BASE}/tournaments/${tournamentId}/challenges/${challengeId}/result/confirm`,
         {},
-        { params: { token } }
+        { params: authParams(auth) }
       )
     );
   }
@@ -102,7 +138,24 @@ export class ApiService {
     );
   }
 
-  adminActionChallenge(tournamentId: string, challengeId: string, token: string, action: ChallengeAction) {
-    return this.actionChallenge(tournamentId, challengeId, token, action);
+  getRosterImageUploadUrl(tournamentId: string, teamId: string, auth: Auth, contentType: string) {
+    const body: RosterImageUploadUrlRequest = { contentType };
+    return firstValueFrom(
+      this.http.post<RosterImageUploadUrlResponse>(
+        `${API_BASE}/tournaments/${tournamentId}/teams/${teamId}/roster-image/upload-url`,
+        body,
+        { params: authParams(auth) }
+      )
+    );
+  }
+
+  confirmRosterImageUpload(tournamentId: string, teamId: string, auth: Auth) {
+    return firstValueFrom(
+      this.http.post<PublicTournament>(
+        `${API_BASE}/tournaments/${tournamentId}/teams/${teamId}/roster-image/confirm`,
+        {},
+        { params: authParams(auth) }
+      )
+    );
   }
 }

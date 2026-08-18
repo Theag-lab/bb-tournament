@@ -13,10 +13,35 @@
       <button type="button" class="btn" (click)="copyShareLink()">
         {{ shareCopied ? 'Lien copié !' : 'Copier le lien de ce tableau' }}
       </button>
-      <button type="button" class="btn btn-primary" (click)="showJoinForm = !showJoinForm" *ngIf="!createdTeam">
+      <button type="button" class="btn btn-primary" (click)="showJoinForm = !showJoinForm; showFindForm = false" *ngIf="!createdTeam">
         {{ showJoinForm ? 'Annuler' : "S'inscrire avec une équipe" }}
       </button>
+      <button type="button" class="btn" (click)="showFindForm = !showFindForm; showJoinForm = false" *ngIf="!createdTeam">
+        {{ showFindForm ? 'Annuler' : "J'ai déjà une équipe" }}
+      </button>
     </div>
+  </section>
+
+  <section class="card" *ngIf="showFindForm && !createdTeam">
+    <h2>Retrouver mon équipe</h2>
+    <div class="alert alert-error" *ngIf="findError">{{ findError }}</div>
+    <form (ngSubmit)="submitFind()">
+      <div class="field" *ngIf="t.teams.length > 0">
+        <label for="find-coach">Nom du coach</label>
+        <select id="find-coach" name="findCoachName" [(ngModel)]="findCoachName" required>
+          <option value="" disabled selected>Choisir un coach</option>
+          <option *ngFor="let team of t.teams" [value]="team.coachName">{{ team.coachName }} ({{ team.name }})</option>
+        </select>
+      </div>
+      <p class="muted" *ngIf="t.teams.length === 0">Aucune équipe inscrite pour le moment.</p>
+      <div class="field">
+        <label for="find-password">Mot de passe</label>
+        <input id="find-password" name="findPassword" type="password" [(ngModel)]="findPassword" required />
+      </div>
+      <button type="submit" class="btn btn-primary" [disabled]="findBusy || !findCoachName || !findPassword.trim()">
+        {{ findBusy ? 'Recherche…' : "Accéder à mon équipe" }}
+      </button>
+    </form>
   </section>
 
   <section class="card" *ngIf="showJoinForm && !createdTeam">
@@ -38,6 +63,10 @@
           <option *ngFor="let r of races" [value]="r">{{ r }}</option>
         </select>
       </div>
+      <div class="field">
+        <label for="join-password">Choisissez un mot de passe d'équipe (4 à 32 caractères)</label>
+        <input id="join-password" name="joinPassword" [(ngModel)]="joinPassword" minlength="4" maxlength="32" required />
+      </div>
       <button type="submit" class="btn btn-primary" [disabled]="joinBusy">
         {{ joinBusy ? 'Inscription…' : "S'inscrire" }}
       </button>
@@ -47,8 +76,9 @@
   <section class="card" *ngIf="createdTeam">
     <h2>Équipe inscrite 🎉</h2>
     <div class="alert alert-info">
-      Conservez ce lien : c'est le <strong>seul</strong> moyen de gérer votre équipe (défis, feuilles de match). Il
-      ne sera plus jamais affiché.
+      Notez votre nom de coach et votre mot de passe <strong>{{ createdTeam.password }}</strong> : c'est le
+      <strong>seul</strong> moyen de revenir gérer votre équipe (défis, feuilles de match). Ils ne seront plus
+      jamais affichés ensemble.
     </div>
     <div class="field">
       <label>Votre lien d'équipe</label>
@@ -78,7 +108,9 @@
         <tbody>
           <tr *ngFor="let s of t.standings; let i = index">
             <td>{{ i + 1 }}</td>
-            <td>{{ teamName(s.teamId) }}</td>
+            <td>
+              <button type="button" class="link-btn" (click)="openRosterById(s.teamId)">{{ teamName(s.teamId) }}</button>
+            </td>
             <td class="muted">{{ teamCoach(s.teamId) }}</td>
             <td>{{ s.points }}</td>
             <td>{{ s.wins }}-{{ s.draws }}-{{ s.losses }}</td>
@@ -106,7 +138,10 @@
         </thead>
         <tbody>
           <tr *ngFor="let team of t.teams">
-            <td>{{ team.name }}</td>
+            <td>
+              <button type="button" class="link-btn" (click)="openRoster(team)">{{ team.name }}</button>
+              <span class="badge" *ngIf="team.rosterImage">📷</span>
+            </td>
             <td>{{ team.coachName }}</td>
             <td>{{ team.race }}</td>
           </tr>
@@ -126,6 +161,7 @@
           <tr>
             <th>Défi</th>
             <th>Statut</th>
+            <th>Date</th>
             <th>Score</th>
           </tr>
         </thead>
@@ -133,14 +169,26 @@
           <tr *ngFor="let c of t.challenges">
             <td>{{ teamName(c.team1Id) }} vs {{ teamName(c.team2Id) }}</td>
             <td><span class="badge" [ngClass]="'badge-' + c.status">{{ c.status }}</span></td>
+            <td class="muted">{{ c.result?.playedAt ?? '—' }}</td>
             <td *ngIf="c.result">{{ c.result.team1Td }} - {{ c.result.team2Td }}</td>
             <td *ngIf="!c.result" class="muted">—</td>
           </tr>
           <tr *ngIf="t.challenges.length === 0">
-            <td colspan="3" class="muted">Aucun défi pour le moment.</td>
+            <td colspan="4" class="muted">Aucun défi pour le moment.</td>
           </tr>
         </tbody>
       </table>
     </div>
   </section>
+
+  <div class="modal-backdrop" *ngIf="selectedRosterTeam as rt" (click)="closeRoster()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <h2>{{ rt.name }}</h2>
+        <button type="button" class="btn" (click)="closeRoster()">Fermer</button>
+      </div>
+      <img *ngIf="selectedRosterImageUrl() as imgUrl" [src]="imgUrl" alt="Roster de {{ rt.name }}" class="roster-preview" />
+      <p class="muted" *ngIf="!selectedRosterImageUrl()">Aucune image de roster envoyée par ce coach.</p>
+    </div>
+  </div>
 </ng-container>

@@ -19,6 +19,10 @@
 
   <section class="card">
     <h1>{{ team.name }}</h1>
+    <p class="muted">
+      Votre mot de passe d'équipe : <strong>{{ password }}</strong> — notez-le avec le nom de coach, c'est votre
+      seul moyen de revenir gérer cette équipe.
+    </p>
     <form (ngSubmit)="saveProfile()">
       <div class="field">
         <label for="edit-name">Nom de l'équipe</label>
@@ -34,10 +38,32 @@
           <option *ngFor="let r of races" [value]="r">{{ r }}</option>
         </select>
       </div>
+      <div class="field">
+        <label for="edit-password">Mot de passe d'équipe (4 à 32 caractères)</label>
+        <input id="edit-password" name="editPassword" [(ngModel)]="editPassword" minlength="4" maxlength="32" required />
+      </div>
       <button type="submit" class="btn" [disabled]="savingProfile">
         {{ savingProfile ? 'Enregistrement…' : 'Enregistrer' }}
       </button>
     </form>
+  </section>
+
+  <section class="card">
+    <h2>Image du roster</h2>
+    <p class="muted">Visible par tous sur le tableau des scores, en cliquant sur votre équipe.</p>
+    <div class="alert alert-error" *ngIf="rosterUploadError">{{ rosterUploadError }}</div>
+    <img *ngIf="myRosterImageUrl() as imgUrl" [src]="imgUrl" alt="Roster de {{ team.name }}" class="roster-preview" />
+    <p class="muted" *ngIf="!myRosterImageUrl()">Aucune image envoyée pour le moment.</p>
+    <label class="btn" [class.btn-primary]="!rosterUploadBusy">
+      {{ rosterUploadBusy ? 'Envoi…' : (myRosterImageUrl() ? "Remplacer l'image" : 'Envoyer une image') }}
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        style="display: none"
+        [disabled]="rosterUploadBusy"
+        (change)="onRosterFileSelected($event)"
+      />
+    </label>
   </section>
 
   <section class="card">
@@ -102,7 +128,7 @@
 
         <div *ngSwitchCase="'awaiting_confirmation'">
           <p *ngIf="c.result">
-            Score soumis par {{ teamName(c.result.submittedByTeamId) }} :
+            Score soumis par {{ teamName(c.result.submittedByTeamId) }} pour le {{ c.result.playedAt }} :
             <strong>{{ c.result.team1Td }} - {{ c.result.team2Td }}</strong>
             (casualties {{ c.result.team1Cas }} - {{ c.result.team2Cas }})
           </p>
@@ -134,7 +160,7 @@
 
         <div *ngSwitchCase="'completed'">
           <p *ngIf="c.result">
-            Résultat final : <strong>{{ c.result.team1Td }} - {{ c.result.team2Td }}</strong>
+            Résultat final du {{ c.result.playedAt }} : <strong>{{ c.result.team1Td }} - {{ c.result.team2Td }}</strong>
             (casualties {{ c.result.team1Cas }} - {{ c.result.team2Cas }})
           </p>
           <p class="muted" *ngIf="c.result">

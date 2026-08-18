@@ -11,6 +11,7 @@ export function toPublicTournament(t: Tournament): PublicTournament {
       coachName: team.coachName,
       race: team.race,
       createdAt: team.createdAt,
+      rosterImage: team.rosterImage,
     })),
     challenges: t.challenges.map((c) => ({
       id: c.id,
@@ -35,7 +36,8 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
       coachName: team.coachName,
       race: team.race,
       createdAt: team.createdAt,
-      participantToken: team.participantToken,
+      rosterImage: team.rosterImage,
+      password: team.password,
     })),
   };
 }

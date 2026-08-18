@@ -1,5 +1,10 @@
 <form class="result-form" (ngSubmit)="submit()">
   <div class="field">
+    <label>Date du match</label>
+    <input type="date" name="playedAt" [(ngModel)]="playedAt" required />
+  </div>
+
+  <div class="field">
     <label>Concession</label>
     <select name="concededBy" [(ngModel)]="concededBy">
       <option value="">Aucune, match joué jusqu'au bout</option>

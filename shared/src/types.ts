@@ -7,6 +7,7 @@ export type ChallengeStatus =
   | 'completed';
 
 export interface MatchResult {
+  playedAt: string; // date the match was actually played, YYYY-MM-DD, entered by whoever fills the sheet
   team1Td: number;
   team2Td: number;
   team1Cas: number;
@@ -31,13 +32,18 @@ export interface Challenge {
   result: MatchResult | null;
 }
 
+export interface RosterImage {
+  updatedAt: string;
+}
+
 export interface Team {
   id: string;
-  participantToken: string;
+  password: string;
   name: string;
   coachName: string;
   race: string;
   createdAt: string;
+  rosterImage: RosterImage | null;
 }
 
 export interface Tournament {
@@ -57,6 +63,7 @@ export interface PublicTeam {
   coachName: string;
   race: string;
   createdAt: string;
+  rosterImage: RosterImage | null;
 }
 
 export interface PublicChallenge {
@@ -92,7 +99,7 @@ export interface PublicTournament {
 }
 
 export interface AdminTeamView extends PublicTeam {
-  participantToken: string;
+  password: string;
 }
 
 export interface AdminTournamentView {
@@ -117,12 +124,34 @@ export interface CreateTeamRequest {
   name: string;
   coachName: string;
   race: string;
+  password: string;
 }
+
+export const TEAM_PASSWORD_MIN_LENGTH = 4;
+export const TEAM_PASSWORD_MAX_LENGTH = 32;
 
 export interface CreateTeamResponse {
   teamId: string;
-  participantToken: string;
 }
+
+export interface ResolveTeamResponse {
+  teamId: string;
+  name: string;
+  coachName: string;
+  race: string;
+}
+
+export interface RosterImageUploadUrlRequest {
+  contentType: string;
+}
+
+export interface RosterImageUploadUrlResponse {
+  url: string;
+  fields: Record<string, string>;
+}
+
+export const ROSTER_IMAGE_ALLOWED_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const ROSTER_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
 export interface CreateChallengeRequest {
   opponentTeamId: string;
@@ -135,6 +164,7 @@ export interface ChallengeActionRequest {
 }
 
 export interface SubmitResultRequest {
+  playedAt: string;
   team1Td: number;
   team2Td: number;
   team1Cas: number;

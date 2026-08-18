@@ -14,16 +14,23 @@ Conçu pour un coût quasi nul sur AWS :
 - **Données** : pas de base de données. Chaque tournoi est un unique fichier JSON dans un bucket S3
   (`tournaments/{id}.json`), avec écriture optimiste via les ETags S3 (`If-Match`/`If-None-Match`) pour éviter les
   écrasements concurrents.
-- **Identité** : pas de comptes ni de mots de passe. Chaque équipe reçoit une URL secrète contenant un UUID
-  (`/tournaments/:id/team/:teamId/:token`) qui sert de preuve de possession de l'équipe. L'organisateur reçoit une
-  URL admin séparée (`/tournaments/:id/admin/:token`). Ces liens ne sont affichés qu'une seule fois à la création
-  — à conserver précieusement, il n'y a aucune récupération possible.
+- **Identité** : pas de comptes au sens classique. Chaque coach choisit un **mot de passe d'équipe** (4 à 32
+  caractères libres) en inscrivant son équipe. Le lien de gestion contient l'id d'équipe + ce mot de passe
+  (`/tournaments/:id/team/:teamId/:password`) ; un bouton "J'ai déjà une équipe" permet aussi de la retrouver
+  sans lien en sélectionnant son nom de coach dans une liste puis en saisissant le mot de passe.
+  L'organisateur reçoit une URL admin séparée avec un jeton long (UUID, `/tournaments/:id/admin/:token`). Ces
+  identifiants ne sont affichés qu'une seule fois à la création — à conserver précieusement, il n'y a aucune
+  récupération possible.
+- **Images de roster** : chaque coach peut envoyer une photo de sa feuille de roster (JPEG/PNG/WebP, 5 Mo max),
+  visible par tout le monde en cliquant sur l'équipe dans le tableau des scores. Upload en direct
+  navigateur → S3 via une URL présignée (POST policy avec limite de taille/type imposée par S3), la Lambda ne
+  transite jamais le fichier lui-même.
 - **Infra as code** : AWS CDK (TypeScript), pile unique `BbTournamentStack`.
 
 Coût estimé à l'échelle d'un tournoi amateur : proche de 0 $/mois (Lambda et API Gateway HTTP API ont un palier
-gratuit très large, S3 ne stocke que quelques Ko par tournoi, CloudFront reste très en dessous du palier gratuit
-de 1 To/mois). Le nom de domaine utilisé est l'URL CloudFront par défaut (`*.cloudfront.net`), donc pas de coût
-Route53/domaine pour l'instant.
+gratuit très large, S3 ne stocke que quelques Ko de JSON par tournoi + quelques Mo d'images de roster, CloudFront
+reste très en dessous du palier gratuit de 1 To/mois). Le nom de domaine utilisé est l'URL CloudFront par défaut
+(`*.cloudfront.net`), donc pas de coût Route53/domaine pour l'instant.
 
 ## Structure du repo (monorepo npm workspaces)
 
@@ -37,14 +44,19 @@ frontend/  Application Angular
 ## Fonctionnalités (v1)
 
 - Créer un tournoi (génère un lien admin, affiché une seule fois).
-- S'inscrire avec une équipe (nom, coach, race — pas de gestion de roster/joueurs individuels).
+- S'inscrire avec une équipe (nom, coach, race, mot de passe libre de 4 à 32 caractères choisi par le coach — pas
+  de gestion de roster/joueurs individuels).
+- Retrouver son équipe via un bouton "J'ai déjà une équipe" : sélection du nom de coach dans la liste + saisie du
+  mot de passe, sans avoir besoin du lien.
+- Envoyer une image de roster (JPEG/PNG/WebP, 5 Mo max), visible par tous en cliquant sur l'équipe.
 - Défier librement n'importe quelle autre équipe inscrite (pas de bracket, pas de round généré).
 - Accepter/refuser/annuler un défi.
-- Remplir la feuille de match (touchdowns, casualties, concession) ; l'adversaire confirme le score, ou peut
-  proposer une correction si les nombres ne correspondent pas.
-- Tableau des scores public en temps quasi réel (rafraîchi toutes les 15s) : classement, équipes, historique des
-  défis.
-- Panneau admin : liens de toutes les équipes, suppression d'équipe, forcer/débloquer un défi, forcer un résultat.
+- Remplir la feuille de match (date du match, touchdowns, casualties, concession) ; l'adversaire confirme le
+  score, ou peut proposer une correction si les valeurs ne correspondent pas.
+- Tableau des scores public en temps quasi réel (rafraîchi toutes les 15s) : classement, équipes (cliquables pour
+  voir le roster), historique des défis avec leur date.
+- Panneau admin : mot de passe + lien de toutes les équipes, suppression d'équipe, forcer/débloquer un défi, forcer un
+  résultat.
 
 Hors scope volontaire pour l'instant (cf. échanges de cadrage) : rounds générés / format squad façon NAF,
 roster builder avec achat de compétences en SPP, nom de domaine personnalisé.
@@ -85,9 +97,14 @@ Pour changer de région, positionner `CDK_DEFAULT_REGION` avant `cdk deploy` (pa
 
 ## Notes de sécurité / limites connues
 
-- Les liens (participant/admin) sont la seule protection : quiconque obtient un lien a le contrôle correspondant.
-  Ne pas les partager publiquement.
-- Pas de limite de débit (rate limiting) sur l'API — acceptable pour un usage de tournoi amateur, à revoir si le
-  site devient public à grande échelle.
+- Le mot de passe d'équipe (nom de coach + mot de passe, ou lien contenant `teamId` + mot de passe) et le jeton
+  admin sont la seule protection : quiconque les obtient a le contrôle correspondant. Ne pas les partager
+  publiquement.
+- **Le mot de passe est volontairement libre en longueur (4 à 32 caractères) et non haché** (stocké en clair dans
+  le JSON du tournoi, visible par l'admin) : un compromis délibéré confort/simplicité pour un tournoi amateur
+  entre personnes de confiance, pas conçu pour résister à un attaquant motivé. Un throttle léger est appliqué au
+  niveau de l'API Gateway (50 req/s, burst 100) comme frein de base contre le brute-force, mais ce n'est pas une
+  protection forte.
 - Le bucket de données a le versioning S3 activé (30 jours de rétention des anciennes versions) comme filet de
-  sécurité en cas de bug d'écriture.
+  sécurité en cas de bug d'écriture ou de mot de passe compromis (l'admin peut restaurer/corriger via son
+  panneau).

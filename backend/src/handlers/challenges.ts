@@ -8,21 +8,27 @@ import {
   computeMatchScore,
 } from '@bb-tournament/shared';
 import * as storage from '../storage';
-import { findTeamByToken, isAdmin } from '../auth';
+import { authenticateTeam, isAdmin } from '../auth';
 import { toPublicTournament } from '../sanitize';
 import { badRequest, forbidden, notFound, unauthorized } from '../errors';
 
 const ACTIVE_STATUSES = new Set(['pending', 'accepted', 'awaiting_confirmation']);
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export async function createChallenge(c: Context) {
   const tournamentId = c.req.param('tournamentId')!;
-  const token = c.req.query('token');
+  const teamId = c.req.query('teamId');
+  const password = c.req.query('password');
   const body = await c.req.json<CreateChallengeRequest>().catch(() => null);
   const opponentTeamId = body?.opponentTeamId;
   if (!opponentTeamId) throw badRequest('opponentTeamId is required');
 
   await storage.updateTournament(tournamentId, (t) => {
-    const challenger = findTeamByToken(t, token);
+    const challenger = authenticateTeam(t, teamId, password);
     if (challenger.id === opponentTeamId) throw badRequest('A team cannot challenge itself');
     const opponent = t.teams.find((tm) => tm.id === opponentTeamId);
     if (!opponent) throw notFound('Opponent team not found');
@@ -55,6 +61,8 @@ export async function createChallenge(c: Context) {
 export async function actionChallenge(c: Context) {
   const tournamentId = c.req.param('tournamentId')!;
   const challengeId = c.req.param('challengeId')!;
+  const teamId = c.req.query('teamId');
+  const password = c.req.query('password');
   const token = c.req.query('token');
   const body = await c.req.json<ChallengeActionRequest>().catch(() => null);
   const action = body?.action;
@@ -68,7 +76,7 @@ export async function actionChallenge(c: Context) {
     if (challenge.status !== 'pending') throw forbidden(`Challenge is not pending (status: ${challenge.status})`);
 
     const admin = isAdmin(t, token);
-    const team = admin ? null : findTeamByToken(t, token);
+    const team = admin ? null : authenticateTeam(t, teamId, password);
 
     if (action === 'accept' || action === 'decline') {
       if (!admin && team!.id !== challenge.team2Id) throw forbidden('Only the challenged team can respond to this challenge');
@@ -86,7 +94,7 @@ export async function actionChallenge(c: Context) {
 
 function validateResultInput(body: Partial<SubmitResultRequest> | null): SubmitResultRequest {
   if (!body) throw badRequest('Result payload is required');
-  const { team1Td, team2Td, team1Cas, team2Cas, concededByTeamId = null } = body;
+  const { team1Td, team2Td, team1Cas, team2Cas, concededByTeamId = null, playedAt } = body;
   if (concededByTeamId === null) {
     for (const [field, value] of [
       ['team1Td', team1Td],
@@ -99,7 +107,11 @@ function validateResultInput(body: Partial<SubmitResultRequest> | null): SubmitR
       }
     }
   }
+  if (playedAt !== undefined && (typeof playedAt !== 'string' || !DATE_PATTERN.test(playedAt))) {
+    throw badRequest('playedAt must be a date in YYYY-MM-DD format');
+  }
   return {
+    playedAt: playedAt ?? todayIsoDate(),
     team1Td: team1Td ?? 0,
     team2Td: team2Td ?? 0,
     team1Cas: team1Cas ?? 0,
@@ -110,6 +122,7 @@ function validateResultInput(body: Partial<SubmitResultRequest> | null): SubmitR
 
 function sameResultValues(a: SubmitResultRequest, b: SubmitResultRequest): boolean {
   return (
+    a.playedAt === b.playedAt &&
     a.team1Td === b.team1Td &&
     a.team2Td === b.team2Td &&
     a.team1Cas === b.team1Cas &&
@@ -121,7 +134,8 @@ function sameResultValues(a: SubmitResultRequest, b: SubmitResultRequest): boole
 export async function submitResult(c: Context) {
   const tournamentId = c.req.param('tournamentId')!;
   const challengeId = c.req.param('challengeId')!;
-  const token = c.req.query('token');
+  const teamId = c.req.query('teamId');
+  const password = c.req.query('password');
   const body = await c.req.json<SubmitResultRequest>().catch(() => null);
   const input = validateResultInput(body);
 
@@ -132,7 +146,7 @@ export async function submitResult(c: Context) {
       throw forbidden(`Cannot submit a result for a challenge with status: ${challenge.status}`);
     }
 
-    const team = findTeamByToken(t, token);
+    const team = authenticateTeam(t, teamId, password);
     if (team.id !== challenge.team1Id && team.id !== challenge.team2Id) {
       throw forbidden('Only the two participating teams can submit a result');
     }
@@ -149,6 +163,7 @@ export async function submitResult(c: Context) {
         // Same team editing their own pending submission.
         challenge.result = {
           ...score,
+          playedAt: input.playedAt,
           concededByTeamId: input.concededByTeamId,
           submittedByTeamId: team.id,
           submittedAt: now,
@@ -160,6 +175,7 @@ export async function submitResult(c: Context) {
       }
 
       const previousInput: SubmitResultRequest = {
+        playedAt: challenge.result.playedAt,
         team1Td: challenge.result.team1Td,
         team2Td: challenge.result.team2Td,
         team1Cas: challenge.result.team1Cas,
@@ -178,6 +194,7 @@ export async function submitResult(c: Context) {
       // Disagreement: this becomes the new pending submission awaiting the other side.
       challenge.result = {
         ...score,
+        playedAt: input.playedAt,
         concededByTeamId: input.concededByTeamId,
         submittedByTeamId: team.id,
         submittedAt: now,
@@ -191,6 +208,7 @@ export async function submitResult(c: Context) {
     // First submission for this challenge.
     challenge.result = {
       ...score,
+      playedAt: input.playedAt,
       concededByTeamId: input.concededByTeamId,
       submittedByTeamId: team.id,
       submittedAt: now,
@@ -208,7 +226,8 @@ export async function submitResult(c: Context) {
 export async function confirmResult(c: Context) {
   const tournamentId = c.req.param('tournamentId')!;
   const challengeId = c.req.param('challengeId')!;
-  const token = c.req.query('token');
+  const teamId = c.req.query('teamId');
+  const password = c.req.query('password');
 
   await storage.updateTournament(tournamentId, (t) => {
     const challenge = t.challenges.find((ch) => ch.id === challengeId);
@@ -217,7 +236,7 @@ export async function confirmResult(c: Context) {
       throw forbidden(`No pending result to confirm (status: ${challenge.status})`);
     }
 
-    const team = findTeamByToken(t, token);
+    const team = authenticateTeam(t, teamId, password);
     if (team.id !== challenge.team1Id && team.id !== challenge.team2Id) {
       throw forbidden('Only the two participating teams can confirm a result');
     }
@@ -256,6 +275,7 @@ export async function adminSetResult(c: Context) {
     const now = new Date().toISOString();
     challenge.result = {
       ...score,
+      playedAt: input.playedAt,
       concededByTeamId: input.concededByTeamId,
       submittedByTeamId: challenge.team1Id,
       submittedAt: now,

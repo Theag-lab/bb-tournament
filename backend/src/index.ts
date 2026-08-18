@@ -5,6 +5,7 @@ import { AppError } from './errors';
 import * as tournaments from './handlers/tournaments';
 import * as teams from './handlers/teams';
 import * as challenges from './handlers/challenges';
+import * as rosterImage from './rosterImage';
 
 const app = new Hono().basePath('/api');
 
@@ -25,8 +26,12 @@ app.get('/tournaments/:tournamentId', tournaments.getPublicTournament);
 app.get('/tournaments/:tournamentId/admin', tournaments.getAdminTournament);
 
 app.post('/tournaments/:tournamentId/teams', teams.createTeam);
+app.get('/tournaments/:tournamentId/teams/find', teams.findMyTeam);
+app.get('/tournaments/:tournamentId/teams/:teamId/verify', teams.verifyTeamAccess);
 app.patch('/tournaments/:tournamentId/teams/:teamId', teams.updateTeam);
 app.delete('/tournaments/:tournamentId/teams/:teamId', teams.deleteTeam);
+app.post('/tournaments/:tournamentId/teams/:teamId/roster-image/upload-url', rosterImage.getUploadUrl);
+app.post('/tournaments/:tournamentId/teams/:teamId/roster-image/confirm', rosterImage.confirmUpload);
 
 app.post('/tournaments/:tournamentId/challenges', challenges.createChallenge);
 app.patch('/tournaments/:tournamentId/challenges/:challengeId', challenges.actionChallenge);

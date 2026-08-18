@@ -2,8 +2,12 @@ export function scoreboardUrl(tournamentId: string): string {
   return `${location.origin}/tournaments/${tournamentId}`;
 }
 
-export function participantUrl(tournamentId: string, teamId: string, token: string): string {
-  return `${location.origin}/tournaments/${tournamentId}/team/${teamId}/${token}`;
+export function participantUrl(tournamentId: string, teamId: string, password: string): string {
+  return `${location.origin}/tournaments/${tournamentId}/team/${teamId}/${encodeURIComponent(password)}`;
+}
+
+export function rosterImageUrl(tournamentId: string, teamId: string, updatedAt: string): string {
+  return `/roster-images/${tournamentId}/${teamId}?v=${encodeURIComponent(updatedAt)}`;
 }
 
 export function adminUrl(tournamentId: string, adminToken: string): string {

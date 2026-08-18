@@ -29,6 +29,7 @@
             <th>Équipe</th>
             <th>Coach</th>
             <th>Race</th>
+            <th>Mot de passe</th>
             <th>Lien participant</th>
             <th></th>
           </tr>
@@ -38,8 +39,9 @@
             <td>{{ team.name }}</td>
             <td>{{ team.coachName }}</td>
             <td>{{ team.race }}</td>
+            <td><strong>{{ team.password }}</strong></td>
             <td>
-              <button type="button" class="btn" (click)="copyTeamLink(team.id, team.participantToken)">
+              <button type="button" class="btn" (click)="copyTeamLink(team.id, team.password)">
                 {{ copiedTeamId === team.id ? 'Copié !' : 'Copier le lien' }}
               </button>
             </td>
@@ -56,7 +58,7 @@
             </td>
           </tr>
           <tr *ngIf="t.teams.length === 0">
-            <td colspan="5" class="muted">Aucune équipe inscrite pour le moment.</td>
+            <td colspan="6" class="muted">Aucune équipe inscrite pour le moment.</td>
           </tr>
         </tbody>
       </table>
@@ -73,8 +75,8 @@
       </div>
 
       <p *ngIf="c.result" class="muted">
-        Score : {{ c.result.team1Td }} - {{ c.result.team2Td }} (casualties {{ c.result.team1Cas }} -
-        {{ c.result.team2Cas }})
+        Joué le {{ c.result.playedAt }} — Score : {{ c.result.team1Td }} - {{ c.result.team2Td }} (casualties
+        {{ c.result.team1Cas }} - {{ c.result.team2Cas }})
         <span *ngIf="c.result.finalizedByAdmin">— forcé par l'admin</span>
       </p>
 

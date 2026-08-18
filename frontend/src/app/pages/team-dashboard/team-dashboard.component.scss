@@ -11,3 +11,12 @@
   justify-content: space-between;
   margin-bottom: 0.5rem;
 }
+
+.roster-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  margin-bottom: 0.9rem;
+}

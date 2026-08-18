@@ -1,6 +1,12 @@
 import type { Context } from 'hono';
 import { v4 as uuidv4 } from 'uuid';
-import type { CreateTournamentRequest, CreateTournamentResponse, Tournament } from '@bb-tournament/shared';
+import {
+  TOURNAMENT_DESCRIPTION_MAX_LENGTH,
+  type CreateTournamentRequest,
+  type CreateTournamentResponse,
+  type Tournament,
+  type UpdateTournamentDescriptionRequest,
+} from '@bb-tournament/shared';
 import * as storage from '../storage';
 import { requireAdmin } from '../auth';
 import { toAdminTournamentView, toPublicTournament } from '../sanitize';
@@ -18,6 +24,7 @@ export async function createTournament(c: Context) {
   const tournament: Tournament = {
     id: uuidv4(),
     name,
+    description: '',
     adminToken: uuidv4(),
     createdAt: now,
     teams: [],
@@ -45,4 +52,22 @@ export async function getAdminTournament(c: Context) {
   const tournament = await storage.getTournament(id);
   requireAdmin(tournament, token);
   return c.json(toAdminTournamentView(tournament));
+}
+
+export async function updateDescription(c: Context) {
+  const id = c.req.param('tournamentId')!;
+  const token = c.req.query('token');
+  const body = await c.req.json<UpdateTournamentDescriptionRequest>().catch(() => null);
+  const description = body?.description ?? '';
+  if (description.length > TOURNAMENT_DESCRIPTION_MAX_LENGTH) {
+    throw badRequest(`description must be at most ${TOURNAMENT_DESCRIPTION_MAX_LENGTH} characters`);
+  }
+
+  await storage.updateTournament(id, (t) => {
+    requireAdmin(t, token);
+    t.description = description.trim();
+  });
+
+  const tournament = await storage.getTournament(id);
+  return c.json(toPublicTournament(tournament));
 }

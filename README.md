@@ -54,9 +54,11 @@ frontend/  Application Angular
 - Remplir la feuille de match (date du match, touchdowns, casualties, concession) ; l'adversaire confirme le
   score, ou peut proposer une correction si les valeurs ne correspondent pas.
 - Tableau des scores public en temps quasi réel (rafraîchi toutes les 15s) : classement, équipes (cliquables pour
-  voir le roster), historique des défis avec leur date.
-- Panneau admin : mot de passe + lien de toutes les équipes, suppression d'équipe, forcer/débloquer un défi, forcer un
-  résultat.
+  voir le roster et l'historique des défis face à chaque adversaire), historique des défis avec leur date.
+- Onglet "Description" sur le tableau des scores (règlement, planning, infos pratiques…), rédigé en Markdown et
+  modifiable uniquement depuis le panneau admin.
+- Panneau admin : mot de passe + lien de toutes les équipes, suppression d'équipe, forcer/débloquer un défi, forcer
+  un résultat, éditer la description du tournoi (avec aperçu).
 
 Hors scope volontaire pour l'instant (cf. échanges de cadrage) : rounds générés / format squad façon NAF,
 roster builder avec achat de compétences en SPP, nom de domaine personnalisé.

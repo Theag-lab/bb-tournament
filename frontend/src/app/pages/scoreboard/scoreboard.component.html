@@ -22,6 +22,30 @@
     </div>
   </section>
 
+  <div class="tabs">
+    <button type="button" class="tab-btn" [class.active]="activeTab === 'scores'" (click)="activeTab = 'scores'">
+      Tableau des scores
+    </button>
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="activeTab === 'description'"
+      (click)="activeTab = 'description'"
+    >
+      Description
+    </button>
+  </div>
+
+  <ng-container *ngIf="activeTab === 'description'">
+    <section class="card">
+      <div class="markdown-body" *ngIf="descriptionHtml" [innerHTML]="descriptionHtml"></div>
+      <p class="muted" *ngIf="!descriptionHtml">
+        Aucune description pour ce tournoi pour le moment.
+      </p>
+    </section>
+  </ng-container>
+
+  <ng-container *ngIf="activeTab === 'scores'">
   <section class="card" *ngIf="showFindForm && !createdTeam">
     <h2>Retrouver mon équipe</h2>
     <div class="alert alert-error" *ngIf="findError">{{ findError }}</div>
@@ -97,10 +121,11 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>Équipe</th>
             <th>Coach</th>
-            <th>Pts</th>
+            <th>Équipe</th>
+            <th>Race</th>
             <th>V-N-D</th>
+            <th>Points</th>
             <th>TD +/-</th>
             <th>Cas +/-</th>
           </tr>
@@ -108,17 +133,18 @@
         <tbody>
           <tr *ngFor="let s of t.standings; let i = index">
             <td>{{ i + 1 }}</td>
-            <td>
-              <button type="button" class="link-btn" (click)="openRosterById(s.teamId)">{{ teamName(s.teamId) }}</button>
-            </td>
             <td class="muted">{{ teamCoach(s.teamId) }}</td>
-            <td>{{ s.points }}</td>
+            <td>
+              <button type="button" class="link-btn" (click)="openTeamById(s.teamId)">{{ teamName(s.teamId) }}</button>
+            </td>
+            <td>{{ teamRace(s.teamId) }}</td>
             <td>{{ s.wins }}-{{ s.draws }}-{{ s.losses }}</td>
+            <td>{{ s.points }}</td>
             <td>{{ s.tdFor }} / {{ s.tdAgainst }}</td>
             <td>{{ s.casFor }} / {{ s.casAgainst }}</td>
           </tr>
           <tr *ngIf="t.standings.length === 0">
-            <td colspan="7" class="muted">Aucune équipe inscrite pour le moment.</td>
+            <td colspan="8" class="muted">Aucune équipe inscrite pour le moment.</td>
           </tr>
         </tbody>
       </table>
@@ -131,18 +157,18 @@
       <table>
         <thead>
           <tr>
-            <th>Équipe</th>
             <th>Coach</th>
+            <th>Équipe</th>
             <th>Race</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let team of t.teams">
+            <td>{{ team.coachName }}</td>
             <td>
-              <button type="button" class="link-btn" (click)="openRoster(team)">{{ team.name }}</button>
+              <button type="button" class="link-btn" (click)="openTeam(team)">{{ team.name }}</button>
               <span class="badge" *ngIf="team.rosterImage">📷</span>
             </td>
-            <td>{{ team.coachName }}</td>
             <td>{{ team.race }}</td>
           </tr>
           <tr *ngIf="t.teams.length === 0">
@@ -162,33 +188,107 @@
             <th>Défi</th>
             <th>Statut</th>
             <th>Date</th>
-            <th>Score</th>
+            <th>TD</th>
+            <th>Cas</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let c of t.challenges">
-            <td>{{ teamName(c.team1Id) }} vs {{ teamName(c.team2Id) }}</td>
+            <td>
+              {{ teamName(c.team1Id) }} ({{ teamCoach(c.team1Id) }}) vs {{ teamName(c.team2Id) }} ({{ teamCoach(c.team2Id) }})
+            </td>
             <td><span class="badge" [ngClass]="'badge-' + c.status">{{ c.status }}</span></td>
             <td class="muted">{{ c.result?.playedAt ?? '—' }}</td>
             <td *ngIf="c.result">{{ c.result.team1Td }} - {{ c.result.team2Td }}</td>
             <td *ngIf="!c.result" class="muted">—</td>
+            <td *ngIf="c.result">{{ c.result.team1Cas }} - {{ c.result.team2Cas }}</td>
+            <td *ngIf="!c.result" class="muted">—</td>
           </tr>
           <tr *ngIf="t.challenges.length === 0">
-            <td colspan="4" class="muted">Aucun défi pour le moment.</td>
+            <td colspan="5" class="muted">Aucun défi pour le moment.</td>
           </tr>
         </tbody>
       </table>
     </div>
   </section>
+  </ng-container>
 
-  <div class="modal-backdrop" *ngIf="selectedRosterTeam as rt" (click)="closeRoster()">
+  <div class="modal-backdrop" *ngIf="selectedTeam as rt" (click)="closeTeam()">
     <div class="modal" (click)="$event.stopPropagation()">
       <div class="modal-head">
         <h2>{{ rt.name }}</h2>
-        <button type="button" class="btn" (click)="closeRoster()">Fermer</button>
+        <button type="button" class="btn" (click)="closeTeam()">Fermer</button>
       </div>
-      <img *ngIf="selectedRosterImageUrl() as imgUrl" [src]="imgUrl" alt="Roster de {{ rt.name }}" class="roster-preview" />
-      <p class="muted" *ngIf="!selectedRosterImageUrl()">Aucune image de roster envoyée par ce coach.</p>
+
+      <div class="team-card">
+        <dl class="team-facts">
+          <dt>Coach</dt>
+          <dd>{{ rt.coachName }}</dd>
+          <dt>Race</dt>
+          <dd>{{ rt.race }}</dd>
+          <ng-container *ngIf="selectedTeamStanding() as s">
+            <dt>Points</dt>
+            <dd>{{ s.points }}</dd>
+            <dt>Bilan V-N-D</dt>
+            <dd>{{ s.wins }}-{{ s.draws }}-{{ s.losses }}</dd>
+            <dt>Touchdowns +/-</dt>
+            <dd>{{ s.tdFor }} / {{ s.tdAgainst }}</dd>
+            <dt>Casualties +/-</dt>
+            <dd>{{ s.casFor }} / {{ s.casAgainst }}</dd>
+          </ng-container>
+        </dl>
+
+        <button
+          type="button"
+          class="roster-thumb-btn"
+          *ngIf="selectedTeamImageUrl() as imgUrl"
+          (click)="openImageLightbox()"
+          title="Cliquer pour agrandir"
+        >
+          <img [src]="imgUrl" alt="Roster de {{ rt.name }}" class="roster-preview" />
+        </button>
+        <p class="muted" *ngIf="!selectedTeamImageUrl()">Aucune image de roster envoyée par ce coach.</p>
+      </div>
+
+      <h3>Historique des matchs</h3>
+      <div class="table-wrap" *ngIf="selectedTeamChallenges().length > 0; else noMatches">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Adversaire</th>
+              <th>Coach adverse</th>
+              <th>Statut</th>
+              <th>Score</th>
+              <th>Résultat</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let c of selectedTeamChallenges()">
+              <td class="muted">{{ c.result?.playedAt ?? '—' }}</td>
+              <td>{{ teamName(opponentId(c, rt.id)) }}</td>
+              <td class="muted">{{ teamCoach(opponentId(c, rt.id)) }}</td>
+              <td><span class="badge" [ngClass]="'badge-' + c.status">{{ c.status }}</span></td>
+              <td>{{ matchScoreLabel(c, rt.id) }}</td>
+              <td>
+                <span
+                  class="badge"
+                  *ngIf="matchOutcome(c, rt.id) as outcome"
+                  [ngClass]="'badge-outcome-' + outcome"
+                >{{ matchOutcomeLabel(c, rt.id) }}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noMatches>
+        <p class="muted">Aucun défi pour cette équipe pour le moment.</p>
+      </ng-template>
     </div>
+  </div>
+
+  <div class="modal-backdrop lightbox-backdrop" *ngIf="lightboxImageUrl as imgUrl" (click)="closeImageLightbox()">
+    <button type="button" class="btn lightbox-close" (click)="closeImageLightbox()">Fermer</button>
+    <img [src]="imgUrl" alt="Roster en grand" class="lightbox-image" (click)="$event.stopPropagation()" />
   </div>
 </ng-container>

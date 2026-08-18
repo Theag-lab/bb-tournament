@@ -50,6 +50,16 @@ export class ApiService {
     );
   }
 
+  updateDescription(tournamentId: string, token: string, description: string) {
+    return firstValueFrom(
+      this.http.patch<PublicTournament>(
+        `${API_BASE}/tournaments/${tournamentId}/description`,
+        { description },
+        { params: { token } }
+      )
+    );
+  }
+
   createTeam(tournamentId: string, body: CreateTeamRequest) {
     return firstValueFrom(
       this.http.post<CreateTeamResponse>(`${API_BASE}/tournaments/${tournamentId}/teams`, body)

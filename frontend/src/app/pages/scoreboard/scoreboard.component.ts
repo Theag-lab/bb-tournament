@@ -2,10 +2,11 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { RACES, type PublicTeam, type PublicTournament } from '@bb-tournament/shared';
+import { RACES, type PublicTeam, type PublicTournament, type StandingEntry } from '@bb-tournament/shared';
 import { ApiService } from '../../core/api.service';
 import { extractErrorMessage } from '../../core/http-error';
 import { copyToClipboard, participantUrl, rosterImageUrl, scoreboardUrl } from '../../core/links';
+import { renderMarkdown } from '../../core/markdown';
 
 const POLL_INTERVAL_MS = 15000;
 
@@ -29,6 +30,9 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   loading = true;
   error: string | null = null;
 
+  activeTab: 'scores' | 'description' = 'scores';
+  descriptionHtml = '';
+
   showJoinForm = false;
   joinBusy = false;
   joinError: string | null = null;
@@ -47,7 +51,7 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   findBusy = false;
   findError: string | null = null;
 
-  selectedRosterTeam: PublicTeam | null = null;
+  selectedTeam: PublicTeam | null = null;
 
   async ngOnInit(): Promise<void> {
     this.tournamentId = this.route.snapshot.paramMap.get('tournamentId')!;
@@ -63,6 +67,7 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     if (!silent) this.loading = true;
     try {
       this.tournament = await this.api.getTournament(this.tournamentId);
+      this.descriptionHtml = renderMarkdown(this.tournament.description);
       this.error = null;
     } catch (err) {
       this.error = extractErrorMessage(err);
@@ -77,6 +82,10 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
 
   teamCoach(teamId: string): string {
     return this.tournament?.teams.find((t) => t.id === teamId)?.coachName ?? '—';
+  }
+
+  teamRace(teamId: string): string {
+    return this.tournament?.teams.find((t) => t.id === teamId)?.race ?? '—';
   }
 
   async submitJoin(): Promise<void> {
@@ -138,22 +147,74 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  openRoster(team: PublicTeam): void {
-    this.selectedRosterTeam = team;
+  openTeam(team: PublicTeam): void {
+    this.selectedTeam = team;
   }
 
-  openRosterById(teamId: string): void {
+  openTeamById(teamId: string): void {
     const team = this.tournament?.teams.find((t) => t.id === teamId);
-    if (team) this.selectedRosterTeam = team;
+    if (team) this.selectedTeam = team;
   }
 
-  closeRoster(): void {
-    this.selectedRosterTeam = null;
+  closeTeam(): void {
+    this.selectedTeam = null;
+    this.lightboxImageUrl = null;
   }
 
-  selectedRosterImageUrl(): string | null {
-    const team = this.selectedRosterTeam;
+  selectedTeamImageUrl(): string | null {
+    const team = this.selectedTeam;
     if (!team?.rosterImage) return null;
     return rosterImageUrl(this.tournamentId, team.id, team.rosterImage.updatedAt);
+  }
+
+  lightboxImageUrl: string | null = null;
+
+  openImageLightbox(): void {
+    this.lightboxImageUrl = this.selectedTeamImageUrl();
+  }
+
+  closeImageLightbox(): void {
+    this.lightboxImageUrl = null;
+  }
+
+  selectedTeamStanding(): StandingEntry | null {
+    if (!this.selectedTeam) return null;
+    return this.tournament?.standings.find((s) => s.teamId === this.selectedTeam!.id) ?? null;
+  }
+
+  selectedTeamChallenges(): PublicTournament['challenges'] {
+    if (!this.selectedTeam) return [];
+    const id = this.selectedTeam.id;
+    return (this.tournament?.challenges.filter((c) => c.team1Id === id || c.team2Id === id) ?? [])
+      .slice()
+      .sort((a, b) => (b.result?.playedAt ?? b.updatedAt).localeCompare(a.result?.playedAt ?? a.updatedAt));
+  }
+
+  opponentId(c: PublicTournament['challenges'][number], teamId: string): string {
+    return c.team1Id === teamId ? c.team2Id : c.team1Id;
+  }
+
+  matchScoreLabel(c: PublicTournament['challenges'][number], teamId: string): string {
+    if (!c.result) return '—';
+    const mine = c.team1Id === teamId ? c.result.team1Td : c.result.team2Td;
+    const theirs = c.team1Id === teamId ? c.result.team2Td : c.result.team1Td;
+    return `${mine} - ${theirs}`;
+  }
+
+  matchOutcome(c: PublicTournament['challenges'][number], teamId: string): 'win' | 'draw' | 'loss' | null {
+    if (!c.result) return null;
+    const mine = c.team1Id === teamId ? c.result.team1Points : c.result.team2Points;
+    const theirs = c.team1Id === teamId ? c.result.team2Points : c.result.team1Points;
+    if (mine > theirs) return 'win';
+    if (mine < theirs) return 'loss';
+    return 'draw';
+  }
+
+  matchOutcomeLabel(c: PublicTournament['challenges'][number], teamId: string): string {
+    const outcome = this.matchOutcome(c, teamId);
+    if (outcome === 'win') return 'Victoire';
+    if (outcome === 'loss') return 'Défaite';
+    if (outcome === 'draw') return 'Nul';
+    return '';
   }
 }

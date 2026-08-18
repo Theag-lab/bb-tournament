@@ -21,6 +21,36 @@
   </section>
 
   <section class="card">
+    <h2>Description du tournoi</h2>
+    <p class="muted">Visible par tous dans l'onglet "Description" du tableau des scores. Markdown pris en charge.</p>
+    <div class="alert alert-error" *ngIf="descriptionError">{{ descriptionError }}</div>
+
+    <div class="actions" style="margin-bottom: 0.6rem">
+      <button type="button" class="btn" [class.btn-primary]="!descriptionPreview" (click)="descriptionPreview = false">
+        Édition
+      </button>
+      <button type="button" class="btn" [class.btn-primary]="descriptionPreview" (click)="descriptionPreview = true">
+        Aperçu
+      </button>
+    </div>
+
+    <textarea
+      *ngIf="!descriptionPreview"
+      name="descriptionDraft"
+      rows="10"
+      [(ngModel)]="descriptionDraft"
+      [maxlength]="descriptionMaxLength"
+      placeholder="Règlement, planning, informations pratiques… (markdown pris en charge)"
+    ></textarea>
+    <div class="markdown-body markdown-preview" *ngIf="descriptionPreview" [innerHTML]="descriptionPreviewHtml()"></div>
+
+    <p class="muted" style="margin-top: 0.4rem">{{ descriptionDraft.length }} / {{ descriptionMaxLength }}</p>
+    <button type="button" class="btn btn-primary" [disabled]="savingDescription" (click)="saveDescription()">
+      {{ savingDescription ? 'Enregistrement…' : 'Enregistrer la description' }}
+    </button>
+  </section>
+
+  <section class="card">
     <h2>Équipes ({{ t.teams.length }})</h2>
     <div class="table-wrap">
       <table>

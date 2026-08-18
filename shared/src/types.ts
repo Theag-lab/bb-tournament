@@ -49,11 +49,14 @@ export interface Team {
 export interface Tournament {
   id: string;
   name: string;
+  description: string; // markdown source, editable by the admin
   adminToken: string;
   createdAt: string;
   teams: Team[];
   challenges: Challenge[];
 }
+
+export const TOURNAMENT_DESCRIPTION_MAX_LENGTH = 20000;
 
 // ---- Public (sanitized) shapes returned to non-owners ----
 
@@ -92,6 +95,7 @@ export interface StandingEntry {
 export interface PublicTournament {
   id: string;
   name: string;
+  description: string;
   createdAt: string;
   teams: PublicTeam[];
   challenges: PublicChallenge[];
@@ -105,10 +109,15 @@ export interface AdminTeamView extends PublicTeam {
 export interface AdminTournamentView {
   id: string;
   name: string;
+  description: string;
   createdAt: string;
   teams: AdminTeamView[];
   challenges: PublicChallenge[];
   standings: StandingEntry[];
+}
+
+export interface UpdateTournamentDescriptionRequest {
+  description: string;
 }
 
 export interface CreateTournamentRequest {

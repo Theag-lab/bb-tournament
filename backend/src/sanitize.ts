@@ -4,6 +4,7 @@ export function toPublicTournament(t: Tournament): PublicTournament {
   return {
     id: t.id,
     name: t.name,
+    description: t.description,
     createdAt: t.createdAt,
     teams: t.teams.map((team) => ({
       id: team.id,

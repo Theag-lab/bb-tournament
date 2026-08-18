@@ -1,10 +1,16 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import type { AdminTournamentView, SubmitResultRequest } from '@bb-tournament/shared';
+import {
+  TOURNAMENT_DESCRIPTION_MAX_LENGTH,
+  type AdminTournamentView,
+  type SubmitResultRequest,
+} from '@bb-tournament/shared';
 import { ApiService } from '../../core/api.service';
 import { extractErrorMessage } from '../../core/http-error';
 import { copyToClipboard, participantUrl, scoreboardUrl } from '../../core/links';
+import { renderMarkdown } from '../../core/markdown';
 import { MatchResultFormComponent } from '../../shared/match-result-form/match-result-form.component';
 
 const POLL_INTERVAL_MS = 15000;
@@ -12,7 +18,7 @@ const POLL_INTERVAL_MS = 15000;
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, MatchResultFormComponent],
+  imports: [CommonModule, FormsModule, RouterLink, MatchResultFormComponent],
   templateUrl: './admin-dashboard.component.html',
   styleUrl: './admin-dashboard.component.scss',
 })
@@ -36,6 +42,12 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
 
   editingResultChallengeId: string | null = null;
 
+  readonly descriptionMaxLength = TOURNAMENT_DESCRIPTION_MAX_LENGTH;
+  descriptionDraft = '';
+  descriptionPreview = false;
+  savingDescription = false;
+  descriptionError: string | null = null;
+
   async ngOnInit(): Promise<void> {
     this.tournamentId = this.route.snapshot.paramMap.get('tournamentId')!;
     this.token = this.route.snapshot.paramMap.get('token')!;
@@ -51,11 +63,29 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     if (!silent) this.loading = true;
     try {
       this.tournament = await this.api.getAdminTournament(this.tournamentId, this.token);
+      if (!silent) this.descriptionDraft = this.tournament.description;
       this.loadError = null;
     } catch (err) {
       this.loadError = extractErrorMessage(err);
     } finally {
       this.loading = false;
+    }
+  }
+
+  descriptionPreviewHtml(): string {
+    return renderMarkdown(this.descriptionDraft);
+  }
+
+  async saveDescription(): Promise<void> {
+    this.savingDescription = true;
+    this.descriptionError = null;
+    try {
+      const pub = await this.api.updateDescription(this.tournamentId, this.token, this.descriptionDraft);
+      this.tournament = { ...this.tournament!, description: pub.description };
+    } catch (err) {
+      this.descriptionError = extractErrorMessage(err);
+    } finally {
+      this.savingDescription = false;
     }
   }
 

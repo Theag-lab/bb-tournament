@@ -100,17 +100,24 @@ h3 {
 }
 
 input,
-select {
+select,
+textarea {
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius);
   padding: 0.5rem 0.65rem;
   font-size: 0.95rem;
+  font-family: inherit;
 
   &:focus {
     outline: 2px solid var(--primary);
   }
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
 }
 
 table {
@@ -210,4 +217,82 @@ table {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+// Renders markdown-generated HTML bound via [innerHTML]. Kept global (not component-scoped)
+// because that content is raw DOM never touched by Angular's template compiler, so emulated
+// view encapsulation's scoping attributes never reach it.
+.markdown-body {
+  line-height: 1.6;
+
+  h1,
+  h2,
+  h3 {
+    margin-top: 1.2em;
+    margin-bottom: 0.5em;
+  }
+
+  p {
+    margin: 0 0 0.9em;
+  }
+
+  ul,
+  ol {
+    margin: 0 0 0.9em;
+    padding-left: 1.4em;
+  }
+
+  a {
+    color: var(--primary);
+  }
+
+  code {
+    background: var(--surface-2);
+    border-radius: 4px;
+    padding: 0.1em 0.35em;
+    font-size: 0.9em;
+  }
+
+  pre {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75em;
+    overflow-x: auto;
+
+    code {
+      background: none;
+      padding: 0;
+    }
+  }
+
+  blockquote {
+    margin: 0 0 0.9em;
+    padding-left: 1em;
+    border-left: 3px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  img {
+    max-width: 100%;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 0.9em;
+  }
+
+  th,
+  td {
+    border: 1px solid var(--border);
+    padding: 0.4em 0.6em;
+  }
+}
+
+.markdown-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem;
+  min-height: 160px;
 }

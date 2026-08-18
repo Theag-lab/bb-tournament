@@ -24,6 +24,7 @@ app.get('/health', (c) => c.json({ ok: true }));
 app.post('/tournaments', tournaments.createTournament);
 app.get('/tournaments/:tournamentId', tournaments.getPublicTournament);
 app.get('/tournaments/:tournamentId/admin', tournaments.getAdminTournament);
+app.patch('/tournaments/:tournamentId/description', tournaments.updateDescription);
 
 app.post('/tournaments/:tournamentId/teams', teams.createTeam);
 app.get('/tournaments/:tournamentId/teams/find', teams.findMyTeam);

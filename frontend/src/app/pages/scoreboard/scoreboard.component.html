@@ -8,23 +8,55 @@
 
 <ng-container *ngIf="!loading && tournament as t">
   <section class="card">
-    <h1>{{ t.name }}</h1>
-    <div class="link-copy">
-      <button type="button" class="btn" (click)="copyShareLink()">
-        {{ shareCopied ? 'Lien copié !' : 'Copier le lien de ce tableau' }}
+    <div class="title-row">
+      <h1>{{ t.name }}</h1>
+      <button
+        type="button"
+        class="icon-btn"
+        (click)="shareTournament()"
+        title="Partager le lien de ce tournoi"
+        aria-label="Partager le lien de ce tournoi"
+      >
+        📤
       </button>
-      <button type="button" class="btn btn-primary" (click)="showJoinForm = !showJoinForm; showFindForm = false" *ngIf="!createdTeam">
+      <span class="muted" *ngIf="shareCopied">Lien copié !</span>
+    </div>
+    <div class="actions">
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="showJoinForm = !showJoinForm; showFindForm = false"
+        *ngIf="!createdTeam && !registrationClosed"
+      >
         {{ showJoinForm ? 'Annuler' : "S'inscrire avec une équipe" }}
       </button>
       <button type="button" class="btn" (click)="showFindForm = !showFindForm; showJoinForm = false" *ngIf="!createdTeam">
         {{ showFindForm ? 'Annuler' : "J'ai déjà une équipe" }}
       </button>
     </div>
+    <p class="muted" *ngIf="registrationClosed" style="margin-top: 0.5rem">
+      Les inscriptions sont closes, les rondes ont commencé.
+      <ng-container *ngIf="roundInPreparation">
+        Une ronde est en cours de préparation par l'organisateur.
+      </ng-container>
+    </p>
   </section>
 
   <div class="tabs">
     <button type="button" class="tab-btn" [class.active]="activeTab === 'scores'" (click)="activeTab = 'scores'">
       Tableau des scores
+    </button>
+    <button type="button" class="tab-btn" [class.active]="activeTab === 'awards'" (click)="activeTab = 'awards'">
+      Scores secondaires
+    </button>
+    <button
+      *ngFor="let r of launchedRounds"
+      type="button"
+      class="tab-btn"
+      [class.active]="activeTab === roundTabId(r.number)"
+      (click)="activeTab = roundTabId(r.number)"
+    >
+      Ronde {{ r.number }}
     </button>
     <button
       type="button"
@@ -35,6 +67,133 @@
       Description
     </button>
   </div>
+
+  <ng-container *ngFor="let r of launchedRounds">
+    <section class="card" *ngIf="activeTab === roundTabId(r.number)">
+      <h2>Ronde {{ r.number }}</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Match</th>
+              <th>Statut</th>
+              <th>Date</th>
+              <th>TD</th>
+              <th>Cas</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let c of roundMatches(r.number)">
+              <td>
+                {{ teamName(c.team1Id) }} ({{ teamCoach(c.team1Id) }}) vs {{ teamName(c.team2Id) }} ({{ teamCoach(c.team2Id) }})
+              </td>
+              <td><span class="badge" [ngClass]="'badge-' + c.status">{{ c.status }}</span></td>
+              <td class="muted">{{ c.result?.playedAt ?? '—' }}</td>
+              <td *ngIf="c.result">{{ c.result.team1Td }} - {{ c.result.team2Td }}</td>
+              <td *ngIf="!c.result" class="muted">—</td>
+              <td *ngIf="c.result">{{ c.result.team1Cas }} - {{ c.result.team2Cas }}</td>
+              <td *ngIf="!c.result" class="muted">—</td>
+            </tr>
+            <tr *ngIf="roundMatches(r.number).length === 0">
+              <td colspan="5" class="muted">Aucun match dans cette ronde.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </ng-container>
+
+  <ng-container *ngIf="activeTab === 'awards'">
+    <section class="card">
+      <h2>🩸 Bashlord</h2>
+      <p class="muted">Le plus de casualties infligées.</p>
+      <div class="table-wrap" *ngIf="bashlordRanking().length > 0; else noBashlord">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Coach</th>
+              <th>Équipe</th>
+              <th>Casualties</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of bashlordRanking(); let i = index">
+              <td>{{ rankMedal(i) }}</td>
+              <td class="muted">{{ teamCoach(s.teamId) }}</td>
+              <td>
+                <button type="button" class="link-btn" (click)="openTeamById(s.teamId)">{{ teamName(s.teamId) }}</button>
+              </td>
+              <td>{{ s.casFor }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noBashlord>
+        <p class="muted">Aucun match joué pour le moment.</p>
+      </ng-template>
+    </section>
+
+    <section class="card">
+      <h2>💥 AggroLord</h2>
+      <p class="muted">Le plus d'agressions infligées.</p>
+      <div class="table-wrap" *ngIf="aggroLordRanking().length > 0; else noAggro">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Coach</th>
+              <th>Équipe</th>
+              <th>Agressions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of aggroLordRanking(); let i = index">
+              <td>{{ rankMedal(i) }}</td>
+              <td class="muted">{{ teamCoach(s.teamId) }}</td>
+              <td>
+                <button type="button" class="link-btn" (click)="openTeamById(s.teamId)">{{ teamName(s.teamId) }}</button>
+              </td>
+              <td>{{ s.aggFor }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noAggro>
+        <p class="muted">Aucun match joué pour le moment.</p>
+      </ng-template>
+    </section>
+
+    <section class="card">
+      <h2>🏈 Meilleur marqueur</h2>
+      <p class="muted">Le plus de touchdowns marqués.</p>
+      <div class="table-wrap" *ngIf="topScorerRanking().length > 0; else noScorer">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Coach</th>
+              <th>Équipe</th>
+              <th>Touchdowns</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of topScorerRanking(); let i = index">
+              <td>{{ rankMedal(i) }}</td>
+              <td class="muted">{{ teamCoach(s.teamId) }}</td>
+              <td>
+                <button type="button" class="link-btn" (click)="openTeamById(s.teamId)">{{ teamName(s.teamId) }}</button>
+              </td>
+              <td>{{ s.tdFor }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noScorer>
+        <p class="muted">Aucun match joué pour le moment.</p>
+      </ng-template>
+    </section>
+  </ng-container>
 
   <ng-container *ngIf="activeTab === 'description'">
     <section class="card">
@@ -160,6 +319,7 @@
             <th>Coach</th>
             <th>Équipe</th>
             <th>Race</th>
+            <th *ngIf="t.requireRosterValidation">Roster</th>
           </tr>
         </thead>
         <tbody>
@@ -170,17 +330,20 @@
               <span class="badge" *ngIf="team.rosterImage">📷</span>
             </td>
             <td>{{ team.race }}</td>
+            <td *ngIf="t.requireRosterValidation">
+              <span class="badge" [ngClass]="'badge-roster-' + team.rosterStatus">{{ rosterStatusLabel(team.rosterStatus) }}</span>
+            </td>
           </tr>
           <tr *ngIf="t.teams.length === 0">
-            <td colspan="3" class="muted">Aucune équipe inscrite pour le moment.</td>
+            <td [attr.colspan]="t.requireRosterValidation ? 4 : 3" class="muted">Aucune équipe inscrite pour le moment.</td>
           </tr>
         </tbody>
       </table>
     </div>
   </section>
 
-  <section class="card">
-    <h2>Défis ({{ t.challenges.length }})</h2>
+  <section class="card" *ngIf="t.mode !== 'swiss'">
+    <h2>Défis libres ({{ freeChallenges().length }})</h2>
     <div class="table-wrap">
       <table>
         <thead>
@@ -193,7 +356,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let c of t.challenges">
+          <tr *ngFor="let c of freeChallenges()">
             <td>
               {{ teamName(c.team1Id) }} ({{ teamCoach(c.team1Id) }}) vs {{ teamName(c.team2Id) }} ({{ teamCoach(c.team2Id) }})
             </td>
@@ -204,7 +367,7 @@
             <td *ngIf="c.result">{{ c.result.team1Cas }} - {{ c.result.team2Cas }}</td>
             <td *ngIf="!c.result" class="muted">—</td>
           </tr>
-          <tr *ngIf="t.challenges.length === 0">
+          <tr *ngIf="freeChallenges().length === 0">
             <td colspan="5" class="muted">Aucun défi pour le moment.</td>
           </tr>
         </tbody>
@@ -226,6 +389,12 @@
           <dd>{{ rt.coachName }}</dd>
           <dt>Race</dt>
           <dd>{{ rt.race }}</dd>
+          <ng-container *ngIf="t.requireRosterValidation">
+            <dt>Roster</dt>
+            <dd>
+              <span class="badge" [ngClass]="'badge-roster-' + rt.rosterStatus">{{ rosterStatusLabel(rt.rosterStatus) }}</span>
+            </dd>
+          </ng-container>
           <ng-container *ngIf="selectedTeamStanding() as s">
             <dt>Points</dt>
             <dd>{{ s.points }}</dd>

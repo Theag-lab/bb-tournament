@@ -1,7 +1,14 @@
 import type { Context } from 'hono';
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
-import type { CreateTeamRequest, CreateTeamResponse, ResolveTeamResponse, Team } from '@bb-tournament/shared';
+import type {
+  CreateTeamRequest,
+  CreateTeamResponse,
+  ResolveTeamResponse,
+  RosterStatus,
+  Team,
+  UpdateRosterStatusRequest,
+} from '@bb-tournament/shared';
 import * as storage from '../storage';
 import { authenticateTeam, findTeamById, isAdmin, validatePassword } from '../auth';
 import { toAdminTournamentView, toPublicTournament } from '../sanitize';
@@ -64,9 +71,13 @@ export async function createTeam(c: Context) {
     race,
     createdAt: now,
     rosterImage: null,
+    rosterStatus: 'created',
   };
 
   await storage.updateTournament(tournamentId, (t) => {
+    if (t.mode !== 'ladder' && t.rounds.length > 0) {
+      throw forbidden('Registration is closed once the tournament rounds have started', 'registration_closed');
+    }
     if (t.teams.some((team) => team.name.toLowerCase() === name.toLowerCase())) {
       throw conflict(`A team named "${name}" already exists in this tournament`, 'team_name_taken');
     }
@@ -190,4 +201,49 @@ export async function deleteTeam(c: Context) {
 
 function requireAdminOrThrow(t: Parameters<typeof isAdmin>[0], token: string | undefined) {
   if (!isAdmin(t, token)) throw unauthorized('Admin token required');
+}
+
+const VALID_STATUSES: RosterStatus[] = ['created', 'submitted', 'validated'];
+
+export async function updateRosterStatus(c: Context) {
+  const tournamentId = c.req.param('tournamentId')!;
+  const teamId = c.req.param('teamId')!;
+  const password = c.req.query('password');
+  const token = c.req.query('token');
+  const body = await c.req.json<UpdateRosterStatusRequest>().catch(() => null);
+  const status = body?.status;
+  if (!status || !VALID_STATUSES.includes(status)) {
+    throw badRequest(`status must be one of: ${VALID_STATUSES.join(', ')}`);
+  }
+
+  await storage.updateTournament(tournamentId, (t) => {
+    if (!t.requireRosterValidation) {
+      throw forbidden('Roster validation is not enabled for this tournament', 'roster_validation_disabled');
+    }
+    const team = findTeamById(t, teamId);
+    const admin = isAdmin(t, token);
+
+    if (admin) {
+      if (status !== 'validated' && status !== 'created') {
+        throw forbidden('The admin can only validate a roster or reset it, not mark it as submitted');
+      }
+      team.rosterStatus = status;
+      return;
+    }
+
+    authenticateTeam(t, teamId, password);
+    if (status !== 'submitted') {
+      throw forbidden('A coach can only submit their roster for validation');
+    }
+    if (team.rosterStatus !== 'created') {
+      throw forbidden(`Cannot submit for validation from status: ${team.rosterStatus}`);
+    }
+    if (!team.rosterImage) {
+      throw badRequest('Upload a roster image before submitting it for validation', 'roster_image_required');
+    }
+    team.rosterStatus = 'submitted';
+  });
+
+  const tournament = await storage.getTournament(tournamentId);
+  return c.json(toPublicTournament(tournament));
 }

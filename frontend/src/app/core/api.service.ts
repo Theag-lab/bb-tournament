@@ -7,13 +7,21 @@ import type {
   CreateChallengeRequest,
   CreateTeamRequest,
   CreateTeamResponse,
+  CreateTournamentRequest,
   CreateTournamentResponse,
   PublicTournament,
   ResolveTeamResponse,
   RosterImageUploadUrlRequest,
   RosterImageUploadUrlResponse,
+  RosterStatus,
   SubmitResultRequest,
 } from '@bb-tournament/shared';
+
+/** Identifies "myself" when loading a tournament, so I still see my own team even if others are masked. */
+export interface Viewer {
+  teamId: string;
+  password: string;
+}
 
 const API_BASE = '/api';
 
@@ -36,12 +44,17 @@ function authParams(auth: Auth): Record<string, string> {
 export class ApiService {
   private readonly http = inject(HttpClient);
 
-  createTournament(name: string) {
-    return firstValueFrom(this.http.post<CreateTournamentResponse>(`${API_BASE}/tournaments`, { name }));
+  createTournament(body: CreateTournamentRequest) {
+    return firstValueFrom(this.http.post<CreateTournamentResponse>(`${API_BASE}/tournaments`, body));
   }
 
-  getTournament(tournamentId: string) {
-    return firstValueFrom(this.http.get<PublicTournament>(`${API_BASE}/tournaments/${tournamentId}`));
+  getTournament(tournamentId: string, viewer?: Viewer) {
+    const params: Record<string, string> = {};
+    if (viewer) {
+      params['viewerTeamId'] = viewer.teamId;
+      params['viewerPassword'] = viewer.password;
+    }
+    return firstValueFrom(this.http.get<PublicTournament>(`${API_BASE}/tournaments/${tournamentId}`, { params }));
   }
 
   getAdminTournament(tournamentId: string, token: string) {
@@ -165,6 +178,42 @@ export class ApiService {
         `${API_BASE}/tournaments/${tournamentId}/teams/${teamId}/roster-image/confirm`,
         {},
         { params: authParams(auth) }
+      )
+    );
+  }
+
+  updateRosterStatus(tournamentId: string, teamId: string, auth: Auth, status: RosterStatus) {
+    return firstValueFrom(
+      this.http.patch<PublicTournament>(
+        `${API_BASE}/tournaments/${tournamentId}/teams/${teamId}/roster-status`,
+        { status },
+        { params: authParams(auth) }
+      )
+    );
+  }
+
+  generateRound(tournamentId: string, token: string) {
+    return firstValueFrom(
+      this.http.post<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/rounds`, {}, { params: { token } })
+    );
+  }
+
+  swapRoundMatches(tournamentId: string, token: string, roundNumber: number, matchId1: string, matchId2: string) {
+    return firstValueFrom(
+      this.http.post<AdminTournamentView>(
+        `${API_BASE}/tournaments/${tournamentId}/rounds/${roundNumber}/swap`,
+        { matchId1, matchId2 },
+        { params: { token } }
+      )
+    );
+  }
+
+  launchRound(tournamentId: string, token: string, roundNumber: number) {
+    return firstValueFrom(
+      this.http.post<AdminTournamentView>(
+        `${API_BASE}/tournaments/${tournamentId}/rounds/${roundNumber}/launch`,
+        {},
+        { params: { token } }
       )
     );
   }

@@ -12,6 +12,8 @@ export interface MatchResult {
   team2Td: number;
   team1Cas: number;
   team2Cas: number;
+  team1Agg: number; // aggressions (blocks that could have caused a casualty) committed by team 1
+  team2Agg: number;
   concededByTeamId: string | null;
   team1Points: number;
   team2Points: number;
@@ -27,6 +29,7 @@ export interface Challenge {
   team1Id: string; // challenger
   team2Id: string; // challenged
   status: ChallengeStatus;
+  round: number | null; // null = free challenge (ladder, or pre-round-1 in swiss_with_challenge)
   createdAt: string;
   updatedAt: string;
   result: MatchResult | null;
@@ -36,6 +39,21 @@ export interface RosterImage {
   updatedAt: string;
 }
 
+// Only meaningful when the tournament's requireRosterValidation is true; otherwise ignored.
+export type RosterStatus = 'created' | 'submitted' | 'validated';
+
+export type TournamentMode = 'ladder' | 'swiss' | 'swiss_with_challenge';
+
+export type RoundStatus = 'draft' | 'launched'; // draft = admin-only, pairings can still be swapped
+
+export interface RoundInfo {
+  number: number;
+  status: RoundStatus;
+}
+
+export const MIN_ROUND_COUNT = 1;
+export const MAX_ROUND_COUNT = 20;
+
 export interface Team {
   id: string;
   password: string;
@@ -44,12 +62,17 @@ export interface Team {
   race: string;
   createdAt: string;
   rosterImage: RosterImage | null;
+  rosterStatus: RosterStatus;
 }
 
 export interface Tournament {
   id: string;
   name: string;
   description: string; // markdown source, editable by the admin
+  requireRosterValidation: boolean; // when true, coaches submit rosters for admin approval
+  mode: TournamentMode;
+  roundCount: number | null; // null for ladder mode, required otherwise
+  rounds: RoundInfo[];
   adminToken: string;
   createdAt: string;
   teams: Team[];
@@ -67,6 +90,7 @@ export interface PublicTeam {
   race: string;
   createdAt: string;
   rosterImage: RosterImage | null;
+  rosterStatus: RosterStatus;
 }
 
 export interface PublicChallenge {
@@ -74,6 +98,7 @@ export interface PublicChallenge {
   team1Id: string;
   team2Id: string;
   status: ChallengeStatus;
+  round: number | null;
   createdAt: string;
   updatedAt: string;
   result: MatchResult | null;
@@ -89,6 +114,8 @@ export interface StandingEntry {
   tdAgainst: number;
   casFor: number;
   casAgainst: number;
+  aggFor: number;
+  aggAgainst: number;
   gamesPlayed: number;
 }
 
@@ -96,6 +123,10 @@ export interface PublicTournament {
   id: string;
   name: string;
   description: string;
+  requireRosterValidation: boolean;
+  mode: TournamentMode;
+  roundCount: number | null;
+  rounds: RoundInfo[]; // launched rounds only
   createdAt: string;
   teams: PublicTeam[];
   challenges: PublicChallenge[];
@@ -110,6 +141,10 @@ export interface AdminTournamentView {
   id: string;
   name: string;
   description: string;
+  requireRosterValidation: boolean;
+  mode: TournamentMode;
+  roundCount: number | null;
+  rounds: RoundInfo[]; // all rounds, including drafts
   createdAt: string;
   teams: AdminTeamView[];
   challenges: PublicChallenge[];
@@ -122,6 +157,18 @@ export interface UpdateTournamentDescriptionRequest {
 
 export interface CreateTournamentRequest {
   name: string;
+  requireRosterValidation?: boolean;
+  mode?: TournamentMode;
+  roundCount?: number; // required when mode !== 'ladder'
+}
+
+export interface UpdateRosterStatusRequest {
+  status: RosterStatus;
+}
+
+export interface SwapRoundMatchesRequest {
+  matchId1: string;
+  matchId2: string;
 }
 
 export interface CreateTournamentResponse {
@@ -178,6 +225,8 @@ export interface SubmitResultRequest {
   team2Td: number;
   team1Cas: number;
   team2Cas: number;
+  team1Agg: number;
+  team2Agg: number;
   concededByTeamId: string | null;
 }
 

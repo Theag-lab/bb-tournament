@@ -1,20 +1,108 @@
 <section class="card" *ngIf="!createdAdminLink">
   <h1>Créer un tournoi Blood Bowl</h1>
-  <p class="muted">
-    Format libre à la Ladder : chaque coach inscrit son équipe puis défie qui il veut. Feuille de match complète
-    (touchdowns, casualties, concession) inspirée du règlement NAF World Cup.
-  </p>
+  <p class="muted">Étape {{ stepNumber }} / {{ stepCount }}</p>
 
   <div class="alert alert-error" *ngIf="error">{{ error }}</div>
 
-  <form (ngSubmit)="create()">
-    <div class="field">
-      <label for="tournament-name">Nom du tournoi</label>
-      <input id="tournament-name" name="name" [(ngModel)]="name" placeholder="Ex : Coupe d'automne 2026" required />
+  <form (ngSubmit)="currentStep === 'review' ? create() : next()">
+    <ng-container [ngSwitch]="currentStep">
+      <div *ngSwitchCase="'name'">
+        <div class="field">
+          <label for="tournament-name">Nom du tournoi</label>
+          <input
+            id="tournament-name"
+            name="name"
+            [(ngModel)]="name"
+            placeholder="Ex : Coupe d'automne 2026"
+            required
+          />
+        </div>
+      </div>
+
+      <div *ngSwitchCase="'mode'">
+        <div class="field">
+          <label>Format du tournoi</label>
+          <label class="checkbox-field">
+            <input type="radio" name="mode" value="ladder" [(ngModel)]="mode" />
+            <span>
+              <strong>Défi libre (ladder)</strong>
+              <span class="muted"> — chaque coach inscrit son équipe puis défie qui il veut, à tout moment.</span>
+            </span>
+          </label>
+          <label class="checkbox-field">
+            <input type="radio" name="mode" value="swiss" [(ngModel)]="mode" />
+            <span>
+              <strong>Rondes suisses</strong>
+              <span class="muted">
+                — l'admin génère des rondes d'appariements (par classement) ; les équipes sont masquées tant que
+                la ronde 1 n'est pas lancée.
+              </span>
+            </span>
+          </label>
+          <label class="checkbox-field">
+            <input type="radio" name="mode" value="swiss_with_challenge" [(ngModel)]="mode" />
+            <span>
+              <strong>Rondes suisses avec défis en 1ère ronde</strong>
+              <span class="muted">
+                — les coachs peuvent se défier librement avant la ronde 1 ; ces défis acceptés deviennent les
+                premiers matchs, le reste est apparié aléatoirement. Rondes suivantes appariées par classement.
+              </span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div *ngSwitchCase="'rounds'">
+        <div class="field">
+          <label for="round-count">Nombre de rondes</label>
+          <input
+            id="round-count"
+            type="number"
+            name="roundCount"
+            [(ngModel)]="roundCount"
+            [min]="minRoundCount"
+            [max]="maxRoundCount"
+          />
+          <p class="muted">Entre {{ minRoundCount }} et {{ maxRoundCount }}.</p>
+        </div>
+      </div>
+
+      <div *ngSwitchCase="'validation'">
+        <label class="checkbox-field">
+          <input type="checkbox" name="requireRosterValidation" [(ngModel)]="requireRosterValidation" />
+          <span>
+            Activer la vérification des rosters par l'admin
+            <span class="muted">
+              — chaque coach devra soumettre une capture d'écran de son roster pour validation avant de pouvoir
+              jouer sereinement ; une fois validé, le roster ne peut plus être modifié.
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div *ngSwitchCase="'review'">
+        <h2>Récapitulatif</h2>
+        <dl class="team-facts">
+          <dt>Nom</dt>
+          <dd>{{ name }}</dd>
+          <dt>Format</dt>
+          <dd>{{ modeLabel(mode) }}</dd>
+          <ng-container *ngIf="mode !== 'ladder'">
+            <dt>Nombre de rondes</dt>
+            <dd>{{ roundCount }}</dd>
+          </ng-container>
+          <dt>Vérification des rosters</dt>
+          <dd>{{ requireRosterValidation ? 'Activée' : 'Désactivée' }}</dd>
+        </dl>
+      </div>
+    </ng-container>
+
+    <div class="actions" style="margin-top: 1rem">
+      <button type="button" class="btn" (click)="back()" [disabled]="stepIndex === 0 || busy">Précédent</button>
+      <button type="submit" class="btn btn-primary" [disabled]="!canGoNext() || busy">
+        {{ currentStep === 'review' ? (busy ? 'Création…' : 'Créer le tournoi') : 'Suivant' }}
+      </button>
     </div>
-    <button type="submit" class="btn btn-primary" [disabled]="busy || !name.trim()">
-      {{ busy ? 'Création…' : 'Créer le tournoi' }}
-    </button>
   </form>
 </section>
 

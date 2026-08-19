@@ -7,6 +7,7 @@ import { ApiService } from '../../core/api.service';
 import { extractErrorMessage } from '../../core/http-error';
 import { copyToClipboard, participantUrl, rosterImageUrl, scoreboardUrl } from '../../core/links';
 import { renderMarkdown } from '../../core/markdown';
+import { rosterStatusLabel } from '../../core/roster-status';
 
 const POLL_INTERVAL_MS = 15000;
 
@@ -24,13 +25,14 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   private pollHandle: ReturnType<typeof setInterval> | null = null;
 
   readonly races = RACES;
+  readonly rosterStatusLabel = rosterStatusLabel;
 
   tournamentId = '';
   tournament: PublicTournament | null = null;
   loading = true;
   error: string | null = null;
 
-  activeTab: 'scores' | 'description' = 'scores';
+  activeTab = 'scores';
   descriptionHtml = '';
 
   showJoinForm = false;
@@ -88,6 +90,30 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     return this.tournament?.teams.find((t) => t.id === teamId)?.race ?? '—';
   }
 
+  get launchedRounds() {
+    return this.tournament?.rounds.filter((r) => r.status === 'launched') ?? [];
+  }
+
+  get registrationClosed(): boolean {
+    return !!this.tournament && this.tournament.mode !== 'ladder' && this.tournament.rounds.length > 0;
+  }
+
+  get roundInPreparation(): boolean {
+    return !!this.tournament?.rounds.some((r) => r.status === 'draft');
+  }
+
+  freeChallenges(): PublicTournament['challenges'] {
+    return this.tournament?.challenges.filter((c) => c.round === null) ?? [];
+  }
+
+  roundMatches(roundNumber: number): PublicTournament['challenges'] {
+    return this.tournament?.challenges.filter((c) => c.round === roundNumber) ?? [];
+  }
+
+  roundTabId(roundNumber: number): string {
+    return `round-${roundNumber}`;
+  }
+
   async submitJoin(): Promise<void> {
     const name = this.joinName.trim();
     const coachName = this.joinCoachName.trim();
@@ -116,8 +142,20 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     this.copied = await copyToClipboard(this.createdTeamUrl);
   }
 
-  async copyShareLink(): Promise<void> {
-    this.shareCopied = await copyToClipboard(scoreboardUrl(this.tournamentId));
+  async shareTournament(): Promise<void> {
+    const url = scoreboardUrl(this.tournamentId);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: this.tournament?.name ?? 'Tournoi Blood Bowl', url });
+        return;
+      } catch {
+        // User cancelled the native share sheet, or it failed — fall back to copying below.
+      }
+    }
+    this.shareCopied = await copyToClipboard(url);
+    if (this.shareCopied) {
+      setTimeout(() => (this.shareCopied = false), 2000);
+    }
   }
 
   goToMyTeam(): void {
@@ -216,5 +254,28 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     if (outcome === 'loss') return 'Défaite';
     if (outcome === 'draw') return 'Nul';
     return '';
+  }
+
+  private ranking(stat: (s: StandingEntry) => number): StandingEntry[] {
+    return (this.tournament?.standings ?? [])
+      .filter((s) => s.gamesPlayed > 0)
+      .slice()
+      .sort((a, b) => stat(b) - stat(a));
+  }
+
+  bashlordRanking(): StandingEntry[] {
+    return this.ranking((s) => s.casFor);
+  }
+
+  aggroLordRanking(): StandingEntry[] {
+    return this.ranking((s) => s.aggFor);
+  }
+
+  topScorerRanking(): StandingEntry[] {
+    return this.ranking((s) => s.tdFor);
+  }
+
+  rankMedal(index: number): string {
+    return index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
   }
 }

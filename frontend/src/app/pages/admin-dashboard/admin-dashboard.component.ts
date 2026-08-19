@@ -5,12 +5,14 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   TOURNAMENT_DESCRIPTION_MAX_LENGTH,
   type AdminTournamentView,
+  type PublicTournament,
   type SubmitResultRequest,
 } from '@bb-tournament/shared';
 import { ApiService } from '../../core/api.service';
 import { extractErrorMessage } from '../../core/http-error';
-import { copyToClipboard, participantUrl, scoreboardUrl } from '../../core/links';
+import { copyToClipboard, participantUrl, rosterImageUrl, scoreboardUrl } from '../../core/links';
 import { renderMarkdown } from '../../core/markdown';
+import { rosterStatusLabel } from '../../core/roster-status';
 import { MatchResultFormComponent } from '../../shared/match-result-form/match-result-form.component';
 
 const POLL_INTERVAL_MS = 15000;
@@ -41,6 +43,8 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   scoreboardCopied = false;
 
   editingResultChallengeId: string | null = null;
+
+  readonly rosterStatusLabel = rosterStatusLabel;
 
   readonly descriptionMaxLength = TOURNAMENT_DESCRIPTION_MAX_LENGTH;
   descriptionDraft = '';
@@ -97,6 +101,16 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     return this.tournament?.challenges.some((c) => c.team1Id === teamId || c.team2Id === teamId) ?? false;
   }
 
+  freeChallenges(): PublicTournament['challenges'] {
+    return this.tournament?.challenges.filter((c) => c.round === null) ?? [];
+  }
+
+  teamRosterImageUrl(teamId: string): string | null {
+    const team = this.tournament?.teams.find((t) => t.id === teamId);
+    if (!team?.rosterImage) return null;
+    return rosterImageUrl(this.tournamentId, team.id, team.rosterImage.updatedAt);
+  }
+
   participantLink(teamId: string, password: string): string {
     return participantUrl(this.tournamentId, teamId, password);
   }
@@ -150,6 +164,82 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       this.actionError = extractErrorMessage(err);
     } finally {
       this.actionBusy = false;
+    }
+  }
+
+  private mergePublicTournament(pub: PublicTournament): void {
+    if (!this.tournament) return;
+    const teams = this.tournament.teams.map((adminTeam) => {
+      const updated = pub.teams.find((t) => t.id === adminTeam.id);
+      return updated ? { ...adminTeam, ...updated } : adminTeam;
+    });
+    this.tournament = { ...this.tournament, teams, challenges: pub.challenges, standings: pub.standings };
+  }
+
+  async setRosterStatus(teamId: string, status: 'validated' | 'created'): Promise<void> {
+    this.actionBusy = true;
+    this.actionError = null;
+    try {
+      const pub = await this.api.updateRosterStatus(this.tournamentId, teamId, { token: this.token }, status);
+      this.mergePublicTournament(pub);
+    } catch (err) {
+      this.actionError = extractErrorMessage(err);
+    } finally {
+      this.actionBusy = false;
+    }
+  }
+
+  roundBusy = false;
+  roundError: string | null = null;
+  swapMatchId1 = '';
+  swapMatchId2 = '';
+
+  roundMatches(roundNumber: number): PublicTournament['challenges'] {
+    return this.tournament?.challenges.filter((c) => c.round === roundNumber) ?? [];
+  }
+
+  async generateRound(): Promise<void> {
+    this.roundBusy = true;
+    this.roundError = null;
+    try {
+      this.tournament = await this.api.generateRound(this.tournamentId, this.token);
+    } catch (err) {
+      this.roundError = extractErrorMessage(err);
+    } finally {
+      this.roundBusy = false;
+    }
+  }
+
+  async swapMatches(roundNumber: number): Promise<void> {
+    if (!this.swapMatchId1 || !this.swapMatchId2) return;
+    this.roundBusy = true;
+    this.roundError = null;
+    try {
+      this.tournament = await this.api.swapRoundMatches(
+        this.tournamentId,
+        this.token,
+        roundNumber,
+        this.swapMatchId1,
+        this.swapMatchId2
+      );
+      this.swapMatchId1 = '';
+      this.swapMatchId2 = '';
+    } catch (err) {
+      this.roundError = extractErrorMessage(err);
+    } finally {
+      this.roundBusy = false;
+    }
+  }
+
+  async launchRound(roundNumber: number): Promise<void> {
+    this.roundBusy = true;
+    this.roundError = null;
+    try {
+      this.tournament = await this.api.launchRound(this.tournamentId, this.token, roundNumber);
+    } catch (err) {
+      this.roundError = extractErrorMessage(err);
+    } finally {
+      this.roundBusy = false;
     }
   }
 }

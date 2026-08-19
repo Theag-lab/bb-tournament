@@ -77,25 +77,6 @@
   align-items: flex-start;
 }
 
-.team-facts {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.25rem 0.75rem;
-  margin: 0;
-  flex: 1;
-  min-width: 200px;
-
-  dt {
-    color: var(--text-muted);
-    font-size: 0.85rem;
-  }
-
-  dd {
-    margin: 0;
-    font-weight: 600;
-  }
-}
-
 .roster-thumb-btn {
   display: block;
   padding: 0;

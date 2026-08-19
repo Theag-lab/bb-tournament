@@ -30,6 +30,8 @@ export class MatchResultFormComponent implements OnChanges {
   team2Td = 0;
   team1Cas = 0;
   team2Cas = 0;
+  team1Agg = 0;
+  team2Agg = 0;
   concededBy: '' | 'team1' | 'team2' = '';
 
   ngOnChanges(): void {
@@ -39,6 +41,8 @@ export class MatchResultFormComponent implements OnChanges {
       this.team2Td = this.initial.team2Td;
       this.team1Cas = this.initial.team1Cas;
       this.team2Cas = this.initial.team2Cas;
+      this.team1Agg = this.initial.team1Agg;
+      this.team2Agg = this.initial.team2Agg;
       this.concededBy = this.initial.concededByTeamId
         ? this.initial.concededByTeamId === this.team1Id
           ? 'team1'
@@ -60,6 +64,8 @@ export class MatchResultFormComponent implements OnChanges {
       team2Td: this.team2Td,
       team1Cas: this.team1Cas,
       team2Cas: this.team2Cas,
+      team1Agg: this.team1Agg,
+      team2Agg: this.team2Agg,
       concededByTeamId,
     });
   }

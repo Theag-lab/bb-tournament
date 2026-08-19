@@ -6,11 +6,12 @@ import {
   ROSTER_IMAGE_MAX_SIZE_BYTES,
   type RosterImageUploadUrlRequest,
   type RosterImageUploadUrlResponse,
+  type Tournament,
 } from '@bb-tournament/shared';
 import * as storage from './storage';
 import { authenticateTeam, isAdmin } from './auth';
 import { toPublicTournament } from './sanitize';
-import { badRequest, notFound } from './errors';
+import { badRequest, forbidden, notFound } from './errors';
 
 const s3 = new S3Client({});
 const UPLOAD_URL_EXPIRY_SECONDS = 300;
@@ -25,8 +26,13 @@ export function rosterImageKey(tournamentId: string, teamId: string): string {
   return `roster-images/${tournamentId}/${teamId}`;
 }
 
-function assertOwnsTeam(
-  tournament: Parameters<typeof isAdmin>[0],
+/**
+ * Verifies the caller may manage this team's roster image: either the admin (who can always
+ * bypass the validation lock), or the team's own password — provided the roster hasn't already
+ * been validated, at which point its image is frozen even for the owning coach.
+ */
+function assertCanManageRosterImage(
+  tournament: Tournament,
   teamId: string,
   password: string | undefined,
   token: string | undefined
@@ -35,7 +41,10 @@ function assertOwnsTeam(
     if (!tournament.teams.some((t) => t.id === teamId)) throw notFound('Team not found');
     return;
   }
-  authenticateTeam(tournament, teamId, password);
+  const team = authenticateTeam(tournament, teamId, password);
+  if (tournament.requireRosterValidation && team.rosterStatus === 'validated') {
+    throw forbidden('This roster has been validated and can no longer be modified', 'roster_locked');
+  }
 }
 
 export async function getUploadUrl(c: Context) {
@@ -50,7 +59,7 @@ export async function getUploadUrl(c: Context) {
   }
 
   const tournament = await storage.getTournament(tournamentId);
-  assertOwnsTeam(tournament, teamId, password, token);
+  assertCanManageRosterImage(tournament, teamId, password, token);
 
   const { url, fields } = await createPresignedPost(s3, {
     Bucket: assetsBucketName(),
@@ -74,7 +83,7 @@ export async function confirmUpload(c: Context) {
   const token = c.req.query('token');
 
   await storage.updateTournament(tournamentId, (t) => {
-    assertOwnsTeam(t, teamId, password, token);
+    assertCanManageRosterImage(t, teamId, password, token);
     const team = t.teams.find((tm) => tm.id === teamId);
     if (!team) throw notFound('Team not found');
     team.rosterImage = { updatedAt: new Date().toISOString() };

@@ -11,6 +11,8 @@ export interface ComputedScore {
   team2Td: number;
   team1Cas: number;
   team2Cas: number;
+  team1Agg: number;
+  team2Agg: number;
   team1Points: number;
   team2Points: number;
 }
@@ -34,6 +36,8 @@ export function computeMatchScore(
       team2Td: team1Conceded ? CONCESSION_SCORE : 0,
       team1Cas: team1Conceded ? 0 : CONCESSION_SCORE,
       team2Cas: team1Conceded ? CONCESSION_SCORE : 0,
+      team1Agg: team1Conceded ? 0 : CONCESSION_SCORE,
+      team2Agg: team1Conceded ? CONCESSION_SCORE : 0,
       team1Points: team1Conceded ? POINTS_CONCESSION : POINTS_WIN,
       team2Points: team1Conceded ? POINTS_WIN : POINTS_CONCESSION,
     };
@@ -43,6 +47,8 @@ export function computeMatchScore(
   const team2Td = Math.max(0, Math.trunc(input.team2Td));
   const team1Cas = Math.max(0, Math.trunc(input.team1Cas));
   const team2Cas = Math.max(0, Math.trunc(input.team2Cas));
+  const team1Agg = Math.max(0, Math.trunc(input.team1Agg));
+  const team2Agg = Math.max(0, Math.trunc(input.team2Agg));
 
   let team1Points: number;
   let team2Points: number;
@@ -57,7 +63,7 @@ export function computeMatchScore(
     team2Points = POINTS_DRAW;
   }
 
-  return { team1Td, team2Td, team1Cas, team2Cas, team1Points, team2Points };
+  return { team1Td, team2Td, team1Cas, team2Cas, team1Agg, team2Agg, team1Points, team2Points };
 }
 
 /**
@@ -77,6 +83,8 @@ export function computeStandings(teams: Team[], challenges: Challenge[]): Standi
       tdAgainst: 0,
       casFor: 0,
       casAgainst: 0,
+      aggFor: 0,
+      aggAgainst: 0,
       gamesPlayed: 0,
     });
   }
@@ -98,6 +106,10 @@ export function computeStandings(teams: Team[], challenges: Challenge[]): Standi
     s1.casAgainst += r.team2Cas;
     s2.casFor += r.team2Cas;
     s2.casAgainst += r.team1Cas;
+    s1.aggFor += r.team1Agg;
+    s1.aggAgainst += r.team2Agg;
+    s2.aggFor += r.team2Agg;
+    s2.aggAgainst += r.team1Agg;
     s1.gamesPlayed += 1;
     s2.gamesPlayed += 1;
 

@@ -11,3 +11,28 @@
   justify-content: space-between;
   margin-bottom: 0.5rem;
 }
+
+.roster-review {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.roster-review-thumb {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.roster-review-info {
+  flex: 1;
+  min-width: 200px;
+}

@@ -5,6 +5,7 @@ import { AppError } from './errors';
 import * as tournaments from './handlers/tournaments';
 import * as teams from './handlers/teams';
 import * as challenges from './handlers/challenges';
+import * as rounds from './handlers/rounds';
 import * as rosterImage from './rosterImage';
 
 const app = new Hono().basePath('/api');
@@ -33,11 +34,16 @@ app.patch('/tournaments/:tournamentId/teams/:teamId', teams.updateTeam);
 app.delete('/tournaments/:tournamentId/teams/:teamId', teams.deleteTeam);
 app.post('/tournaments/:tournamentId/teams/:teamId/roster-image/upload-url', rosterImage.getUploadUrl);
 app.post('/tournaments/:tournamentId/teams/:teamId/roster-image/confirm', rosterImage.confirmUpload);
+app.patch('/tournaments/:tournamentId/teams/:teamId/roster-status', teams.updateRosterStatus);
 
 app.post('/tournaments/:tournamentId/challenges', challenges.createChallenge);
 app.patch('/tournaments/:tournamentId/challenges/:challengeId', challenges.actionChallenge);
 app.put('/tournaments/:tournamentId/challenges/:challengeId/result', challenges.submitResult);
 app.post('/tournaments/:tournamentId/challenges/:challengeId/result/confirm', challenges.confirmResult);
 app.put('/tournaments/:tournamentId/challenges/:challengeId/result/admin', challenges.adminSetResult);
+
+app.post('/tournaments/:tournamentId/rounds', rounds.generateRound);
+app.post('/tournaments/:tournamentId/rounds/:roundNumber/swap', rounds.swapMatches);
+app.post('/tournaments/:tournamentId/rounds/:roundNumber/launch', rounds.launch);
 
 export const handler = handle(app);

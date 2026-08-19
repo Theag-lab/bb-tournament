@@ -30,10 +30,19 @@
       <label>Casualties infligées par {{ team2Name }}</label>
       <input type="number" min="0" name="team2Cas" [(ngModel)]="team2Cas" />
     </div>
+    <div class="field">
+      <label>Agressions infligées par {{ team1Name }}</label>
+      <input type="number" min="0" name="team1Agg" [(ngModel)]="team1Agg" />
+    </div>
+    <div class="field">
+      <label>Agressions infligées par {{ team2Name }}</label>
+      <input type="number" min="0" name="team2Agg" [(ngModel)]="team2Agg" />
+    </div>
   </div>
 
   <p class="muted" *ngIf="isConcession">
-    Score forcé à 3-0 (touchdowns et casualties) en faveur de l'équipe non-concédante, conformément au règlement.
+    Score forcé à 3-0 (touchdowns, casualties et agressions) en faveur de l'équipe non-concédante, conformément au
+    règlement.
   </p>
 
   <button type="submit" class="btn btn-primary" [disabled]="busy">{{ submitLabel }}</button>

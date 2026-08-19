@@ -49,36 +49,84 @@
   </section>
 
   <section class="card">
-    <h2>Image du roster</h2>
+    <div class="title-row">
+      <h2>Image du roster</h2>
+      <span class="badge" *ngIf="tournament.requireRosterValidation" [ngClass]="'badge-roster-' + team.rosterStatus">
+        {{ rosterStatusLabel() }}
+      </span>
+    </div>
     <p class="muted">Visible par tous sur le tableau des scores, en cliquant sur votre équipe.</p>
+
+    <div class="alert alert-info" *ngIf="tournament.requireRosterValidation && team.rosterStatus === 'created' && !myRosterImageUrl()">
+      📸 N'oubliez pas d'ajouter une capture d'écran de votre roster, puis de la soumettre pour validation à
+      l'organisateur.
+    </div>
+    <div class="alert alert-info" *ngIf="tournament.requireRosterValidation && team.rosterStatus === 'submitted'">
+      Votre roster est en attente de validation par l'organisateur.
+    </div>
+    <div class="alert alert-info" *ngIf="rosterImageLocked">
+      Votre roster a été validé : l'image ne peut plus être modifiée. Contactez l'organisateur en cas d'erreur.
+    </div>
+
     <div class="alert alert-error" *ngIf="rosterUploadError">{{ rosterUploadError }}</div>
+    <div class="alert alert-error" *ngIf="rosterStatusError">{{ rosterStatusError }}</div>
+
     <img *ngIf="myRosterImageUrl() as imgUrl" [src]="imgUrl" alt="Roster de {{ team.name }}" class="roster-preview" />
     <p class="muted" *ngIf="!myRosterImageUrl()">Aucune image envoyée pour le moment.</p>
-    <label class="btn" [class.btn-primary]="!rosterUploadBusy">
-      {{ rosterUploadBusy ? 'Envoi…' : (myRosterImageUrl() ? "Remplacer l'image" : 'Envoyer une image') }}
-      <input
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        style="display: none"
-        [disabled]="rosterUploadBusy"
-        (change)="onRosterFileSelected($event)"
-      />
-    </label>
+
+    <div class="actions">
+      <label class="btn" [class.btn-primary]="!rosterUploadBusy" *ngIf="!rosterImageLocked">
+        {{ rosterUploadBusy ? 'Envoi…' : (myRosterImageUrl() ? "Remplacer l'image" : 'Envoyer une image') }}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          style="display: none"
+          [disabled]="rosterUploadBusy"
+          (change)="onRosterFileSelected($event)"
+        />
+      </label>
+      <button
+        type="button"
+        class="btn btn-primary"
+        *ngIf="tournament.requireRosterValidation && team.rosterStatus === 'created'"
+        [disabled]="rosterStatusBusy || !myRosterImageUrl()"
+        (click)="submitRosterForValidation()"
+      >
+        {{ rosterStatusBusy ? 'Envoi…' : 'Soumettre pour validation' }}
+      </button>
+    </div>
   </section>
 
-  <section class="card">
+  <section class="card" *ngIf="canChallenge">
     <h2>Défier un adversaire</h2>
-    <div class="field" *ngIf="otherTeams.length > 0">
-      <label for="opponent">Adversaire</label>
-      <select id="opponent" name="opponent" [(ngModel)]="challengeOpponentId">
-        <option value="" disabled selected>Choisir une équipe</option>
-        <option *ngFor="let o of otherTeams" [value]="o.id">{{ o.name }} ({{ o.coachName }})</option>
-      </select>
+    <div class="alert alert-info" *ngIf="tournament.requireRosterValidation && team.rosterStatus !== 'validated'">
+      Votre roster doit être validé par l'organisateur avant de pouvoir défier une autre équipe.
     </div>
-    <p class="muted" *ngIf="otherTeams.length === 0">Aucune autre équipe inscrite pour le moment.</p>
-    <button type="button" class="btn btn-primary" [disabled]="actionBusy || !challengeOpponentId" (click)="sendChallenge()">
-      Défier
-    </button>
+    <ng-container *ngIf="!tournament.requireRosterValidation || team.rosterStatus === 'validated'">
+      <div class="field" *ngIf="otherTeams.length > 0">
+        <label for="opponent">Adversaire</label>
+        <select id="opponent" name="opponent" [(ngModel)]="challengeOpponentId">
+          <option value="" disabled selected>Choisir une équipe</option>
+          <option *ngFor="let o of otherTeams" [value]="o.id">{{ o.name }} ({{ o.coachName }})</option>
+        </select>
+      </div>
+      <p class="muted" *ngIf="otherTeams.length === 0">Aucune autre équipe inscrite pour le moment.</p>
+      <button type="button" class="btn btn-primary" [disabled]="actionBusy || !challengeOpponentId" (click)="sendChallenge()">
+        Défier
+      </button>
+    </ng-container>
+  </section>
+
+  <section class="card" *ngIf="!canChallenge && tournament.mode !== 'ladder'">
+    <h2>Défier un adversaire</h2>
+    <p class="muted" *ngIf="tournament.mode === 'swiss'">
+      Ce tournoi est en format rondes suisses : les rondes sont générées et appariées par l'organisateur, pas de
+      défi libre.
+    </p>
+    <p class="muted" *ngIf="tournament.mode === 'swiss_with_challenge'">
+      La ronde 1 a déjà été générée : les défis libres ne sont plus disponibles, les rondes suivantes sont
+      appariées par l'organisateur.
+    </p>
   </section>
 
   <section class="card">
@@ -89,6 +137,7 @@
     <div class="challenge" *ngFor="let c of myChallenges">
       <div class="challenge-head">
         <strong>vs {{ teamName(opponentId(c)) }}</strong>
+        <span class="badge">{{ matchLabel(c) }}</span>
         <span class="badge" [ngClass]="'badge-' + c.status">{{ c.status }}</span>
       </div>
 

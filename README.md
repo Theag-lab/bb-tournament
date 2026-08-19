@@ -1,8 +1,9 @@
 # BB Online Tournament
 
-Site de gestion de tournois Blood Bowl au format "ladder" (défis libres entre équipes inscrites), inspiré du
-règlement NAF World Cup (`inspiration/NAF-World-Cup-Rules-V2.1.pdf`) pour la feuille de match : touchdowns,
-casualties, concession (forcée à 3-0) et calcul des points (Victoire 5 / Nul 2 / Défaite 0 / Concession -5).
+Site de gestion de tournois Blood Bowl, avec trois formats au choix (ladder libre, rondes suisses, ou suisses
+avec défis en 1ère ronde), inspiré du règlement NAF World Cup (`inspiration/NAF-World-Cup-Rules-V2.1.pdf`) pour la
+feuille de match : touchdowns, casualties, concession (forcée à 3-0) et calcul des points (Victoire 5 / Nul 2 /
+Défaite 0 / Concession -5).
 
 ## Architecture
 
@@ -41,27 +42,56 @@ infra/     AWS CDK (S3, Lambda, API Gateway HTTP API, CloudFront)
 frontend/  Application Angular
 ```
 
-## Fonctionnalités (v1)
+## Fonctionnalités
 
-- Créer un tournoi (génère un lien admin, affiché une seule fois).
+- Créer un tournoi via un tunnel en plusieurs étapes (nom → format → nombre de rondes si besoin → vérification
+  des rosters → récapitulatif), qui génère un lien admin affiché une seule fois.
+- **Trois formats de tournoi**, choisis à la création (non modifiable ensuite) :
+  - **Défi libre (ladder)** : chaque coach défie qui il veut, à tout moment, comme avant.
+  - **Rondes suisses** : pas de défi libre. L'admin génère chaque ronde (appariement aléatoire pour la ronde 1,
+    puis par classement — en évitant les revanches quand c'est possible — pour les suivantes), peut échanger des
+    paires tant que la ronde est en brouillon, puis la lance. La ronde suivante ne peut être générée que lorsque
+    tous les matchs de la précédente sont terminés. Un nombre pair d'équipes est requis pour générer une ronde
+    (pas de "bye" : il faut attendre une équipe supplémentaire). Les inscriptions se ferment dès qu'une ronde a
+    été générée. Les fiches d'équipe (nom, coach, race, image de roster) restent masquées aux autres participants
+    tant que la ronde 1 n'est pas lancée (tirage à l'aveugle) — chacun voit toujours sa propre équipe.
+  - **Rondes suisses avec défis en 1ère ronde** : les coachs peuvent se défier librement avant que l'admin ne
+    génère la ronde 1 (un seul défi actif à la fois par équipe) ; les défis acceptés deviennent des paires fixes
+    de la ronde 1, le reste des équipes est apparié aléatoirement. À partir de la génération de la ronde 1, le
+    tournoi bascule en rondes classiques (plus de défi libre). Ici les équipes restent visibles dès le début
+    (nécessaire pour choisir un adversaire).
+  - Un onglet par ronde lancée apparaît sur le tableau des scores public ; côté coach, le match de la ronde en
+    cours apparaît dans "Mes défis" avec la feuille de match habituelle.
 - S'inscrire avec une équipe (nom, coach, race, mot de passe libre de 4 à 32 caractères choisi par le coach — pas
   de gestion de roster/joueurs individuels).
 - Retrouver son équipe via un bouton "J'ai déjà une équipe" : sélection du nom de coach dans la liste + saisie du
   mot de passe, sans avoir besoin du lien.
 - Envoyer une image de roster (JPEG/PNG/WebP, 5 Mo max), visible par tous en cliquant sur l'équipe.
-- Défier librement n'importe quelle autre équipe inscrite (pas de bracket, pas de round généré).
 - Accepter/refuser/annuler un défi.
-- Remplir la feuille de match (date du match, touchdowns, casualties, concession) ; l'adversaire confirme le
-  score, ou peut proposer une correction si les valeurs ne correspondent pas.
-- Tableau des scores public en temps quasi réel (rafraîchi toutes les 15s) : classement, équipes (cliquables pour
-  voir le roster et l'historique des défis face à chaque adversaire), historique des défis avec leur date.
+- Remplir la feuille de match (date du match, touchdowns, casualties, agressions, concession) ; l'adversaire
+  confirme le score, ou peut proposer une correction si les valeurs ne correspondent pas.
+- Tableau des scores public en temps quasi réel (rafraîchi toutes les 15s) : classement (avec race, V-N-D, points,
+  TD et casualties), équipes (cliquables pour voir le roster et l'historique des défis face à chaque adversaire),
+  historique des défis avec date, TD et casualties des deux coachs.
+- Onglet "Scores secondaires" : classements Bashlord (plus de casualties infligées), AggroLord (plus
+  d'agressions infligées) et Meilleur marqueur (plus de touchdowns marqués).
 - Onglet "Description" sur le tableau des scores (règlement, planning, infos pratiques…), rédigé en Markdown et
   modifiable uniquement depuis le panneau admin.
 - Panneau admin : mot de passe + lien de toutes les équipes, suppression d'équipe, forcer/débloquer un défi, forcer
-  un résultat, éditer la description du tournoi (avec aperçu).
+  un résultat, éditer la description du tournoi (avec aperçu), et en format suisse : générer/échanger/lancer les
+  rondes.
+- **Vérification des rosters (optionnelle)** : à la création du tournoi, l'admin peut activer "la vérification des
+  rosters". Chaque équipe passe alors par un statut visible de tous (Créée → Soumise pour validation → Validée) :
+  le coach envoie sa capture d'écran puis la soumet pour validation ; l'admin valide ou renvoie pour modification
+  depuis son panneau ; une fois validée, l'image ne peut plus être remplacée par le coach (l'admin garde la main).
+  Tant que son roster n'est pas validé, une équipe ne peut pas défier une autre équipe (elle peut en revanche
+  toujours être défiée et accepter un défi). Si l'option n'est pas activée à la création, aucun statut n'est
+  affiché nulle part, l'image reste librement modifiable et les défis restent totalement libres — ce comportement
+  (option désactivée) est celui de tous les tournois créés avant l'ajout de cette fonctionnalité.
 
-Hors scope volontaire pour l'instant (cf. échanges de cadrage) : rounds générés / format squad façon NAF,
-roster builder avec achat de compétences en SPP, nom de domaine personnalisé.
+Hors scope volontaire pour l'instant (cf. échanges de cadrage) : format squad façon NAF (6 coachs par équipe de
+tournoi), roster builder avec achat de compétences en SPP, nom de domaine personnalisé, "bye" pour un nombre
+impair d'équipes (actuellement bloqué plutôt que compensé).
 
 ## Prérequis
 
@@ -96,6 +126,37 @@ La sortie `SiteUrl` du stack CDK est l'URL publique du site. Recommencer `npm ru
 (le build Angular et la Lambda sont re-synchronisés automatiquement, avec invalidation CloudFront).
 
 Pour changer de région, positionner `CDK_DEFAULT_REGION` avant `cdk deploy` (par défaut `eu-west-1`).
+
+## Migration de données existantes
+
+Le schéma JSON des tournois évolue avec les fonctionnalités (aucune base de données, donc aucune migration
+automatique n'est appliquée aux fichiers déjà stockés dans S3). Deux scripts (indépendants, ordre indifférent) :
+
+```bash
+cd scripts
+pip install -r requirements.txt
+
+# Ajoute requireRosterValidation (false) et rosterStatus ("created" par équipe) si absents.
+python3 migrate_add_roster_validation.py --bucket <nom-du-data-bucket> --dry-run
+python3 migrate_add_roster_validation.py --bucket <nom-du-data-bucket>
+
+# Ajoute mode ("ladder"), roundCount (null), rounds ([]) et round (null par défi) si absents.
+# Nécessaire (pas juste cosmétique) : sans ça, certains endpoints (inscription, défi) plantent
+# sur les tournois créés avant l'ajout des formats suisses, car ils lisent ces champs sans garde.
+python3 migrate_add_tournament_modes.py --bucket <nom-du-data-bucket> --dry-run
+python3 migrate_add_tournament_modes.py --bucket <nom-du-data-bucket>
+```
+
+Le nom du bucket de données est dans la sortie `DataBucketName` du stack CDK :
+
+```bash
+aws cloudformation describe-stacks --stack-name BbTournamentStack \
+  --query "Stacks[0].Outputs[?OutputKey=='DataBucketName'].OutputValue" --output text
+```
+
+Les deux scripts sont idempotents (relançables sans risque) et utilisent une écriture conditionnelle (`If-Match`
+sur l'ETag) : si un tournoi est modifié par l'app entre la lecture et l'écriture, cette écriture est ignorée avec
+un avertissement plutôt que d'écraser le changement concurrent — il suffit de relancer le script pour la reprendre.
 
 ## Notes de sécurité / limites connues
 

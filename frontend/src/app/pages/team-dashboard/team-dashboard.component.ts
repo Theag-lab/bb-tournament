@@ -13,6 +13,7 @@ import {
 import { ApiService, type Auth } from '../../core/api.service';
 import { extractErrorMessage } from '../../core/http-error';
 import { rosterImageUrl } from '../../core/links';
+import { rosterStatusLabel as labelForRosterStatus } from '../../core/roster-status';
 import { uploadToS3 } from '../../core/upload';
 import { MatchResultFormComponent } from '../../shared/match-result-form/match-result-form.component';
 
@@ -56,6 +57,9 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
   rosterUploadBusy = false;
   rosterUploadError: string | null = null;
 
+  rosterStatusBusy = false;
+  rosterStatusError: string | null = null;
+
   private get auth(): Auth {
     return { teamId: this.teamId, password: this.password };
   }
@@ -84,7 +88,10 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
   async load(silent = false): Promise<void> {
     if (!silent) this.loading = true;
     try {
-      this.tournament = await this.api.getTournament(this.tournamentId);
+      this.tournament = await this.api.getTournament(this.tournamentId, {
+        teamId: this.teamId,
+        password: this.password,
+      });
       this.loadError = null;
       const myTeam = this.myTeam;
       if (myTeam && !silent) {
@@ -112,6 +119,18 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     return this.tournament?.challenges.filter((c) => c.team1Id === this.teamId || c.team2Id === this.teamId) ?? [];
   }
 
+  /** Free challenges (défier) are only available in ladder mode, or pre-round-1 in swiss_with_challenge. */
+  get canChallenge(): boolean {
+    if (!this.tournament) return false;
+    if (this.tournament.mode === 'ladder') return true;
+    if (this.tournament.mode === 'swiss_with_challenge') return this.tournament.rounds.length === 0;
+    return false;
+  }
+
+  matchLabel(c: PublicTournament['challenges'][number]): string {
+    return c.round === null ? 'Défi libre' : `Ronde ${c.round}`;
+  }
+
   teamName(teamId: string): string {
     return this.tournament?.teams.find((t) => t.id === teamId)?.name ?? '—';
   }
@@ -132,6 +151,26 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     const team = this.myTeam;
     if (!team?.rosterImage) return null;
     return rosterImageUrl(this.tournamentId, team.id, team.rosterImage.updatedAt);
+  }
+
+  get rosterImageLocked(): boolean {
+    return !!this.tournament?.requireRosterValidation && this.myTeam?.rosterStatus === 'validated';
+  }
+
+  rosterStatusLabel(): string {
+    return labelForRosterStatus(this.myTeam?.rosterStatus);
+  }
+
+  async submitRosterForValidation(): Promise<void> {
+    this.rosterStatusBusy = true;
+    this.rosterStatusError = null;
+    try {
+      this.tournament = await this.api.updateRosterStatus(this.tournamentId, this.teamId, this.auth, 'submitted');
+    } catch (err) {
+      this.rosterStatusError = extractErrorMessage(err);
+    } finally {
+      this.rosterStatusBusy = false;
+    }
   }
 
   async saveProfile(): Promise<void> {
@@ -219,6 +258,7 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
+    if (this.rosterImageLocked) return;
 
     this.rosterUploadError = null;
     if (!(ROSTER_IMAGE_ALLOWED_CONTENT_TYPES as readonly string[]).includes(file.type)) {

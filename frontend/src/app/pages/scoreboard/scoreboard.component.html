@@ -75,27 +75,27 @@
         <table>
           <thead>
             <tr>
-              <th>Match</th>
+              <th>Coach 1</th>
+              <th>Score</th>
+              <th>Coach 2</th>
               <th>Statut</th>
-              <th>Date</th>
-              <th>TD</th>
-              <th>Cas</th>
             </tr>
           </thead>
           <tbody>
             <tr *ngFor="let c of roundMatches(r.number)">
               <td>
-                {{ teamName(c.team1Id) }} ({{ teamCoach(c.team1Id) }}) vs {{ teamName(c.team2Id) }} ({{ teamCoach(c.team2Id) }})
+                <strong>{{ teamCoach(c.team1Id) }}</strong>
+                <div class="subtext">{{ teamName(c.team1Id) }}</div>
+              </td>
+              <td class="nowrap">{{ c.result ? (c.result.team1Td + ' - ' + c.result.team2Td) : '—' }}</td>
+              <td>
+                <strong>{{ teamCoach(c.team2Id) }}</strong>
+                <div class="subtext">{{ teamName(c.team2Id) }}</div>
               </td>
               <td><span class="badge" [ngClass]="'badge-' + c.status">{{ c.status }}</span></td>
-              <td class="muted">{{ c.result?.playedAt ?? '—' }}</td>
-              <td *ngIf="c.result">{{ c.result.team1Td }} - {{ c.result.team2Td }}</td>
-              <td *ngIf="!c.result" class="muted">—</td>
-              <td *ngIf="c.result">{{ c.result.team1Cas }} - {{ c.result.team2Cas }}</td>
-              <td *ngIf="!c.result" class="muted">—</td>
             </tr>
             <tr *ngIf="roundMatches(r.number).length === 0">
-              <td colspan="5" class="muted">Aucun match dans cette ronde.</td>
+              <td colspan="4" class="muted">Aucun match dans cette ronde.</td>
             </tr>
           </tbody>
         </table>
@@ -297,7 +297,7 @@
               <button type="button" class="link-btn" (click)="openTeamById(s.teamId)">{{ teamName(s.teamId) }}</button>
             </td>
             <td>{{ teamRace(s.teamId) }}</td>
-            <td>{{ s.wins }}-{{ s.draws }}-{{ s.losses }}</td>
+            <td class="nowrap">{{ s.wins }}/{{ s.draws }}/{{ s.losses }}</td>
             <td>{{ s.points }}</td>
             <td>{{ s.tdFor }} / {{ s.tdAgainst }}</td>
             <td>{{ s.casFor }} / {{ s.casAgainst }}</td>
@@ -399,9 +399,11 @@
             <dt>Points</dt>
             <dd>{{ s.points }}</dd>
             <dt>Bilan V-N-D</dt>
-            <dd>{{ s.wins }}-{{ s.draws }}-{{ s.losses }}</dd>
+            <dd class="nowrap">{{ s.wins }}/{{ s.draws }}/{{ s.losses }}</dd>
             <dt>Touchdowns +/-</dt>
             <dd>{{ s.tdFor }} / {{ s.tdAgainst }}</dd>
+            <dt>Score adverse</dt>
+            <dd>{{ s.opponentScore }}</dd>
             <dt>Casualties +/-</dt>
             <dd>{{ s.casFor }} / {{ s.casAgainst }}</dd>
           </ng-container>

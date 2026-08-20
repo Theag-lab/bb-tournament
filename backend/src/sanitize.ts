@@ -1,19 +1,20 @@
 import { AdminTournamentView, PublicTournament, Tournament, computeStandings } from '@bb-tournament/shared';
 
 /**
- * Team rosters (name/coach/race/image) stay hidden from other participants until round 1 launches
- * — but only in pure 'swiss' mode (a blind random draw). In 'swiss_with_challenge', coaches must
- * see each other to choose who to challenge before round 1, so hiding would defeat the mode's
- * whole point; those tournaments show teams from the start, same as 'ladder'.
+ * Roster *image and race* stay hidden from other participants until round 1 launches, in both
+ * swiss modes — this is the actual "scouting" concern (seeing an opponent's exact roster build
+ * or race/matchup before pairings are locked in). Team name/coach are NOT hidden: in
+ * swiss_with_challenge coaches need them to pick who to challenge, and knowing who's in the
+ * tournament isn't a fairness issue the way seeing their race or roster sheet is.
  */
-function teamsHiddenFromOthers(t: Tournament): boolean {
-  if (t.mode !== 'swiss') return false;
+function rosterDetailsHiddenFromOthers(t: Tournament): boolean {
+  if (t.mode === 'ladder') return false;
   const round1 = t.rounds.find((r) => r.number === 1);
   return !round1 || round1.status !== 'launched';
 }
 
 export function toPublicTournament(t: Tournament, viewerTeamId: string | null = null): PublicTournament {
-  const hideOthers = teamsHiddenFromOthers(t);
+  const hideRosterDetails = rosterDetailsHiddenFromOthers(t);
   const launchedRounds = new Set(t.rounds.filter((r) => r.status === 'launched').map((r) => r.number));
 
   return {
@@ -29,14 +30,14 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
     rounds: t.rounds,
     createdAt: t.createdAt,
     teams: t.teams.map((team) => {
-      const masked = hideOthers && team.id !== viewerTeamId;
+      const hideDetails = hideRosterDetails && team.id !== viewerTeamId;
       return {
         id: team.id,
-        name: masked ? 'Équipe masquée' : team.name,
-        coachName: masked ? '—' : team.coachName,
-        race: masked ? '—' : team.race,
+        name: team.name,
+        coachName: team.coachName,
+        race: hideDetails ? '—' : team.race,
         createdAt: team.createdAt,
-        rosterImage: masked ? null : team.rosterImage,
+        rosterImage: hideDetails ? null : team.rosterImage,
         rosterStatus: team.rosterStatus,
       };
     }),

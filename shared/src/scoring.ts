@@ -67,8 +67,22 @@ export function computeMatchScore(
 }
 
 /**
- * Standings ordering follows the PDF's individual tiebreaker order:
- * points, then fewest touchdowns conceded, then net touchdowns, then net casualties.
+ * A stable, deterministic stand-in for a physical "random draw" tiebreak: the same pair of teams
+ * always resolves the same way (so standings don't reshuffle on every poll), while carrying no
+ * relationship to anything meaningful about the team — an arbitrary but fixed coin-flip result.
+ */
+function stableRandomKey(teamId: string): number {
+  let hash = 0;
+  for (let i = 0; i < teamId.length; i++) {
+    hash = (hash * 31 + teamId.charCodeAt(i)) | 0;
+  }
+  return hash;
+}
+
+/**
+ * Standings ordering follows the PDF's individual tiebreaker order exactly: points, then fewest
+ * touchdowns conceded, then opponent score (sum of opponents' final points — a Buchholz-style
+ * strength-of-schedule measure), then net touchdowns, then random draw, then net casualties.
  */
 export function computeStandings(teams: Team[], challenges: Challenge[]): StandingEntry[] {
   const byTeam = new Map<string, StandingEntry>();
@@ -86,6 +100,7 @@ export function computeStandings(teams: Team[], challenges: Challenge[]): Standi
       aggFor: 0,
       aggAgainst: 0,
       gamesPlayed: 0,
+      opponentScore: 0,
     });
   }
 
@@ -125,12 +140,27 @@ export function computeStandings(teams: Team[], challenges: Challenge[]): Standi
     }
   }
 
+  // Opponent score (Buchholz) needs every team's FINAL points, so it's a second pass over the
+  // now-fully-accumulated standings rather than something foldable into the loop above.
+  for (const challenge of challenges) {
+    if (challenge.status !== 'completed' || !challenge.result) continue;
+    const s1 = byTeam.get(challenge.team1Id);
+    const s2 = byTeam.get(challenge.team2Id);
+    if (!s1 || !s2) continue;
+    s1.opponentScore += s2.points;
+    s2.opponentScore += s1.points;
+  }
+
   return Array.from(byTeam.values()).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     if (a.tdAgainst !== b.tdAgainst) return a.tdAgainst - b.tdAgainst; // fewest TD conceded first
+    if (b.opponentScore !== a.opponentScore) return b.opponentScore - a.opponentScore;
     const netTdA = a.tdFor - a.tdAgainst;
     const netTdB = b.tdFor - b.tdAgainst;
     if (netTdB !== netTdA) return netTdB - netTdA;
+    const randomA = stableRandomKey(a.teamId);
+    const randomB = stableRandomKey(b.teamId);
+    if (randomA !== randomB) return randomA - randomB;
     const netCasA = a.casFor - a.casAgainst;
     const netCasB = b.casFor - b.casAgainst;
     if (netCasB !== netCasA) return netCasB - netCasA;

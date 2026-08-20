@@ -111,6 +111,16 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     return rosterImageUrl(this.tournamentId, team.id, team.rosterImage.updatedAt);
   }
 
+  lightboxImageUrl: string | null = null;
+
+  openImageLightbox(url: string): void {
+    this.lightboxImageUrl = url;
+  }
+
+  closeImageLightbox(): void {
+    this.lightboxImageUrl = null;
+  }
+
   participantLink(teamId: string, password: string): string {
     return participantUrl(this.tournamentId, teamId, password);
   }

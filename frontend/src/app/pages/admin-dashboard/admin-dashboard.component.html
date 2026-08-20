@@ -58,12 +58,15 @@
     </p>
 
     <div class="roster-review" *ngFor="let team of t.teams">
-      <img
+      <button
+        type="button"
+        class="roster-thumb-btn"
         *ngIf="teamRosterImageUrl(team.id) as imgUrl"
-        [src]="imgUrl"
-        alt="Roster de {{ team.name }}"
-        class="roster-review-thumb"
-      />
+        (click)="openImageLightbox(imgUrl)"
+        title="Cliquer pour agrandir"
+      >
+        <img [src]="imgUrl" alt="Roster de {{ team.name }}" class="roster-review-thumb" />
+      </button>
       <div class="roster-review-thumb muted" *ngIf="!teamRosterImageUrl(team.id)" style="display: flex; align-items: center; justify-content: center; text-align: center; font-size: 0.75rem;">
         Aucune image
       </div>
@@ -270,4 +273,9 @@
 
     <p class="muted" *ngIf="freeChallenges().length === 0">Aucun défi pour le moment.</p>
   </section>
+
+  <div class="modal-backdrop lightbox-backdrop" *ngIf="lightboxImageUrl as imgUrl" (click)="closeImageLightbox()">
+    <button type="button" class="btn lightbox-close" (click)="closeImageLightbox()">Fermer</button>
+    <img [src]="imgUrl" alt="Roster en grand" class="lightbox-image" (click)="$event.stopPropagation()" />
+  </div>
 </ng-container>

@@ -3,7 +3,10 @@
 Site de gestion de tournois Blood Bowl, avec trois formats au choix (ladder libre, rondes suisses, ou suisses
 avec défis en 1ère ronde), inspiré du règlement NAF World Cup (`inspiration/NAF-World-Cup-Rules-V2.1.pdf`) pour la
 feuille de match : touchdowns, casualties, concession (forcée à 3-0) et calcul des points (Victoire 5 / Nul 2 /
-Défaite 0 / Concession -5).
+Défaite 0 / Concession -5). Le classement départage les égalités dans l'ordre exact du PDF ("Individual
+Tiebreaker") : points → moins de touchdowns encaissés → score adverse (somme des points finaux des adversaires
+affrontés, à la Buchholz) → touchdowns nets → tirage au sort (déterministe et stable, pas re-tiré à chaque
+rafraîchissement) → casualties nettes.
 
 ## Architecture
 
@@ -53,13 +56,14 @@ frontend/  Application Angular
     paires tant que la ronde est en brouillon, puis la lance. La ronde suivante ne peut être générée que lorsque
     tous les matchs de la précédente sont terminés. Un nombre pair d'équipes est requis pour générer une ronde
     (pas de "bye" : il faut attendre une équipe supplémentaire). Les inscriptions se ferment dès qu'une ronde a
-    été générée. Les fiches d'équipe (nom, coach, race, image de roster) restent masquées aux autres participants
-    tant que la ronde 1 n'est pas lancée (tirage à l'aveugle) — chacun voit toujours sa propre équipe.
+    été générée. La race et l'image de roster de chaque équipe restent masquées aux autres participants (nom et
+    coach, eux, restent visibles) tant que la ronde 1 n'est pas lancée — chacun voit toujours sa propre équipe en
+    clair.
   - **Rondes suisses avec défis en 1ère ronde** : les coachs peuvent se défier librement avant que l'admin ne
     génère la ronde 1 (un seul défi actif à la fois par équipe) ; les défis acceptés deviennent des paires fixes
     de la ronde 1, le reste des équipes est apparié aléatoirement. À partir de la génération de la ronde 1, le
-    tournoi bascule en rondes classiques (plus de défi libre). Ici les équipes restent visibles dès le début
-    (nécessaire pour choisir un adversaire).
+    tournoi bascule en rondes classiques (plus de défi libre). Même masquage race/image que ci-dessus (nom/coach
+    restent visibles dès le début, nécessaire pour choisir un adversaire).
   - Un onglet par ronde lancée apparaît sur le tableau des scores public ; côté coach, le match de la ronde en
     cours apparaît dans "Mes défis" avec la feuille de match habituelle.
 - S'inscrire avec une équipe (nom, coach, race, mot de passe libre de 4 à 32 caractères choisi par le coach — pas
@@ -72,7 +76,8 @@ frontend/  Application Angular
   confirme le score, ou peut proposer une correction si les valeurs ne correspondent pas.
 - Tableau des scores public en temps quasi réel (rafraîchi toutes les 15s) : classement (avec race, V-N-D, points,
   TD et casualties), équipes (cliquables pour voir le roster et l'historique des défis face à chaque adversaire),
-  historique des défis avec date, TD et casualties des deux coachs.
+  historique des défis avec date, TD et casualties des deux coachs. Icône de partage à côté du nom du tournoi :
+  ouvre le partage natif sur mobile (choix de l'app), ou copie le lien sur desktop.
 - Onglet "Scores secondaires" : classements Bashlord (plus de casualties infligées), AggroLord (plus
   d'agressions infligées) et Meilleur marqueur (plus de touchdowns marqués).
 - Onglet "Description" sur le tableau des scores (règlement, planning, infos pratiques…), rédigé en Markdown et
@@ -95,7 +100,7 @@ impair d'équipes (actuellement bloqué plutôt que compensé).
 
 ## Prérequis
 
-- Node.js 20+ et npm
+- Node.js 22+ et npm (la Lambda tourne en runtime `nodejs22.x`, Node 20 étant déprécié par AWS)
 - Un compte AWS + [AWS CLI configuré](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html)
   avec des identifiants valides
 - `npx cdk bootstrap` doit avoir été exécuté une fois par compte/région (voir plus bas)

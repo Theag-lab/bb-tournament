@@ -117,6 +117,8 @@ export interface StandingEntry {
   aggFor: number;
   aggAgainst: number;
   gamesPlayed: number;
+  /** Sum of opponents' final tournament points (Buchholz-style strength-of-schedule tiebreaker). */
+  opponentScore: number;
 }
 
 export interface PublicTournament {

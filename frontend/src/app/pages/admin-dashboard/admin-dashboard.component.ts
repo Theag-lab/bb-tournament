@@ -6,6 +6,7 @@ import {
   TOURNAMENT_DESCRIPTION_MAX_LENGTH,
   type AdminTournamentView,
   type PublicTournament,
+  type SquadScoringConfig,
   type SubmitResultRequest,
 } from '@bb-tournament/shared';
 import { ApiService } from '../../core/api.service';
@@ -67,7 +68,10 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     if (!silent) this.loading = true;
     try {
       this.tournament = await this.api.getAdminTournament(this.tournamentId, this.token);
-      if (!silent) this.descriptionDraft = this.tournament.description;
+      if (!silent) {
+        this.descriptionDraft = this.tournament.description;
+        if (this.tournament.squadScoring) this.squadScoringDraft = { ...this.tournament.squadScoring };
+      }
       this.loadError = null;
     } catch (err) {
       this.loadError = extractErrorMessage(err);
@@ -254,6 +258,95 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       this.roundError = extractErrorMessage(err);
     } finally {
       this.roundBusy = false;
+    }
+  }
+
+  squadBusy = false;
+  squadError: string | null = null;
+  newSquadName = '';
+  renamingSquadId: string | null = null;
+  renameSquadDraft = '';
+  squadScoringDraft: SquadScoringConfig | null = null;
+  savingSquadScoring = false;
+
+  squadMemberCount(squadId: string): number {
+    return this.tournament?.teams.filter((t) => t.squadId === squadId).length ?? 0;
+  }
+
+  async createSquad(): Promise<void> {
+    const name = this.newSquadName.trim();
+    if (!name) return;
+    this.squadBusy = true;
+    this.squadError = null;
+    try {
+      this.tournament = await this.api.createSquad(this.tournamentId, this.token, name);
+      this.newSquadName = '';
+    } catch (err) {
+      this.squadError = extractErrorMessage(err);
+    } finally {
+      this.squadBusy = false;
+    }
+  }
+
+  startRenameSquad(squadId: string, currentName: string): void {
+    this.renamingSquadId = squadId;
+    this.renameSquadDraft = currentName;
+  }
+
+  cancelRenameSquad(): void {
+    this.renamingSquadId = null;
+  }
+
+  async saveRenameSquad(squadId: string): Promise<void> {
+    const name = this.renameSquadDraft.trim();
+    if (!name) return;
+    this.squadBusy = true;
+    this.squadError = null;
+    try {
+      this.tournament = await this.api.renameSquad(this.tournamentId, this.token, squadId, name);
+      this.renamingSquadId = null;
+    } catch (err) {
+      this.squadError = extractErrorMessage(err);
+    } finally {
+      this.squadBusy = false;
+    }
+  }
+
+  async deleteSquad(squadId: string): Promise<void> {
+    this.squadBusy = true;
+    this.squadError = null;
+    try {
+      this.tournament = await this.api.deleteSquad(this.tournamentId, this.token, squadId);
+    } catch (err) {
+      this.squadError = extractErrorMessage(err);
+    } finally {
+      this.squadBusy = false;
+    }
+  }
+
+  async assignTeamSquad(teamId: string, squadId: string): Promise<void> {
+    this.squadBusy = true;
+    this.squadError = null;
+    try {
+      this.tournament = await this.api.assignTeamSquad(this.tournamentId, this.token, teamId, squadId || null);
+    } catch (err) {
+      this.squadError = extractErrorMessage(err);
+    } finally {
+      this.squadBusy = false;
+    }
+  }
+
+  async saveSquadScoring(): Promise<void> {
+    if (!this.squadScoringDraft) return;
+    this.savingSquadScoring = true;
+    this.squadError = null;
+    try {
+      this.tournament = await this.api.updateSquadScoring(this.tournamentId, this.token, this.squadScoringDraft);
+      if (this.tournament.squadScoring) this.squadScoringDraft = { ...this.tournament.squadScoring };
+    } catch (err) {
+      this.squadError = extractErrorMessage(err);
+    } finally {
+      this.savingSquadScoring = false;
     }
   }
 }

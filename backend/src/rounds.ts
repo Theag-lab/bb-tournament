@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Challenge, Tournament, computeStandings } from '@bb-tournament/shared';
+import { Challenge, DEFAULT_SQUAD_SCORING, Tournament, computeSquadStandings, computeStandings } from '@bb-tournament/shared';
 import { badRequest, forbidden, notFound } from './errors';
 
 // Statuses that mean "this pre-round challenge represents a real commitment" — used when
@@ -65,6 +65,15 @@ function pairInOrder(orderedIds: string[], priorOpponents: Map<string, Set<strin
   return pairs;
 }
 
+function assertPreviousRoundComplete(t: Tournament, roundNumber: number): void {
+  if (roundNumber <= 1) return;
+  const previousRoundNumber = t.rounds[t.rounds.length - 1].number;
+  const previousChallenges = t.challenges.filter((c) => c.round === previousRoundNumber);
+  if (!previousChallenges.every((c) => c.status === 'completed')) {
+    throw forbidden(`Round ${previousRoundNumber} is not finished yet`, 'previous_round_unfinished');
+  }
+}
+
 /**
  * Generates the next round's pairings and appends them to the tournament (mutates in place).
  * Round 1 pairs are random (except pre-locked challenges in swiss_with_challenge mode); rounds
@@ -74,20 +83,19 @@ export function generateNextRound(t: Tournament): void {
   if (t.mode === 'ladder') throw forbidden('This tournament has no rounds (ladder mode)');
   if (t.roundCount === null) throw forbidden('roundCount is not configured for this tournament');
   if (t.rounds.length >= t.roundCount) throw forbidden('All rounds have already been generated', 'all_rounds_generated');
+
+  if (t.format === 'team') {
+    generateNextTeamRound(t);
+    return;
+  }
+
   if (t.teams.length === 0) throw badRequest('No teams registered yet');
   if (t.teams.length % 2 !== 0) {
     throw forbidden('An odd number of teams cannot be paired; wait for another team to register', 'odd_team_count');
   }
 
   const roundNumber = t.rounds.length + 1;
-
-  if (roundNumber > 1) {
-    const previousRoundNumber = t.rounds[t.rounds.length - 1].number;
-    const previousChallenges = t.challenges.filter((c) => c.round === previousRoundNumber);
-    if (!previousChallenges.every((c) => c.status === 'completed')) {
-      throw forbidden(`Round ${previousRoundNumber} is not finished yet`, 'previous_round_unfinished');
-    }
-  }
+  assertPreviousRoundComplete(t, roundNumber);
 
   const now = new Date().toISOString();
   const lockedTeamIds = new Set<string>();
@@ -132,6 +140,80 @@ export function generateNextRound(t: Tournament): void {
     updatedAt: now,
     result: null,
   }));
+
+  t.challenges.push(...newChallenges);
+  t.rounds.push({ number: roundNumber, status: 'draft' });
+}
+
+/** Squad-level equivalent of buildPriorOpponents: two squads are "already faced" once any pair of their members has completed a match. */
+function buildPriorSquadOpponents(challenges: Challenge[], teamSquad: Map<string, string | null>): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  const add = (a: string, b: string) => {
+    if (!map.has(a)) map.set(a, new Set());
+    map.get(a)!.add(b);
+  };
+  for (const ch of challenges) {
+    if (ch.status !== 'completed') continue;
+    const squadA = teamSquad.get(ch.team1Id);
+    const squadB = teamSquad.get(ch.team2Id);
+    if (!squadA || !squadB || squadA === squadB) continue;
+    add(squadA, squadB);
+    add(squadB, squadA);
+  }
+  return map;
+}
+
+/**
+ * Double-swiss pairing for 'team' format tournaments: squads are paired like teams are in the
+ * individual algorithm above (adjacent in squad standings, avoiding squad-level rematches via
+ * the same `pairInOrder`), then within each squad pairing, members are matched by their
+ * individual rank inside their own squad (1st vs 1st, 2nd vs 2nd, ...) — no individual-level
+ * rematch avoidance, squad-level avoidance is considered sufficient (confirmed with the
+ * organiser). Uneven squad sizes leave the extra lower-ranked members without a match that round
+ * (implicit bye, no challenge created for them).
+ */
+function generateNextTeamRound(t: Tournament): void {
+  if (t.teams.length === 0) throw badRequest('No teams registered yet');
+  if (t.squads.length === 0) throw badRequest('No squads registered yet');
+  if (t.squads.length % 2 !== 0) {
+    throw forbidden('An odd number of squads cannot be paired; wait for another squad to register', 'odd_squad_count');
+  }
+  const emptySquad = t.squads.find((s) => !t.teams.some((tm) => tm.squadId === s.id));
+  if (emptySquad) {
+    throw forbidden(`Squad "${emptySquad.name}" has no members yet`, 'empty_squad');
+  }
+
+  const roundNumber = t.rounds.length + 1;
+  assertPreviousRoundComplete(t, roundNumber);
+
+  const now = new Date().toISOString();
+  const teamSquad = new Map(t.teams.map((tm) => [tm.id, tm.squadId]));
+  const scoring = t.squadScoring ?? DEFAULT_SQUAD_SCORING;
+
+  const priorSquadOpponents = buildPriorSquadOpponents(t.challenges, teamSquad);
+  const squadOrder = computeSquadStandings(t.squads, t.teams, t.challenges, scoring).map((s) => s.squadId);
+  const squadPairs = pairInOrder(squadOrder, priorSquadOpponents);
+
+  const individualOrder = computeStandings(t.teams, t.challenges).map((s) => s.teamId);
+
+  const newChallenges: Challenge[] = [];
+  for (const [squadA, squadB] of squadPairs) {
+    const membersA = individualOrder.filter((id) => teamSquad.get(id) === squadA);
+    const membersB = individualOrder.filter((id) => teamSquad.get(id) === squadB);
+    const pairCount = Math.min(membersA.length, membersB.length);
+    for (let i = 0; i < pairCount; i++) {
+      newChallenges.push({
+        id: uuidv4(),
+        team1Id: membersA[i],
+        team2Id: membersB[i],
+        status: 'accepted',
+        round: roundNumber,
+        createdAt: now,
+        updatedAt: now,
+        result: null,
+      });
+    }
+  }
 
   t.challenges.push(...newChallenges);
   t.rounds.push({ number: roundNumber, status: 'draft' });

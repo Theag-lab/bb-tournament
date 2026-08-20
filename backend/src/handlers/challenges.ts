@@ -94,7 +94,7 @@ export async function createChallenge(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
-  return c.json(toPublicTournament(tournament), 201);
+  return c.json(toPublicTournament(tournament, teamId ?? null), 201);
 }
 
 export async function actionChallenge(c: Context) {
@@ -109,12 +109,13 @@ export async function actionChallenge(c: Context) {
     throw badRequest('action must be one of: accept, decline, cancel');
   }
 
+  let admin = false;
   await storage.updateTournament(tournamentId, (t) => {
     const challenge = t.challenges.find((ch) => ch.id === challengeId);
     if (!challenge) throw notFound('Challenge not found');
     if (challenge.status !== 'pending') throw forbidden(`Challenge is not pending (status: ${challenge.status})`);
 
-    const admin = isAdmin(t, token);
+    admin = isAdmin(t, token);
     const team = admin ? null : authenticateTeam(t, teamId, password);
 
     if (action === 'accept' || action === 'decline') {
@@ -128,7 +129,7 @@ export async function actionChallenge(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
-  return c.json(toPublicTournament(tournament));
+  return c.json(toPublicTournament(tournament, admin ? null : teamId ?? null));
 }
 
 function validateResultInput(body: Partial<SubmitResultRequest> | null): SubmitResultRequest {
@@ -276,7 +277,7 @@ export async function submitResult(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
-  return c.json(toPublicTournament(tournament));
+  return c.json(toPublicTournament(tournament, teamId ?? null));
 }
 
 export async function confirmResult(c: Context) {
@@ -309,7 +310,7 @@ export async function confirmResult(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
-  return c.json(toPublicTournament(tournament));
+  return c.json(toPublicTournament(tournament, teamId ?? null));
 }
 
 export async function adminSetResult(c: Context) {

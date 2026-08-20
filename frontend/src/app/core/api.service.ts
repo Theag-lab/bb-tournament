@@ -3,8 +3,10 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import type {
   AdminTournamentView,
+  AssignTeamSquadRequest,
   ChallengeAction,
   CreateChallengeRequest,
+  CreateSquadRequest,
   CreateTeamRequest,
   CreateTeamResponse,
   CreateTournamentRequest,
@@ -15,6 +17,8 @@ import type {
   RosterImageUploadUrlResponse,
   RosterStatus,
   SubmitResultRequest,
+  UpdateSquadRequest,
+  UpdateSquadScoringRequest,
 } from '@bb-tournament/shared';
 
 /** Identifies "myself" when loading a tournament, so I still see my own team even if others are masked. */
@@ -220,6 +224,47 @@ export class ApiService {
         {},
         { params: { token } }
       )
+    );
+  }
+
+  createSquad(tournamentId: string, token: string, name: string) {
+    const body: CreateSquadRequest = { name };
+    return firstValueFrom(
+      this.http.post<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/squads`, body, { params: { token } })
+    );
+  }
+
+  renameSquad(tournamentId: string, token: string, squadId: string, name: string) {
+    const body: UpdateSquadRequest = { name };
+    return firstValueFrom(
+      this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/squads/${squadId}`, body, {
+        params: { token },
+      })
+    );
+  }
+
+  deleteSquad(tournamentId: string, token: string, squadId: string) {
+    return firstValueFrom(
+      this.http.delete<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/squads/${squadId}`, {
+        params: { token },
+      })
+    );
+  }
+
+  assignTeamSquad(tournamentId: string, token: string, teamId: string, squadId: string | null) {
+    const body: AssignTeamSquadRequest = { squadId };
+    return firstValueFrom(
+      this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/teams/${teamId}/squad`, body, {
+        params: { token },
+      })
+    );
+  }
+
+  updateSquadScoring(tournamentId: string, token: string, body: UpdateSquadScoringRequest) {
+    return firstValueFrom(
+      this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/squad-scoring`, body, {
+        params: { token },
+      })
     );
   }
 }

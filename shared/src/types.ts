@@ -54,6 +54,52 @@ export interface RoundInfo {
 export const MIN_ROUND_COUNT = 1;
 export const MAX_ROUND_COUNT = 20;
 
+/**
+ * 'individual' (default): each Team is ranked on its own, as today. 'team': Teams are grouped
+ * into Squads (see below) — squad standings drive round pairing (double-swiss), individual
+ * standings are still computed and shown alongside. A 'team' tournament always forces
+ * `mode: 'swiss'` server-side (no free challenges) — see backend/src/handlers/tournaments.ts.
+ */
+export type TournamentFormat = 'individual' | 'team';
+
+export interface Squad {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export const MIN_SQUAD_SIZE = 2;
+export const MAX_SQUAD_SIZE = 20;
+
+/**
+ * Squad-level match scoring, independent from the individual W/D/L points (POINTS_WIN etc. in
+ * scoring.ts). Buckets a match's TD-difference into one of 6 tiers exactly as specified by the
+ * tournament organiser: victoire totale / victoire / petite victoire / nul / petite défaite /
+ * défaite — asymmetric by design (3 win tiers, only 2 loss tiers; a crushing win is called out
+ * specially but any non-small loss is just "défaite", no separate "big loss" tier).
+ */
+export interface SquadScoringConfig {
+  smallMarginMaxDiff: number; // TD-difference in [1, this] => "petite" tier (win or loss side)
+  bigMarginMinDiff: number; // TD-difference >= this => "victoire totale" (win side only)
+  pointsBigWin: number;
+  pointsWin: number;
+  pointsSmallWin: number;
+  pointsDraw: number;
+  pointsSmallLoss: number;
+  pointsLoss: number;
+}
+
+export const DEFAULT_SQUAD_SCORING: SquadScoringConfig = {
+  smallMarginMaxDiff: 1,
+  bigMarginMinDiff: 3,
+  pointsBigWin: 5,
+  pointsWin: 4,
+  pointsSmallWin: 3,
+  pointsDraw: 2,
+  pointsSmallLoss: 1,
+  pointsLoss: 0,
+};
+
 export interface Team {
   id: string;
   password: string;
@@ -61,6 +107,7 @@ export interface Team {
   coachName: string;
   race: string;
   nafNumber: string | null; // coach's NAF membership number, needed for the NAF XML export
+  squadId: string | null; // set when the tournament's format is 'team', otherwise always null
   createdAt: string;
   rosterImage: RosterImage | null;
   rosterStatus: RosterStatus;
@@ -74,6 +121,10 @@ export interface Tournament {
   mode: TournamentMode;
   roundCount: number | null; // null for ladder mode, required otherwise
   rounds: RoundInfo[];
+  format: TournamentFormat;
+  squadSize: number | null; // required when format === 'team', otherwise null
+  squadScoring: SquadScoringConfig | null; // set when format === 'team', otherwise null
+  squads: Squad[];
   adminToken: string;
   createdAt: string;
   teams: Team[];
@@ -90,6 +141,7 @@ export interface PublicTeam {
   coachName: string;
   race: string;
   nafNumber: string | null;
+  squadId: string | null;
   createdAt: string;
   rosterImage: RosterImage | null;
   rosterStatus: RosterStatus;
@@ -123,6 +175,19 @@ export interface StandingEntry {
   opponentScore: number;
 }
 
+/** Squad-level equivalent of StandingEntry, only populated for 'team' format tournaments. */
+export interface SquadStandingEntry {
+  squadId: string;
+  points: number; // computed via SquadScoringConfig, not the individual W/D/L points
+  tdFor: number;
+  tdAgainst: number;
+  casFor: number;
+  casAgainst: number;
+  aggFor: number;
+  aggAgainst: number;
+  gamesPlayed: number;
+}
+
 export interface PublicTournament {
   id: string;
   name: string;
@@ -131,10 +196,15 @@ export interface PublicTournament {
   mode: TournamentMode;
   roundCount: number | null;
   rounds: RoundInfo[]; // launched rounds only
+  format: TournamentFormat;
+  squadSize: number | null;
+  squadScoring: SquadScoringConfig | null;
+  squads: Squad[];
   createdAt: string;
   teams: PublicTeam[];
   challenges: PublicChallenge[];
   standings: StandingEntry[];
+  squadStandings: SquadStandingEntry[];
 }
 
 export interface AdminTeamView extends PublicTeam {
@@ -149,10 +219,15 @@ export interface AdminTournamentView {
   mode: TournamentMode;
   roundCount: number | null;
   rounds: RoundInfo[]; // all rounds, including drafts
+  format: TournamentFormat;
+  squadSize: number | null;
+  squadScoring: SquadScoringConfig | null;
+  squads: Squad[];
   createdAt: string;
   teams: AdminTeamView[];
   challenges: PublicChallenge[];
   standings: StandingEntry[];
+  squadStandings: SquadStandingEntry[];
 }
 
 export interface UpdateTournamentDescriptionRequest {
@@ -164,6 +239,9 @@ export interface CreateTournamentRequest {
   requireRosterValidation?: boolean;
   mode?: TournamentMode;
   roundCount?: number; // required when mode !== 'ladder'
+  format?: TournamentFormat;
+  squadSize?: number; // required when format === 'team'
+  squadScoring?: Partial<SquadScoringConfig>; // overrides on top of DEFAULT_SQUAD_SCORING
 }
 
 export interface UpdateRosterStatusRequest {
@@ -186,7 +264,24 @@ export interface CreateTeamRequest {
   race: string;
   password: string;
   nafNumber?: string | null; // optional; coaches can also set/change it later from their team page
+  // Exactly one of these two is required when the tournament's format is 'team'; ignored otherwise.
+  squadId?: string; // join an existing squad
+  newSquadName?: string; // create a new squad and join it
 }
+
+export interface CreateSquadRequest {
+  name: string;
+}
+
+export interface UpdateSquadRequest {
+  name: string;
+}
+
+export interface AssignTeamSquadRequest {
+  squadId: string | null;
+}
+
+export type UpdateSquadScoringRequest = Partial<SquadScoringConfig>;
 
 export const TEAM_PASSWORD_MIN_LENGTH = 4;
 export const TEAM_PASSWORD_MAX_LENGTH = 32;

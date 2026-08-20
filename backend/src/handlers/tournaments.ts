@@ -1,22 +1,28 @@
 import type { Context } from 'hono';
 import { v4 as uuidv4 } from 'uuid';
 import {
+  DEFAULT_SQUAD_SCORING,
   MAX_ROUND_COUNT,
+  MAX_SQUAD_SIZE,
   MIN_ROUND_COUNT,
+  MIN_SQUAD_SIZE,
   TOURNAMENT_DESCRIPTION_MAX_LENGTH,
   type CreateTournamentRequest,
   type CreateTournamentResponse,
   type Tournament,
+  type TournamentFormat,
   type TournamentMode,
   type UpdateTournamentDescriptionRequest,
 } from '@bb-tournament/shared';
 import * as storage from '../storage';
 import { requireAdmin } from '../auth';
 import { toAdminTournamentView, toPublicTournament } from '../sanitize';
+import { mergeSquadScoring } from './squads';
 import { badRequest } from '../errors';
 
 const MAX_NAME_LENGTH = 80;
 const VALID_MODES: TournamentMode[] = ['ladder', 'swiss', 'swiss_with_challenge'];
+const VALID_FORMATS: TournamentFormat[] = ['individual', 'team'];
 
 export async function createTournament(c: Context) {
   const body = await c.req.json<CreateTournamentRequest>().catch(() => null);
@@ -24,7 +30,13 @@ export async function createTournament(c: Context) {
   if (!name) throw badRequest('Tournament name is required');
   if (name.length > MAX_NAME_LENGTH) throw badRequest(`Tournament name must be at most ${MAX_NAME_LENGTH} characters`);
 
-  const mode: TournamentMode = body?.mode && VALID_MODES.includes(body.mode) ? body.mode : 'ladder';
+  const format: TournamentFormat = body?.format && VALID_FORMATS.includes(body.format) ? body.format : 'individual';
+
+  // A 'team' tournament is always paired via swiss rounds, with no free challenges (see
+  // canCreateFreeChallenge in handlers/challenges.ts, which already returns false for 'swiss').
+  const mode: TournamentMode =
+    format === 'team' ? 'swiss' : body?.mode && VALID_MODES.includes(body.mode) ? body.mode : 'ladder';
+
   let roundCount: number | null = null;
   if (mode !== 'ladder') {
     const rc = body?.roundCount;
@@ -32,6 +44,15 @@ export async function createTournament(c: Context) {
       throw badRequest(`roundCount must be an integer between ${MIN_ROUND_COUNT} and ${MAX_ROUND_COUNT} for this mode`);
     }
     roundCount = rc;
+  }
+
+  let squadSize: number | null = null;
+  if (format === 'team') {
+    const size = body?.squadSize;
+    if (typeof size !== 'number' || !Number.isInteger(size) || size < MIN_SQUAD_SIZE || size > MAX_SQUAD_SIZE) {
+      throw badRequest(`squadSize must be an integer between ${MIN_SQUAD_SIZE} and ${MAX_SQUAD_SIZE} for team format`);
+    }
+    squadSize = size;
   }
 
   const now = new Date().toISOString();
@@ -43,6 +64,10 @@ export async function createTournament(c: Context) {
     mode,
     roundCount,
     rounds: [],
+    format,
+    squadSize,
+    squadScoring: format === 'team' ? mergeSquadScoring(DEFAULT_SQUAD_SCORING, body?.squadScoring) : null,
+    squads: [],
     adminToken: uuidv4(),
     createdAt: now,
     teams: [],

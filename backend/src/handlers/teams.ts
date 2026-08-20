@@ -7,7 +7,9 @@ import {
   type CreateTeamResponse,
   type ResolveTeamResponse,
   type RosterStatus,
+  type Squad,
   type Team,
+  type Tournament,
   type UpdateRosterStatusRequest,
 } from '@bb-tournament/shared';
 import * as storage from '../storage';
@@ -51,6 +53,41 @@ function validateTeamInput(body: Partial<CreateTeamRequest> | null): {
   return { name, coachName, race, password, nafNumber };
 }
 
+/**
+ * Resolves the squadId a new team should join, for 'team' format tournaments only (returns null
+ * for 'individual' tournaments, ignoring any squadId/newSquadName the client sent). Must run
+ * inside the storage mutator so squad name/size checks see fresh state on optimistic-lock retry.
+ */
+function resolveSquadForNewTeam(t: Tournament, body: Partial<CreateTeamRequest> | null): string | null {
+  if (t.format !== 'team') return null;
+  const squadId = body?.squadId?.trim();
+  const newSquadName = body?.newSquadName?.trim();
+  if (squadId && newSquadName) {
+    throw badRequest('Provide either squadId or newSquadName, not both', 'squad_choice_conflict');
+  }
+  if (squadId) {
+    const squad = t.squads.find((s) => s.id === squadId);
+    if (!squad) throw notFound('Squad not found');
+    const memberCount = t.teams.filter((tm) => tm.squadId === squad.id).length;
+    if (t.squadSize !== null && memberCount >= t.squadSize) {
+      throw forbidden(`Squad "${squad.name}" is already full`, 'squad_full');
+    }
+    return squad.id;
+  }
+  if (newSquadName) {
+    if (newSquadName.length > MAX_FIELD_LENGTH) {
+      throw badRequest(`Squad name must be at most ${MAX_FIELD_LENGTH} characters`);
+    }
+    if (t.squads.some((s) => s.name.toLowerCase() === newSquadName.toLowerCase())) {
+      throw conflict(`A squad named "${newSquadName}" already exists in this tournament`, 'squad_name_taken');
+    }
+    const squad: Squad = { id: uuidv4(), name: newSquadName, createdAt: new Date().toISOString() };
+    t.squads.push(squad);
+    return squad.id;
+  }
+  throw badRequest('squadId or newSquadName is required to join a team-format tournament', 'squad_required');
+}
+
 function assertCredentialsFree(
   t: { teams: Team[] },
   coachName: string,
@@ -76,19 +113,7 @@ export async function createTeam(c: Context) {
   const body = await c.req.json<CreateTeamRequest>().catch(() => null);
   const { name, coachName, race, password, nafNumber } = validateTeamInput(body);
 
-  const now = new Date().toISOString();
-  const newTeam: Team = {
-    id: uuidv4(),
-    password,
-    name,
-    coachName,
-    race,
-    nafNumber,
-    createdAt: now,
-    rosterImage: null,
-    rosterStatus: 'created',
-  };
-
+  let newTeamId = '';
   await storage.updateTournament(tournamentId, (t) => {
     if (t.mode !== 'ladder' && t.rounds.length > 0) {
       throw forbidden('Registration is closed once the tournament rounds have started', 'registration_closed');
@@ -97,10 +122,26 @@ export async function createTeam(c: Context) {
       throw conflict(`A team named "${name}" already exists in this tournament`, 'team_name_taken');
     }
     assertCredentialsFree(t, coachName, password);
+    const squadId = resolveSquadForNewTeam(t, body);
+
+    const now = new Date().toISOString();
+    const newTeam: Team = {
+      id: uuidv4(),
+      password,
+      name,
+      coachName,
+      race,
+      nafNumber,
+      squadId,
+      createdAt: now,
+      rosterImage: null,
+      rosterStatus: 'created',
+    };
+    newTeamId = newTeam.id;
     t.teams.push(newTeam);
   });
 
-  const response: CreateTeamResponse = { teamId: newTeam.id };
+  const response: CreateTeamResponse = { teamId: newTeamId };
   return c.json(response, 201);
 }
 
@@ -188,7 +229,7 @@ export async function updateTeam(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
-  return c.json(toPublicTournament(tournament));
+  return c.json(toPublicTournament(tournament, teamId));
 }
 
 export async function deleteTeam(c: Context) {
@@ -263,5 +304,5 @@ export async function updateRosterStatus(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
-  return c.json(toPublicTournament(tournament));
+  return c.json(toPublicTournament(tournament, teamId));
 }

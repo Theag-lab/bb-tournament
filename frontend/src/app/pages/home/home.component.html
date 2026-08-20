@@ -19,6 +19,49 @@
         </div>
       </div>
 
+      <div *ngSwitchCase="'format'">
+        <div class="field">
+          <label>Type de tournoi</label>
+          <label class="checkbox-field">
+            <input type="radio" name="format" value="individual" [(ngModel)]="format" />
+            <span>
+              <strong>Individuel</strong>
+              <span class="muted"> — chaque coach est inscrit et classé seul.</span>
+            </span>
+          </label>
+          <label class="checkbox-field">
+            <input type="radio" name="format" value="team" [(ngModel)]="format" />
+            <span>
+              <strong>Par équipe</strong>
+              <span class="muted">
+                — les coachs sont regroupés en équipes (à la manière de la NAF World Cup). Le classement
+                d'équipe prime pour l'appariement des rondes (système suisse uniquement, pas de défis libres) ;
+                un classement individuel reste affiché en parallèle.
+              </span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div *ngSwitchCase="'squad-size'">
+        <div class="field">
+          <label for="squad-size">Taille des équipes</label>
+          <input
+            id="squad-size"
+            type="number"
+            name="squadSize"
+            [(ngModel)]="squadSize"
+            [min]="minSquadSize"
+            [max]="maxSquadSize"
+          />
+          <p class="muted">
+            Entre {{ minSquadSize }} et {{ maxSquadSize }} coachs par équipe. Chaque coach choisira de créer ou
+            de rejoindre une équipe à l'inscription ; vous pourrez aussi créer des équipes et réassigner des
+            coachs vous-même depuis l'administration.
+          </p>
+        </div>
+      </div>
+
       <div *ngSwitchCase="'mode'">
         <div class="field">
           <label>Format du tournoi</label>
@@ -86,9 +129,17 @@
         <dl class="team-facts">
           <dt>Nom</dt>
           <dd>{{ name }}</dd>
-          <dt>Format</dt>
-          <dd>{{ modeLabel(mode) }}</dd>
-          <ng-container *ngIf="mode !== 'ladder'">
+          <dt>Type</dt>
+          <dd>{{ formatLabel(format) }}</dd>
+          <ng-container *ngIf="format === 'individual'">
+            <dt>Format</dt>
+            <dd>{{ modeLabel(mode) }}</dd>
+          </ng-container>
+          <ng-container *ngIf="format === 'team'">
+            <dt>Taille des équipes</dt>
+            <dd>{{ squadSize }}</dd>
+          </ng-container>
+          <ng-container *ngIf="needsRoundCount">
             <dt>Nombre de rondes</dt>
             <dd>{{ roundCount }}</dd>
           </ng-container>

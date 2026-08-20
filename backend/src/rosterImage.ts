@@ -90,5 +90,5 @@ export async function confirmUpload(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
-  return c.json(toPublicTournament(tournament));
+  return c.json(toPublicTournament(tournament, teamId));
 }

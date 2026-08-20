@@ -101,7 +101,7 @@
   </section>
 
   <section class="card" *ngIf="t.mode !== 'ladder'">
-    <h2>Gestion des rondes ({{ t.mode === 'swiss' ? 'suisse' : 'suisse + défis' }})</h2>
+    <h2>Gestion des rondes ({{ t.format === 'team' ? 'double suisse par escouade' : t.mode === 'swiss' ? 'suisse' : 'suisse + défis' }})</h2>
     <p class="muted">{{ t.rounds.length }} / {{ t.roundCount }} ronde(s) générée(s).</p>
     <div class="alert alert-error" *ngIf="roundError">{{ roundError }}</div>
 
@@ -184,6 +184,115 @@
     <p class="muted" *ngIf="t.rounds.length === 0">Aucune ronde générée pour le moment.</p>
   </section>
 
+  <section class="card" *ngIf="t.format === 'team'">
+    <h2>Escouades ({{ t.squads.length }})</h2>
+    <p class="muted">Taille cible : {{ t.squadSize }} coachs par escouade.</p>
+    <div class="alert alert-error" *ngIf="squadError">{{ squadError }}</div>
+
+    <div class="actions" style="margin-bottom: 1rem">
+      <input name="newSquadName" [(ngModel)]="newSquadName" placeholder="Nom de la nouvelle escouade" />
+      <button type="button" class="btn btn-primary" [disabled]="squadBusy || !newSquadName.trim()" (click)="createSquad()">
+        Créer une escouade
+      </button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Escouade</th>
+            <th>Membres</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let squad of t.squads">
+            <td>
+              <ng-container *ngIf="renamingSquadId !== squad.id">{{ squad.name }}</ng-container>
+              <input
+                *ngIf="renamingSquadId === squad.id"
+                [name]="'rename-' + squad.id"
+                [(ngModel)]="renameSquadDraft"
+              />
+            </td>
+            <td>{{ squadMemberCount(squad.id) }} / {{ t.squadSize }}</td>
+            <td class="actions">
+              <ng-container *ngIf="renamingSquadId === squad.id; else renameBtn">
+                <button type="button" class="btn btn-primary" [disabled]="squadBusy" (click)="saveRenameSquad(squad.id)">
+                  Enregistrer
+                </button>
+                <button type="button" class="btn" [disabled]="squadBusy" (click)="cancelRenameSquad()">Annuler</button>
+              </ng-container>
+              <ng-template #renameBtn>
+                <button type="button" class="btn" [disabled]="squadBusy" (click)="startRenameSquad(squad.id, squad.name)">
+                  Renommer
+                </button>
+              </ng-template>
+              <button
+                type="button"
+                class="btn btn-danger"
+                [disabled]="squadBusy || squadMemberCount(squad.id) > 0"
+                [title]="squadMemberCount(squad.id) > 0 ? 'Impossible : cette escouade a des membres' : ''"
+                (click)="deleteSquad(squad.id)"
+              >
+                Supprimer
+              </button>
+            </td>
+          </tr>
+          <tr *ngIf="t.squads.length === 0">
+            <td colspan="3" class="muted">Aucune escouade créée pour le moment.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" *ngIf="t.format === 'team' && squadScoringDraft as scoring">
+    <h2>Barème de score d'équipe</h2>
+    <p class="muted">
+      Points attribués à l'escouade selon l'écart de touchdowns du match (indépendant des points individuels
+      W/N/D). "Victoire totale" s'applique à partir du seuil haut ; en dessous du seuil bas, il s'agit d'une
+      "petite" victoire/défaite.
+    </p>
+
+    <div class="field">
+      <label for="scoring-small-margin">Écart maximum pour une "petite" victoire/défaite</label>
+      <input id="scoring-small-margin" type="number" name="smallMarginMaxDiff" [(ngModel)]="scoring.smallMarginMaxDiff" min="1" />
+    </div>
+    <div class="field">
+      <label for="scoring-big-margin">Écart minimum pour une "victoire totale"</label>
+      <input id="scoring-big-margin" type="number" name="bigMarginMinDiff" [(ngModel)]="scoring.bigMarginMinDiff" min="2" />
+    </div>
+    <div class="field">
+      <label for="scoring-big-win">Points — victoire totale</label>
+      <input id="scoring-big-win" type="number" name="pointsBigWin" [(ngModel)]="scoring.pointsBigWin" min="0" />
+    </div>
+    <div class="field">
+      <label for="scoring-win">Points — victoire</label>
+      <input id="scoring-win" type="number" name="pointsWin" [(ngModel)]="scoring.pointsWin" min="0" />
+    </div>
+    <div class="field">
+      <label for="scoring-small-win">Points — petite victoire</label>
+      <input id="scoring-small-win" type="number" name="pointsSmallWin" [(ngModel)]="scoring.pointsSmallWin" min="0" />
+    </div>
+    <div class="field">
+      <label for="scoring-draw">Points — nul</label>
+      <input id="scoring-draw" type="number" name="pointsDraw" [(ngModel)]="scoring.pointsDraw" min="0" />
+    </div>
+    <div class="field">
+      <label for="scoring-small-loss">Points — petite défaite</label>
+      <input id="scoring-small-loss" type="number" name="pointsSmallLoss" [(ngModel)]="scoring.pointsSmallLoss" min="0" />
+    </div>
+    <div class="field">
+      <label for="scoring-loss">Points — défaite</label>
+      <input id="scoring-loss" type="number" name="pointsLoss" [(ngModel)]="scoring.pointsLoss" min="0" />
+    </div>
+
+    <button type="button" class="btn btn-primary" [disabled]="savingSquadScoring" (click)="saveSquadScoring()">
+      {{ savingSquadScoring ? 'Enregistrement…' : 'Enregistrer le barème' }}
+    </button>
+  </section>
+
   <section class="card">
     <h2>Équipes ({{ t.teams.length }})</h2>
     <div class="table-wrap">
@@ -194,6 +303,7 @@
             <th>Coach</th>
             <th>Race</th>
             <th>NAF</th>
+            <th *ngIf="t.format === 'team'">Escouade</th>
             <th>Mot de passe</th>
             <th>Lien participant</th>
             <th></th>
@@ -205,6 +315,17 @@
             <td>{{ team.coachName }}</td>
             <td>{{ team.race }}</td>
             <td>{{ team.nafNumber ?? '—' }}</td>
+            <td *ngIf="t.format === 'team'">
+              <select
+                [name]="'squad-' + team.id"
+                [ngModel]="team.squadId ?? ''"
+                (ngModelChange)="assignTeamSquad(team.id, $event)"
+                [disabled]="squadBusy"
+              >
+                <option value="">— aucune —</option>
+                <option *ngFor="let squad of t.squads" [value]="squad.id">{{ squad.name }}</option>
+              </select>
+            </td>
             <td><strong>{{ team.password }}</strong></td>
             <td>
               <button type="button" class="btn" (click)="copyTeamLink(team.id, team.password)">
@@ -224,7 +345,7 @@
             </td>
           </tr>
           <tr *ngIf="t.teams.length === 0">
-            <td colspan="7" class="muted">Aucune équipe inscrite pour le moment.</td>
+            <td [attr.colspan]="t.format === 'team' ? 8 : 7" class="muted">Aucune équipe inscrite pour le moment.</td>
           </tr>
         </tbody>
       </table>

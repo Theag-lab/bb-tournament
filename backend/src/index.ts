@@ -6,6 +6,7 @@ import * as tournaments from './handlers/tournaments';
 import * as teams from './handlers/teams';
 import * as challenges from './handlers/challenges';
 import * as rounds from './handlers/rounds';
+import * as squads from './handlers/squads';
 import * as naf from './handlers/naf';
 import * as rosterImage from './rosterImage';
 
@@ -37,6 +38,12 @@ app.delete('/tournaments/:tournamentId/teams/:teamId', teams.deleteTeam);
 app.post('/tournaments/:tournamentId/teams/:teamId/roster-image/upload-url', rosterImage.getUploadUrl);
 app.post('/tournaments/:tournamentId/teams/:teamId/roster-image/confirm', rosterImage.confirmUpload);
 app.patch('/tournaments/:tournamentId/teams/:teamId/roster-status', teams.updateRosterStatus);
+
+app.post('/tournaments/:tournamentId/squads', squads.createSquad);
+app.patch('/tournaments/:tournamentId/squads/:squadId', squads.renameSquad);
+app.delete('/tournaments/:tournamentId/squads/:squadId', squads.deleteSquad);
+app.patch('/tournaments/:tournamentId/teams/:teamId/squad', squads.assignTeamSquad);
+app.patch('/tournaments/:tournamentId/squad-scoring', squads.updateSquadScoring);
 
 app.post('/tournaments/:tournamentId/challenges', challenges.createChallenge);
 app.patch('/tournaments/:tournamentId/challenges/:challengeId', challenges.actionChallenge);

@@ -46,7 +46,7 @@ export function buildNafExport(tournament: Tournament): string {
       const team2 = tournament.teams.find((t) => t.id === c.team2Id);
       if (!team1 || !team2 || !eligibleTeams.has(team1.id) || !eligibleTeams.has(team2.id)) return null;
 
-      const timeStamp = `${c.result.playedAt} 00:00`;
+      const timeStamp = `${c.result.playedAt} 12:00`;
       const playerRecord = (team: Team, td: number, cas: number) =>
         `<playerRecord><name>${escapeXml(team.coachName)}</name><number>${escapeXml(
           team.nafNumber!

@@ -2,12 +2,19 @@ import { CommonModule } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { MAX_ROUND_COUNT, MIN_ROUND_COUNT, type TournamentMode } from '@bb-tournament/shared';
+import {
+  MAX_ROUND_COUNT,
+  MAX_SQUAD_SIZE,
+  MIN_ROUND_COUNT,
+  MIN_SQUAD_SIZE,
+  type TournamentFormat,
+  type TournamentMode,
+} from '@bb-tournament/shared';
 import { ApiService } from '../../core/api.service';
 import { extractErrorMessage } from '../../core/http-error';
 import { adminUrl, copyToClipboard } from '../../core/links';
 
-type WizardStep = 'name' | 'mode' | 'rounds' | 'validation' | 'review';
+type WizardStep = 'name' | 'format' | 'mode' | 'squad-size' | 'rounds' | 'validation' | 'review';
 
 @Component({
   selector: 'app-home',
@@ -22,10 +29,14 @@ export class HomeComponent {
 
   readonly minRoundCount = MIN_ROUND_COUNT;
   readonly maxRoundCount = MAX_ROUND_COUNT;
+  readonly minSquadSize = MIN_SQUAD_SIZE;
+  readonly maxSquadSize = MAX_SQUAD_SIZE;
 
   name = '';
+  format: TournamentFormat = 'individual';
   mode: TournamentMode = 'ladder';
   roundCount = 3;
+  squadSize = 4;
   requireRosterValidation = false;
 
   busy = false;
@@ -39,10 +50,19 @@ export class HomeComponent {
   stepIndex = 0;
 
   get steps(): WizardStep[] {
-    const steps: WizardStep[] = ['name', 'mode'];
-    if (this.mode !== 'ladder') steps.push('rounds');
+    const steps: WizardStep[] = ['name', 'format'];
+    if (this.format === 'individual') {
+      steps.push('mode');
+      if (this.mode !== 'ladder') steps.push('rounds');
+    } else {
+      steps.push('squad-size', 'rounds');
+    }
     steps.push('validation', 'review');
     return steps;
+  }
+
+  formatLabel(format: TournamentFormat): string {
+    return format === 'individual' ? 'Individuel' : 'Par équipe';
   }
 
   get currentStep(): WizardStep {
@@ -75,6 +95,8 @@ export class HomeComponent {
         return this.name.trim().length > 0;
       case 'rounds':
         return this.roundCount >= this.minRoundCount && this.roundCount <= this.maxRoundCount;
+      case 'squad-size':
+        return this.squadSize >= this.minSquadSize && this.squadSize <= this.maxSquadSize;
       default:
         return true;
     }
@@ -98,8 +120,10 @@ export class HomeComponent {
       const res = await this.api.createTournament({
         name,
         requireRosterValidation: this.requireRosterValidation,
-        mode: this.mode,
-        roundCount: this.mode === 'ladder' ? undefined : this.roundCount,
+        format: this.format,
+        mode: this.format === 'individual' ? this.mode : undefined,
+        roundCount: this.needsRoundCount ? this.roundCount : undefined,
+        squadSize: this.format === 'team' ? this.squadSize : undefined,
       });
       this.createdTournamentId = res.tournamentId;
       this.createdAdminLink = adminUrl(res.tournamentId, res.adminToken);
@@ -108,6 +132,11 @@ export class HomeComponent {
     } finally {
       this.busy = false;
     }
+  }
+
+  /** Team format is always multi-round; individual format only needs roundCount outside ladder. */
+  get needsRoundCount(): boolean {
+    return this.format === 'team' || this.mode !== 'ladder';
   }
 
   goToScoreboard(): void {

@@ -104,8 +104,88 @@
   </ng-container>
 
   <ng-container *ngIf="activeTab === 'awards'">
+    <ng-container *ngIf="isTeamFormat">
+      <section class="card">
+        <h2>🩸 Bashlord — par équipe</h2>
+        <p class="muted">L'équipe qui a infligé le plus de casualties au total.</p>
+        <div class="table-wrap" *ngIf="squadBashlordRanking().length > 0; else noSquadBashlord">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Équipe</th>
+                <th>Casualties</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let s of squadBashlordRanking(); let i = index">
+                <td>{{ rankMedal(i) }}</td>
+                <td>{{ squadName(s.squadId) }}</td>
+                <td>{{ s.casFor }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ng-template #noSquadBashlord>
+          <p class="muted">Aucun match joué pour le moment.</p>
+        </ng-template>
+      </section>
+
+      <section class="card">
+        <h2>💥 AggroLord — par équipe</h2>
+        <p class="muted">L'équipe qui a infligé le plus d'agressions au total.</p>
+        <div class="table-wrap" *ngIf="squadAggroLordRanking().length > 0; else noSquadAggro">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Équipe</th>
+                <th>Agressions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let s of squadAggroLordRanking(); let i = index">
+                <td>{{ rankMedal(i) }}</td>
+                <td>{{ squadName(s.squadId) }}</td>
+                <td>{{ s.aggFor }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ng-template #noSquadAggro>
+          <p class="muted">Aucun match joué pour le moment.</p>
+        </ng-template>
+      </section>
+
+      <section class="card">
+        <h2>🏈 Meilleur marqueur — par équipe</h2>
+        <p class="muted">L'équipe qui a marqué le plus de touchdowns au total.</p>
+        <div class="table-wrap" *ngIf="squadTopScorerRanking().length > 0; else noSquadScorer">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Équipe</th>
+                <th>Touchdowns</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let s of squadTopScorerRanking(); let i = index">
+                <td>{{ rankMedal(i) }}</td>
+                <td>{{ squadName(s.squadId) }}</td>
+                <td>{{ s.tdFor }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ng-template #noSquadScorer>
+          <p class="muted">Aucun match joué pour le moment.</p>
+        </ng-template>
+      </section>
+    </ng-container>
+
     <section class="card">
-      <h2>🩸 Bashlord</h2>
+      <h2>🩸 Bashlord{{ isTeamFormat ? ' — individuel' : '' }}</h2>
       <p class="muted">Le plus de casualties infligées.</p>
       <div class="table-wrap" *ngIf="bashlordRanking().length > 0; else noBashlord">
         <table>
@@ -135,7 +215,7 @@
     </section>
 
     <section class="card">
-      <h2>💥 AggroLord</h2>
+      <h2>💥 AggroLord{{ isTeamFormat ? ' — individuel' : '' }}</h2>
       <p class="muted">Le plus d'agressions infligées.</p>
       <div class="table-wrap" *ngIf="aggroLordRanking().length > 0; else noAggro">
         <table>
@@ -165,7 +245,7 @@
     </section>
 
     <section class="card">
-      <h2>🏈 Meilleur marqueur</h2>
+      <h2>🏈 Meilleur marqueur{{ isTeamFormat ? ' — individuel' : '' }}</h2>
       <p class="muted">Le plus de touchdowns marqués.</p>
       <div class="table-wrap" *ngIf="topScorerRanking().length > 0; else noScorer">
         <table>
@@ -250,7 +330,38 @@
         <label for="join-password">Choisissez un mot de passe d'équipe (4 à 32 caractères)</label>
         <input id="join-password" name="joinPassword" [(ngModel)]="joinPassword" minlength="4" maxlength="32" required />
       </div>
-      <button type="submit" class="btn btn-primary" [disabled]="joinBusy">
+
+      <ng-container *ngIf="isTeamFormat">
+        <div class="field">
+          <label>Escouade</label>
+          <label class="checkbox-field">
+            <input type="radio" name="joinSquadChoice" value="existing" [(ngModel)]="joinSquadChoice" />
+            <span>Rejoindre une escouade existante</span>
+          </label>
+          <label class="checkbox-field">
+            <input type="radio" name="joinSquadChoice" value="new" [(ngModel)]="joinSquadChoice" />
+            <span>Créer une nouvelle escouade</span>
+          </label>
+        </div>
+        <div class="field" *ngIf="joinSquadChoice === 'existing'">
+          <label for="join-squad">Escouade à rejoindre</label>
+          <select id="join-squad" name="joinSquadId" [(ngModel)]="joinSquadId" required>
+            <option value="" disabled selected>Choisir une escouade</option>
+            <option *ngFor="let s of availableSquads()" [value]="s.id">
+              {{ s.name }} ({{ squadMemberCount(s.id) }}/{{ t.squadSize }})
+            </option>
+          </select>
+          <p class="muted" *ngIf="availableSquads().length === 0">
+            Aucune escouade disponible pour le moment — vous pouvez en créer une.
+          </p>
+        </div>
+        <div class="field" *ngIf="joinSquadChoice === 'new'">
+          <label for="join-new-squad">Nom de la nouvelle escouade</label>
+          <input id="join-new-squad" name="joinNewSquadName" [(ngModel)]="joinNewSquadName" required />
+        </div>
+      </ng-container>
+
+      <button type="submit" class="btn btn-primary" [disabled]="joinBusy || !canSubmitJoin">
         {{ joinBusy ? 'Inscription…' : "S'inscrire" }}
       </button>
     </form>
@@ -273,8 +384,38 @@
     <button type="button" class="btn btn-primary" (click)="goToMyTeam()">Gérer mon équipe</button>
   </section>
 
+  <section class="card" *ngIf="isTeamFormat">
+    <h2>Classement par escouade</h2>
+    <p class="muted">Détermine l'appariement des rondes (système suisse par escouade).</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Escouade</th>
+            <th>Points</th>
+            <th>TD +/-</th>
+            <th>Cas +/-</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let s of t.squadStandings; let i = index">
+            <td>{{ i + 1 }}</td>
+            <td>{{ squadName(s.squadId) }}</td>
+            <td>{{ s.points }}</td>
+            <td>{{ s.tdFor }} / {{ s.tdAgainst }}</td>
+            <td>{{ s.casFor }} / {{ s.casAgainst }}</td>
+          </tr>
+          <tr *ngIf="t.squadStandings.length === 0">
+            <td colspan="5" class="muted">Aucune escouade inscrite pour le moment.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="card">
-    <h2>Classement</h2>
+    <h2>Classement{{ isTeamFormat ? ' individuel' : '' }}</h2>
     <div class="table-wrap">
       <table>
         <thead>
@@ -282,6 +423,7 @@
             <th>#</th>
             <th>Coach</th>
             <th>Équipe</th>
+            <th *ngIf="isTeamFormat">Escouade</th>
             <th>Race</th>
             <th>V-N-D</th>
             <th>Points</th>
@@ -296,6 +438,7 @@
             <td>
               <button type="button" class="link-btn" (click)="openTeamById(s.teamId)">{{ teamName(s.teamId) }}</button>
             </td>
+            <td *ngIf="isTeamFormat">{{ squadName(teamSquadId(s.teamId)) }}</td>
             <td>{{ teamRace(s.teamId) }}</td>
             <td class="nowrap">{{ s.wins }}/{{ s.draws }}/{{ s.losses }}</td>
             <td>{{ s.points }}</td>
@@ -303,7 +446,7 @@
             <td>{{ s.casFor }} / {{ s.casAgainst }}</td>
           </tr>
           <tr *ngIf="t.standings.length === 0">
-            <td colspan="8" class="muted">Aucune équipe inscrite pour le moment.</td>
+            <td [attr.colspan]="isTeamFormat ? 9 : 8" class="muted">Aucune équipe inscrite pour le moment.</td>
           </tr>
         </tbody>
       </table>
@@ -318,6 +461,7 @@
           <tr>
             <th>Coach</th>
             <th>Équipe</th>
+            <th *ngIf="isTeamFormat">Escouade</th>
             <th>Race</th>
             <th *ngIf="t.requireRosterValidation">Roster</th>
           </tr>
@@ -329,13 +473,14 @@
               <button type="button" class="link-btn" (click)="openTeam(team)">{{ team.name }}</button>
               <span class="badge" *ngIf="team.rosterImage">📷</span>
             </td>
+            <td *ngIf="isTeamFormat">{{ squadName(team.squadId) }}</td>
             <td>{{ team.race }}</td>
             <td *ngIf="t.requireRosterValidation">
               <span class="badge" [ngClass]="'badge-roster-' + team.rosterStatus">{{ rosterStatusLabel(team.rosterStatus) }}</span>
             </td>
           </tr>
           <tr *ngIf="t.teams.length === 0">
-            <td [attr.colspan]="t.requireRosterValidation ? 4 : 3" class="muted">Aucune équipe inscrite pour le moment.</td>
+            <td [attr.colspan]="(isTeamFormat ? 1 : 0) + (t.requireRosterValidation ? 4 : 3)" class="muted">Aucune équipe inscrite pour le moment.</td>
           </tr>
         </tbody>
       </table>

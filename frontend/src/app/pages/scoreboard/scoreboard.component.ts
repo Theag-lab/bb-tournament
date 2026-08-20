@@ -2,7 +2,14 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { RACES, type PublicTeam, type PublicTournament, type StandingEntry } from '@bb-tournament/shared';
+import {
+  RACES,
+  type PublicTeam,
+  type PublicTournament,
+  type Squad,
+  type SquadStandingEntry,
+  type StandingEntry,
+} from '@bb-tournament/shared';
 import { ApiService } from '../../core/api.service';
 import { extractErrorMessage } from '../../core/http-error';
 import { copyToClipboard, participantUrl, rosterImageUrl, scoreboardUrl } from '../../core/links';
@@ -42,6 +49,9 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   joinCoachName = '';
   joinRace = '';
   joinPassword = '';
+  joinSquadChoice: 'existing' | 'new' = 'existing';
+  joinSquadId = '';
+  joinNewSquadName = '';
 
   createdTeam: { teamId: string; password: string } | null = null;
   copied = false;
@@ -90,6 +100,10 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     return this.tournament?.teams.find((t) => t.id === teamId)?.race ?? '—';
   }
 
+  teamSquadId(teamId: string): string | null {
+    return this.tournament?.teams.find((t) => t.id === teamId)?.squadId ?? null;
+  }
+
   get launchedRounds() {
     return this.tournament?.rounds.filter((r) => r.status === 'launched') ?? [];
   }
@@ -114,16 +128,50 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     return `round-${roundNumber}`;
   }
 
+  get isTeamFormat(): boolean {
+    return this.tournament?.format === 'team';
+  }
+
+  squadMemberCount(squadId: string): number {
+    return this.tournament?.teams.filter((t) => t.squadId === squadId).length ?? 0;
+  }
+
+  /** Squads a new coach can join from the registration form — full squads are excluded. */
+  availableSquads(): Squad[] {
+    const squadSize = this.tournament?.squadSize;
+    return (this.tournament?.squads ?? []).filter((s) => squadSize == null || this.squadMemberCount(s.id) < squadSize);
+  }
+
+  squadName(squadId: string | null): string {
+    if (!squadId) return '—';
+    return this.tournament?.squads.find((s) => s.id === squadId)?.name ?? '—';
+  }
+
+  get canSubmitJoin(): boolean {
+    if (!this.joinName.trim() || !this.joinCoachName.trim() || !this.joinRace.trim() || !this.joinPassword.trim()) {
+      return false;
+    }
+    if (!this.isTeamFormat) return true;
+    return this.joinSquadChoice === 'existing' ? !!this.joinSquadId : !!this.joinNewSquadName.trim();
+  }
+
   async submitJoin(): Promise<void> {
     const name = this.joinName.trim();
     const coachName = this.joinCoachName.trim();
     const race = this.joinRace.trim();
     const password = this.joinPassword.trim();
-    if (!name || !coachName || !race || !password) return;
+    if (!this.canSubmitJoin) return;
     this.joinBusy = true;
     this.joinError = null;
     try {
-      const res = await this.api.createTeam(this.tournamentId, { name, coachName, race, password });
+      const res = await this.api.createTeam(this.tournamentId, {
+        name,
+        coachName,
+        race,
+        password,
+        squadId: this.isTeamFormat && this.joinSquadChoice === 'existing' ? this.joinSquadId : undefined,
+        newSquadName: this.isTeamFormat && this.joinSquadChoice === 'new' ? this.joinNewSquadName.trim() : undefined,
+      });
       this.createdTeam = { teamId: res.teamId, password };
       await this.load(true);
     } catch (err) {
@@ -273,6 +321,25 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
 
   topScorerRanking(): StandingEntry[] {
     return this.ranking((s) => s.tdFor);
+  }
+
+  private squadRanking(stat: (s: SquadStandingEntry) => number): SquadStandingEntry[] {
+    return (this.tournament?.squadStandings ?? [])
+      .filter((s) => s.gamesPlayed > 0)
+      .slice()
+      .sort((a, b) => stat(b) - stat(a));
+  }
+
+  squadBashlordRanking(): SquadStandingEntry[] {
+    return this.squadRanking((s) => s.casFor);
+  }
+
+  squadAggroLordRanking(): SquadStandingEntry[] {
+    return this.squadRanking((s) => s.aggFor);
+  }
+
+  squadTopScorerRanking(): SquadStandingEntry[] {
+    return this.squadRanking((s) => s.tdFor);
   }
 
   rankMedal(index: number): string {

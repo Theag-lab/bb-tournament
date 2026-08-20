@@ -1,4 +1,4 @@
-import { Challenge, StandingEntry, SubmitResultRequest, Team } from './types';
+import { Challenge, Squad, SquadScoringConfig, SquadStandingEntry, StandingEntry, SubmitResultRequest, Team } from './types';
 
 export const POINTS_WIN = 5;
 export const POINTS_DRAW = 2;
@@ -165,5 +165,92 @@ export function computeStandings(teams: Team[], challenges: Challenge[]): Standi
     const netCasB = b.casFor - b.casAgainst;
     if (netCasB !== netCasA) return netCasB - netCasA;
     return 0;
+  });
+}
+
+/**
+ * Maps one side's TD-difference (positive = that side won by this much) to the squad points for
+ * its match-result tier, per the organiser-configured SquadScoringConfig. Asymmetric by design:
+ * the win side has 3 tiers (small/plain/total), the loss side only 2 (small/plain) — see
+ * SquadScoringConfig's doc comment.
+ */
+function squadPointsForDiff(diff: number, cfg: SquadScoringConfig): number {
+  if (diff === 0) return cfg.pointsDraw;
+  const abs = Math.abs(diff);
+  if (diff > 0) {
+    if (abs >= cfg.bigMarginMinDiff) return cfg.pointsBigWin;
+    if (abs > cfg.smallMarginMaxDiff) return cfg.pointsWin;
+    return cfg.pointsSmallWin;
+  }
+  return abs > cfg.smallMarginMaxDiff ? cfg.pointsLoss : cfg.pointsSmallLoss;
+}
+
+/**
+ * Squad-level standings for 'team' format tournaments: aggregates every completed match played
+ * by each squad's member teams. Squad score comes from `squadPointsForDiff`, not the individual
+ * W/D/L points used by `computeStandings` — the two are independent scoring systems.
+ */
+export function computeSquadStandings(
+  squads: Squad[],
+  teams: Team[],
+  challenges: Challenge[],
+  scoring: SquadScoringConfig
+): SquadStandingEntry[] {
+  const squadOfTeam = new Map(teams.map((t) => [t.id, t.squadId]));
+  const byId = new Map<string, SquadStandingEntry>();
+  for (const squad of squads) {
+    byId.set(squad.id, {
+      squadId: squad.id,
+      points: 0,
+      tdFor: 0,
+      tdAgainst: 0,
+      casFor: 0,
+      casAgainst: 0,
+      aggFor: 0,
+      aggAgainst: 0,
+      gamesPlayed: 0,
+    });
+  }
+
+  for (const challenge of challenges) {
+    if (challenge.status !== 'completed' || !challenge.result) continue;
+    const r = challenge.result;
+    const squad1Id = squadOfTeam.get(challenge.team1Id);
+    const squad2Id = squadOfTeam.get(challenge.team2Id);
+    if (!squad1Id || !squad2Id) continue;
+    const e1 = byId.get(squad1Id);
+    const e2 = byId.get(squad2Id);
+    if (!e1 || !e2) continue;
+
+    const diff = r.team1Td - r.team2Td;
+    e1.points += squadPointsForDiff(diff, scoring);
+    e2.points += squadPointsForDiff(-diff, scoring);
+    e1.tdFor += r.team1Td;
+    e1.tdAgainst += r.team2Td;
+    e2.tdFor += r.team2Td;
+    e2.tdAgainst += r.team1Td;
+    e1.casFor += r.team1Cas;
+    e1.casAgainst += r.team2Cas;
+    e2.casFor += r.team2Cas;
+    e2.casAgainst += r.team1Cas;
+    e1.aggFor += r.team1Agg;
+    e1.aggAgainst += r.team2Agg;
+    e2.aggFor += r.team2Agg;
+    e2.aggAgainst += r.team1Agg;
+    e1.gamesPlayed += 1;
+    e2.gamesPlayed += 1;
+  }
+
+  return Array.from(byId.values()).sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    const netTdA = a.tdFor - a.tdAgainst;
+    const netTdB = b.tdFor - b.tdAgainst;
+    if (netTdB !== netTdA) return netTdB - netTdA;
+    const netCasA = a.casFor - a.casAgainst;
+    const netCasB = b.casFor - b.casAgainst;
+    if (netCasB !== netCasA) return netCasB - netCasA;
+    const randomA = stableRandomKey(a.squadId);
+    const randomB = stableRandomKey(b.squadId);
+    return randomA - randomB;
   });
 }

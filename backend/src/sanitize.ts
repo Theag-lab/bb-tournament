@@ -1,4 +1,17 @@
-import { AdminTournamentView, PublicTournament, Tournament, computeStandings } from '@bb-tournament/shared';
+import {
+  AdminTournamentView,
+  DEFAULT_SQUAD_SCORING,
+  PublicTournament,
+  SquadStandingEntry,
+  Tournament,
+  computeSquadStandings,
+  computeStandings,
+} from '@bb-tournament/shared';
+
+function squadStandingsOf(t: Tournament): SquadStandingEntry[] {
+  if (t.format !== 'team') return [];
+  return computeSquadStandings(t.squads, t.teams, t.challenges, t.squadScoring ?? DEFAULT_SQUAD_SCORING);
+}
 
 /**
  * Roster *image and race* stay hidden from other participants until round 1 launches, in both
@@ -28,6 +41,10 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
     // always shown — this lets the frontend know e.g. registration is closed while a draft
     // round is still being prepared, without exposing who's actually paired with whom yet.
     rounds: t.rounds,
+    format: t.format,
+    squadSize: t.squadSize,
+    squadScoring: t.squadScoring,
+    squads: t.squads,
     createdAt: t.createdAt,
     teams: t.teams.map((team) => {
       const hideDetails = hideRosterDetails && team.id !== viewerTeamId;
@@ -37,6 +54,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
         coachName: team.coachName,
         race: hideDetails ? '—' : team.race,
         nafNumber: team.nafNumber,
+        squadId: team.squadId,
         createdAt: team.createdAt,
         rosterImage: hideDetails ? null : team.rosterImage,
         rosterStatus: team.rosterStatus,
@@ -55,6 +73,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
         result: c.result,
       })),
     standings: computeStandings(t.teams, t.challenges),
+    squadStandings: squadStandingsOf(t),
   };
 }
 
@@ -67,6 +86,10 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
     mode: t.mode,
     roundCount: t.roundCount,
     rounds: t.rounds,
+    format: t.format,
+    squadSize: t.squadSize,
+    squadScoring: t.squadScoring,
+    squads: t.squads,
     createdAt: t.createdAt,
     teams: t.teams.map((team) => ({
       id: team.id,
@@ -74,6 +97,7 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
       coachName: team.coachName,
       race: team.race,
       nafNumber: team.nafNumber,
+      squadId: team.squadId,
       createdAt: team.createdAt,
       rosterImage: team.rosterImage,
       rosterStatus: team.rosterStatus,
@@ -90,5 +114,6 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
       result: c.result,
     })),
     standings: computeStandings(t.teams, t.challenges),
+    squadStandings: squadStandingsOf(t),
   };
 }

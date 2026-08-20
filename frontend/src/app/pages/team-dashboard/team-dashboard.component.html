@@ -39,6 +39,21 @@
         </select>
       </div>
       <div class="field">
+        <label for="edit-naf-number">Numéro NAF (optionnel)</label>
+        <input
+          id="edit-naf-number"
+          name="editNafNumber"
+          [(ngModel)]="editNafNumber"
+          placeholder="Ex : 12345"
+          inputmode="numeric"
+          pattern="[0-9]*"
+        />
+        <p class="muted">
+          Renseignez-le si vous êtes inscrit à la <a href="https://www.thenaf.net" target="_blank" rel="noopener">NAF</a> —
+          cela permet à l'organisateur d'exporter les résultats vers la NAF après le tournoi.
+        </p>
+      </div>
+      <div class="field">
         <label for="edit-password">Mot de passe d'équipe (4 à 32 caractères)</label>
         <input id="edit-password" name="editPassword" [(ngModel)]="editPassword" minlength="4" maxlength="32" required />
       </div>

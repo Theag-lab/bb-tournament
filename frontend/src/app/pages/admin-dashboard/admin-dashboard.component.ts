@@ -134,6 +134,10 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     this.scoreboardCopied = await copyToClipboard(scoreboardUrl(this.tournamentId));
   }
 
+  nafExportUrl(): string {
+    return this.api.nafExportUrl(this.tournamentId, this.token);
+  }
+
   async deleteTeam(teamId: string): Promise<void> {
     this.actionBusy = true;
     this.actionError = null;

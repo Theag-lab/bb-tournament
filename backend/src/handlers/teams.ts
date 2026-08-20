@@ -1,13 +1,14 @@
 import type { Context } from 'hono';
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
-import type {
-  CreateTeamRequest,
-  CreateTeamResponse,
-  ResolveTeamResponse,
-  RosterStatus,
-  Team,
-  UpdateRosterStatusRequest,
+import {
+  NAF_NUMBER_PATTERN,
+  type CreateTeamRequest,
+  type CreateTeamResponse,
+  type ResolveTeamResponse,
+  type RosterStatus,
+  type Team,
+  type UpdateRosterStatusRequest,
 } from '@bb-tournament/shared';
 import * as storage from '../storage';
 import { authenticateTeam, findTeamById, isAdmin, validatePassword } from '../auth';
@@ -18,11 +19,23 @@ import { assetsBucketName, rosterImageKey } from '../rosterImage';
 const s3 = new S3Client({});
 const MAX_FIELD_LENGTH = 40;
 
+/** Returns the trimmed NAF number, or null if omitted/blank. Throws 400 if present but malformed. */
+function validateNafNumber(raw: string | null | undefined): string | null {
+  if (raw === undefined || raw === null) return null;
+  const nafNumber = raw.trim();
+  if (!nafNumber) return null;
+  if (!NAF_NUMBER_PATTERN.test(nafNumber)) {
+    throw badRequest('Le numéro NAF doit être un nombre entier positif', 'invalid_naf_number');
+  }
+  return nafNumber;
+}
+
 function validateTeamInput(body: Partial<CreateTeamRequest> | null): {
   name: string;
   coachName: string;
   race: string;
   password: string;
+  nafNumber: string | null;
 } {
   const name = body?.name?.trim();
   const coachName = body?.coachName?.trim();
@@ -34,7 +47,8 @@ function validateTeamInput(body: Partial<CreateTeamRequest> | null): {
     if (value.length > MAX_FIELD_LENGTH) throw badRequest(`${field} must be at most ${MAX_FIELD_LENGTH} characters`);
   }
   const password = validatePassword(body?.password);
-  return { name, coachName, race, password };
+  const nafNumber = validateNafNumber(body?.nafNumber);
+  return { name, coachName, race, password, nafNumber };
 }
 
 function assertCredentialsFree(
@@ -60,7 +74,7 @@ function assertCredentialsFree(
 export async function createTeam(c: Context) {
   const tournamentId = c.req.param('tournamentId')!;
   const body = await c.req.json<CreateTeamRequest>().catch(() => null);
-  const { name, coachName, race, password } = validateTeamInput(body);
+  const { name, coachName, race, password, nafNumber } = validateTeamInput(body);
 
   const now = new Date().toISOString();
   const newTeam: Team = {
@@ -69,6 +83,7 @@ export async function createTeam(c: Context) {
     name,
     coachName,
     race,
+    nafNumber,
     createdAt: now,
     rosterImage: null,
     rosterStatus: 'created',
@@ -163,6 +178,9 @@ export async function updateTeam(c: Context) {
     }
     if (body.password !== undefined) {
       team.password = validatePassword(body.password);
+    }
+    if (body.nafNumber !== undefined) {
+      team.nafNumber = validateNafNumber(body.nafNumber);
     }
     if (body.coachName !== undefined || body.password !== undefined) {
       assertCredentialsFree(t, team.coachName, team.password, teamId);

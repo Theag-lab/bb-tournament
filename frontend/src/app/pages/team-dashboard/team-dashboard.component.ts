@@ -47,6 +47,7 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
   editName = '';
   editCoachName = '';
   editRace = '';
+  editNafNumber = '';
   editPassword = '';
   savingProfile = false;
 
@@ -98,6 +99,7 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
         this.editName = myTeam.name;
         this.editCoachName = myTeam.coachName;
         this.editRace = myTeam.race;
+        this.editNafNumber = myTeam.nafNumber ?? '';
         this.editPassword = this.password;
       }
     } catch (err) {
@@ -177,6 +179,7 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     const name = this.editName.trim();
     const coachName = this.editCoachName.trim();
     const race = this.editRace.trim();
+    const nafNumber = this.editNafNumber.trim();
     const password = this.editPassword.trim();
     if (!name || !coachName || !race || !password) return;
     this.savingProfile = true;
@@ -186,6 +189,7 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
         name,
         coachName,
         race,
+        nafNumber: nafNumber || null,
         password,
       });
       this.password = password;

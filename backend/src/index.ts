@@ -6,6 +6,7 @@ import * as tournaments from './handlers/tournaments';
 import * as teams from './handlers/teams';
 import * as challenges from './handlers/challenges';
 import * as rounds from './handlers/rounds';
+import * as naf from './handlers/naf';
 import * as rosterImage from './rosterImage';
 
 const app = new Hono().basePath('/api');
@@ -26,6 +27,7 @@ app.post('/tournaments', tournaments.createTournament);
 app.get('/tournaments/:tournamentId', tournaments.getPublicTournament);
 app.get('/tournaments/:tournamentId/admin', tournaments.getAdminTournament);
 app.patch('/tournaments/:tournamentId/description', tournaments.updateDescription);
+app.get('/tournaments/:tournamentId/naf-export', naf.exportNaf);
 
 app.post('/tournaments/:tournamentId/teams', teams.createTeam);
 app.get('/tournaments/:tournamentId/teams/find', teams.findMyTeam);

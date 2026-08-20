@@ -60,6 +60,7 @@ export interface Team {
   name: string;
   coachName: string;
   race: string;
+  nafNumber: string | null; // coach's NAF membership number, needed for the NAF XML export
   createdAt: string;
   rosterImage: RosterImage | null;
   rosterStatus: RosterStatus;
@@ -88,6 +89,7 @@ export interface PublicTeam {
   name: string;
   coachName: string;
   race: string;
+  nafNumber: string | null;
   createdAt: string;
   rosterImage: RosterImage | null;
   rosterStatus: RosterStatus;
@@ -183,10 +185,14 @@ export interface CreateTeamRequest {
   coachName: string;
   race: string;
   password: string;
+  nafNumber?: string | null; // optional; coaches can also set/change it later from their team page
 }
 
 export const TEAM_PASSWORD_MIN_LENGTH = 4;
 export const TEAM_PASSWORD_MAX_LENGTH = 32;
+
+/** NAF membership numbers are plain positive integers, printed on naf.net coach profiles. */
+export const NAF_NUMBER_PATTERN = /^[1-9][0-9]{0,6}$/;
 
 export interface CreateTeamResponse {
   teamId: string;
@@ -265,3 +271,51 @@ export const RACES = [
   'Vampire',
   'Wood Elf',
 ] as const;
+
+/**
+ * This app's `RACES` don't line up 1:1 with the NAF's own team-name labels (see
+ * inspiration/naf-xml-export-spec.md). `null` means there's no confirmed NAF equivalent, so
+ * teams of that race are silently left out of the NAF export, same as picking "None" in Tourma.
+ *
+ * Verified against Tourma's own roster-translation table (`RosterType.java` /
+ * `rosters.properties`), not just its stale XSD: `Snotlings` and `Old World Alliance` ARE
+ * recognized NAF team names there (Tourma's own properties file misspells the latter as "Old
+ * Wolrd Alliance" when exporting — a Tourma typo, not reproduced here). `Gnomes` and `Imperial
+ * Nobility` have no trace anywhere in Tourma — confirmed a known Tourma gap (it predates these
+ * BB2020 rosters), not evidence NAF lacks them. Mapped to their GW/BB2020 names as-is, since
+ * recently-added rosters don't carry the legacy NAF/GW naming mismatches older teams have
+ * (e.g. `Chaos`/`Chaos Chosen`, `Bretonnians`/`Bretonnia`).
+ */
+export const RACE_TO_NAF_TEAM: Record<(typeof RACES)[number], string | null> = {
+  Amazon: 'Amazons',
+  'Black Orc': 'Orc',
+  Bretonnia: 'Bretonnians',
+  'Chaos Chosen': 'Chaos',
+  'Chaos Dwarf': 'Chaos Dwarves',
+  'Chaos Renegade': 'Chaos Pact',
+  'Dark Elf': 'Dark Elves',
+  Dwarf: 'Dwarves',
+  'Elven Union': 'Elves',
+  Gnomes: 'Gnomes',
+  Goblins: 'Goblins',
+  Halflings: 'Halflings',
+  'High Elf': 'High Elves',
+  Human: 'Humans',
+  'Imperial Nobility': 'Imperial Nobility',
+  Khorne: 'Khorne',
+  Lizardmen: 'Lizardmen',
+  'Necromantic Horror': 'Necromantic',
+  Norse: 'Norse',
+  Nurgle: "Nurgle's Rotters",
+  Ogres: 'Ogres',
+  'Old World Alliance': 'Old World Alliance',
+  Orc: 'Orc',
+  'Shambling Undead': 'Undead',
+  Skaven: 'Skaven',
+  Slann: 'Slann',
+  Snotlings: 'Snotlings',
+  'Tomb Kings': 'Khemri',
+  'Underworld Denizens': 'Underworld',
+  Vampire: 'Vampires',
+  'Wood Elf': 'Wood Elves',
+};

@@ -18,6 +18,7 @@
     <button type="button" class="btn" (click)="copyScoreboardLink()">
       {{ scoreboardCopied ? 'Lien copié !' : 'Copier le lien public du tableau des scores' }}
     </button>
+    <a class="btn" [href]="nafExportUrl()" target="_blank" rel="noopener">Exporter les résultats NAF (XML)</a>
   </section>
 
   <section class="card">
@@ -192,6 +193,7 @@
             <th>Équipe</th>
             <th>Coach</th>
             <th>Race</th>
+            <th>NAF</th>
             <th>Mot de passe</th>
             <th>Lien participant</th>
             <th></th>
@@ -202,6 +204,7 @@
             <td>{{ team.name }}</td>
             <td>{{ team.coachName }}</td>
             <td>{{ team.race }}</td>
+            <td>{{ team.nafNumber ?? '—' }}</td>
             <td><strong>{{ team.password }}</strong></td>
             <td>
               <button type="button" class="btn" (click)="copyTeamLink(team.id, team.password)">
@@ -221,7 +224,7 @@
             </td>
           </tr>
           <tr *ngIf="t.teams.length === 0">
-            <td colspan="6" class="muted">Aucune équipe inscrite pour le moment.</td>
+            <td colspan="7" class="muted">Aucune équipe inscrite pour le moment.</td>
           </tr>
         </tbody>
       </table>

@@ -208,6 +208,11 @@ export class ApiService {
     );
   }
 
+  /** Direct download link (GET, admin token in the query string) rather than a fetch — it's a file, not JSON. */
+  nafExportUrl(tournamentId: string, token: string): string {
+    return `${API_BASE}/tournaments/${tournamentId}/naf-export?token=${encodeURIComponent(token)}`;
+  }
+
   launchRound(tournamentId: string, token: string, roundNumber: number) {
     return firstValueFrom(
       this.http.post<AdminTournamentView>(

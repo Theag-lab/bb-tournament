@@ -82,17 +82,21 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let c of roundMatches(r.number)">
+            <tr
+              *ngFor="let row of roundMatchGroups(r.number); trackBy: trackByRoundMatchRow"
+              [class.match-group-start]="row.groupStart"
+              [class.match-group-alt]="row.groupIndex % 2 === 1"
+            >
               <td>
-                <strong>{{ teamCoach(c.team1Id) }}</strong>
-                <div class="subtext">{{ teamName(c.team1Id) }}</div>
+                <strong>{{ matchPrimaryLabel(row.leftTeamId) }}</strong>
+                <div class="subtext">{{ matchSecondaryLabel(row.leftTeamId) }}</div>
               </td>
-              <td class="nowrap">{{ c.result ? (c.result.team1Td + ' - ' + c.result.team2Td) : '—' }}</td>
+              <td class="nowrap">{{ row.leftTd !== null ? (row.leftTd + ' - ' + row.rightTd) : '—' }}</td>
               <td>
-                <strong>{{ teamCoach(c.team2Id) }}</strong>
-                <div class="subtext">{{ teamName(c.team2Id) }}</div>
+                <strong>{{ matchPrimaryLabel(row.rightTeamId) }}</strong>
+                <div class="subtext">{{ matchSecondaryLabel(row.rightTeamId) }}</div>
               </td>
-              <td><span class="badge" [ngClass]="'badge-' + c.status">{{ c.status }}</span></td>
+              <td><span class="badge" [ngClass]="'badge-' + row.challenge.status">{{ row.challenge.status }}</span></td>
             </tr>
             <tr *ngIf="roundMatches(r.number).length === 0">
               <td colspan="4" class="muted">Aucun match dans cette ronde.</td>
@@ -118,9 +122,9 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let s of squadBashlordRanking(); let i = index">
+              <tr *ngFor="let s of squadBashlordRanking(); let i = index; trackBy: trackBySquadId">
                 <td>{{ rankMedal(i) }}</td>
-                <td>{{ squadName(s.squadId) }}</td>
+                <td><button type="button" class="link-btn" (click)="openSquadById(s.squadId)">{{ squadName(s.squadId) }}</button></td>
                 <td>{{ s.casFor }}</td>
               </tr>
             </tbody>
@@ -144,9 +148,9 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let s of squadAggroLordRanking(); let i = index">
+              <tr *ngFor="let s of squadAggroLordRanking(); let i = index; trackBy: trackBySquadId">
                 <td>{{ rankMedal(i) }}</td>
-                <td>{{ squadName(s.squadId) }}</td>
+                <td><button type="button" class="link-btn" (click)="openSquadById(s.squadId)">{{ squadName(s.squadId) }}</button></td>
                 <td>{{ s.aggFor }}</td>
               </tr>
             </tbody>
@@ -170,9 +174,9 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let s of squadTopScorerRanking(); let i = index">
+              <tr *ngFor="let s of squadTopScorerRanking(); let i = index; trackBy: trackBySquadId">
                 <td>{{ rankMedal(i) }}</td>
-                <td>{{ squadName(s.squadId) }}</td>
+                <td><button type="button" class="link-btn" (click)="openSquadById(s.squadId)">{{ squadName(s.squadId) }}</button></td>
                 <td>{{ s.tdFor }}</td>
               </tr>
             </tbody>
@@ -198,7 +202,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let s of bashlordRanking(); let i = index">
+            <tr *ngFor="let s of bashlordRanking(); let i = index; trackBy: trackByTeamId">
               <td>{{ rankMedal(i) }}</td>
               <td class="muted">{{ teamCoach(s.teamId) }}</td>
               <td>
@@ -228,7 +232,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let s of aggroLordRanking(); let i = index">
+            <tr *ngFor="let s of aggroLordRanking(); let i = index; trackBy: trackByTeamId">
               <td>{{ rankMedal(i) }}</td>
               <td class="muted">{{ teamCoach(s.teamId) }}</td>
               <td>
@@ -258,7 +262,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let s of topScorerRanking(); let i = index">
+            <tr *ngFor="let s of topScorerRanking(); let i = index; trackBy: trackByTeamId">
               <td>{{ rankMedal(i) }}</td>
               <td class="muted">{{ teamCoach(s.teamId) }}</td>
               <td>
@@ -393,21 +397,25 @@
           <tr>
             <th>#</th>
             <th>Escouade</th>
+            <th>V-N-D</th>
             <th>Points</th>
             <th>TD +/-</th>
             <th>Cas +/-</th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let s of t.squadStandings; let i = index">
+          <tr *ngFor="let s of t.squadStandings; let i = index; trackBy: trackBySquadId">
             <td>{{ i + 1 }}</td>
-            <td>{{ squadName(s.squadId) }}</td>
+            <td>
+              <button type="button" class="link-btn" (click)="openSquadById(s.squadId)">{{ squadName(s.squadId) }}</button>
+            </td>
+            <td class="nowrap">{{ s.wins }}/{{ s.draws }}/{{ s.losses }}</td>
             <td>{{ s.points }}</td>
             <td>{{ s.tdFor }} / {{ s.tdAgainst }}</td>
             <td>{{ s.casFor }} / {{ s.casAgainst }}</td>
           </tr>
           <tr *ngIf="t.squadStandings.length === 0">
-            <td colspan="5" class="muted">Aucune escouade inscrite pour le moment.</td>
+            <td colspan="6" class="muted">Aucune escouade inscrite pour le moment.</td>
           </tr>
         </tbody>
       </table>
@@ -432,13 +440,13 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let s of t.standings; let i = index">
+          <tr *ngFor="let s of t.standings; let i = index; trackBy: trackByTeamId">
             <td>{{ i + 1 }}</td>
             <td class="muted">{{ teamCoach(s.teamId) }}</td>
             <td>
               <button type="button" class="link-btn" (click)="openTeamById(s.teamId)">{{ teamName(s.teamId) }}</button>
             </td>
-            <td *ngIf="isTeamFormat">{{ squadName(teamSquadId(s.teamId)) }}</td>
+            <td *ngIf="isTeamFormat"><button type="button" class="link-btn" (click)="openSquadById(teamSquadId(s.teamId))">{{ squadName(teamSquadId(s.teamId)) }}</button></td>
             <td>{{ teamRace(s.teamId) }}</td>
             <td class="nowrap">{{ s.wins }}/{{ s.draws }}/{{ s.losses }}</td>
             <td>{{ s.points }}</td>
@@ -467,13 +475,13 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let team of t.teams">
+          <tr *ngFor="let team of t.teams; trackBy: trackById">
             <td>{{ team.coachName }}</td>
             <td>
               <button type="button" class="link-btn" (click)="openTeam(team)">{{ team.name }}</button>
               <span class="badge" *ngIf="team.rosterImage">📷</span>
             </td>
-            <td *ngIf="isTeamFormat">{{ squadName(team.squadId) }}</td>
+            <td *ngIf="isTeamFormat"><button type="button" class="link-btn" (click)="openSquadById(team.squadId)">{{ squadName(team.squadId) }}</button></td>
             <td>{{ team.race }}</td>
             <td *ngIf="t.requireRosterValidation">
               <span class="badge" [ngClass]="'badge-roster-' + team.rosterStatus">{{ rosterStatusLabel(team.rosterStatus) }}</span>
@@ -501,7 +509,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let c of freeChallenges()">
+          <tr *ngFor="let c of freeChallenges(); trackBy: trackById">
             <td>
               {{ teamName(c.team1Id) }} ({{ teamCoach(c.team1Id) }}) vs {{ teamName(c.team2Id) }} ({{ teamCoach(c.team2Id) }})
             </td>
@@ -580,7 +588,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let c of selectedTeamChallenges()">
+            <tr *ngFor="let c of selectedTeamChallenges(); trackBy: trackById">
               <td class="muted">{{ c.result?.playedAt ?? '—' }}</td>
               <td>{{ teamName(opponentId(c, rt.id)) }}</td>
               <td class="muted">{{ teamCoach(opponentId(c, rt.id)) }}</td>
@@ -599,6 +607,58 @@
       </div>
       <ng-template #noMatches>
         <p class="muted">Aucun défi pour cette équipe pour le moment.</p>
+      </ng-template>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" *ngIf="selectedSquad as sq" (click)="closeSquad()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <h2>{{ sq.name }}</h2>
+        <button type="button" class="btn" (click)="closeSquad()">Fermer</button>
+      </div>
+
+      <dl class="team-facts" *ngIf="selectedSquadStanding() as s">
+        <dt>Points</dt>
+        <dd>{{ s.points }}</dd>
+        <dt>Bilan V-N-D</dt>
+        <dd class="nowrap">{{ s.wins }}/{{ s.draws }}/{{ s.losses }}</dd>
+        <dt>Touchdowns +/-</dt>
+        <dd>{{ s.tdFor }} / {{ s.tdAgainst }}</dd>
+        <dt>Casualties +/-</dt>
+        <dd>{{ s.casFor }} / {{ s.casAgainst }}</dd>
+      </dl>
+
+      <h3>Coachs de l'escouade ({{ selectedSquadMembers().length }})</h3>
+      <div class="table-wrap" *ngIf="selectedSquadMembers().length > 0; else noMembers">
+        <table>
+          <thead>
+            <tr>
+              <th>Coach</th>
+              <th>Race</th>
+              <th>V-N-D</th>
+              <th>Points</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let member of selectedSquadMembers(); trackBy: trackById">
+              <td>
+                <button type="button" class="link-btn" (click)="openTeamFromSquad(member.id)">{{ member.coachName }}</button>
+              </td>
+              <td>{{ member.race }}</td>
+              <ng-container *ngIf="memberStanding(member.id) as ms; else noStanding">
+                <td class="nowrap">{{ ms.wins }}/{{ ms.draws }}/{{ ms.losses }}</td>
+                <td>{{ ms.points }}</td>
+              </ng-container>
+              <ng-template #noStanding>
+                <td class="muted" colspan="2">—</td>
+              </ng-template>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noMembers>
+        <p class="muted">Aucun coach dans cette escouade pour le moment.</p>
       </ng-template>
     </div>
   </div>

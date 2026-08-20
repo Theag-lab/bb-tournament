@@ -233,6 +233,17 @@ export function swapRoundMatches(t: Tournament, roundNumber: number, matchId1: s
     throw badRequest('This swap would pit a team against itself');
   }
 
+  if (t.format === 'team') {
+    const squadOf = (teamId: string) => t.teams.find((tm) => tm.id === teamId)?.squadId ?? null;
+    const pairKey = (c: Challenge) => [squadOf(c.team1Id), squadOf(c.team2Id)].sort().join('|');
+    if (pairKey(m1) !== pairKey(m2)) {
+      throw forbidden(
+        'In team format, matches can only be swapped within the same squad pairing',
+        'swap_crosses_squad_pairing'
+      );
+    }
+  }
+
   const now = new Date().toISOString();
   const tmp = m1.team2Id;
   m1.team2Id = m2.team2Id;

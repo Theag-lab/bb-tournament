@@ -202,6 +202,9 @@ export function computeSquadStandings(
     byId.set(squad.id, {
       squadId: squad.id,
       points: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
       tdFor: 0,
       tdAgainst: 0,
       casFor: 0,
@@ -225,6 +228,16 @@ export function computeSquadStandings(
     const diff = r.team1Td - r.team2Td;
     e1.points += squadPointsForDiff(diff, scoring);
     e2.points += squadPointsForDiff(-diff, scoring);
+    if (diff > 0) {
+      e1.wins += 1;
+      e2.losses += 1;
+    } else if (diff < 0) {
+      e2.wins += 1;
+      e1.losses += 1;
+    } else {
+      e1.draws += 1;
+      e2.draws += 1;
+    }
     e1.tdFor += r.team1Td;
     e1.tdAgainst += r.team2Td;
     e2.tdFor += r.team2Td;

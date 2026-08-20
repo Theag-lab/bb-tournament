@@ -179,6 +179,11 @@ export interface StandingEntry {
 export interface SquadStandingEntry {
   squadId: string;
   points: number; // computed via SquadScoringConfig, not the individual W/D/L points
+  // W/D/L by TD comparison per match (independent of the 6-tier squad points above, same idea as
+  // the individual W/D/L record).
+  wins: number;
+  draws: number;
+  losses: number;
   tdFor: number;
   tdAgainst: number;
   casFor: number;

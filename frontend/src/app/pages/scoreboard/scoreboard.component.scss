@@ -2,34 +2,6 @@
   display: block;
 }
 
-.tabs {
-  display: flex;
-  gap: 0.25rem;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 1.25rem;
-}
-
-.tab-btn {
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-muted);
-  padding: 0.6rem 0.9rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-
-  &:hover {
-    color: var(--text);
-  }
-
-  &.active {
-    color: var(--text);
-    border-bottom-color: var(--primary);
-  }
-}
-
 .link-btn {
   background: none;
   border: none;

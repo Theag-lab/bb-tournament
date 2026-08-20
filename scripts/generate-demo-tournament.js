@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 /**
- * Generates a static Tournament JSON fixture (team format, 50 coaches in 10 squads, 5 rounds —
- * 3 played, 1 in draft) for demo/screenshot purposes. Does NOT write to S3 or call any API —
- * this only produces a local JSON file matching the exact `Tournament` shape from
- * shared/src/types.ts. Reuses the real scoring/standings/pairing logic from the built shared
- * package so the generated data is internally consistent with what the app itself would produce.
+ * Generates a static Tournament JSON fixture (team format, 50 pseudo-named coaches in 10 squads,
+ * 5 rounds planned) for demo/screenshot purposes. Does NOT write to S3 or call any API — this
+ * only produces a local JSON file matching the exact `Tournament` shape from shared/src/types.ts.
+ * Reuses the real scoring/standings/pairing logic from the built shared package so the generated
+ * data is internally consistent with what the app itself would produce.
+ *
+ * Rounds 1-2 are fully completed. Round 3 is deliberately "in progress" — a realistic mix of
+ * completed, awaiting_confirmation (one side submitted) and not-yet-played matches — and is the
+ * last round generated: exactly like the real app, round 4 can't be generated until round 3 is
+ * fully completed, so it deliberately does not exist yet in this fixture.
  *
  * Usage: node scripts/generate-demo-tournament.js [output-path] [tournament-id]
  */
@@ -25,7 +30,11 @@ const TEAM_PASSWORD = 'demo1234';
 const SQUAD_SIZE = 5;
 const SQUAD_COUNT = 10;
 const ROUND_COUNT = 5;
-const PLAYED_ROUNDS = 3; // rounds 1..3 launched+completed, round 4 generated as draft, round 5 not yet generated
+const ROUNDS_FULLY_COMPLETE = 2; // rounds 1-2: launched + all matches completed
+// Round 3 ("en cours"): each match randomly lands in one of these three real-world states.
+const ROUND3_COMPLETED_SHARE = 0.4;
+const ROUND3_AWAITING_SHARE = 0.3;
+// remainder (~0.3) stays 'accepted' with no result at all — not played yet
 
 // Deterministic PRNG (mulberry32) so re-running the script produces identical output.
 function mulberry32(seed) {
@@ -49,13 +58,23 @@ const shuffle = (arr) => {
 };
 const randint = (min, max) => min + Math.floor(rand() * (max - min + 1));
 
-const FIRST_NAMES = [
-  'Julien', 'Marc', 'Sophie', 'Thomas', 'Claire', 'Antoine', 'Lea', 'Nicolas', 'Camille', 'Hugo',
-  'Manon', 'Louis', 'Chloe', 'Maxime', 'Emma', 'Simon', 'Alice', 'Romain', 'Julie', 'Bastien',
+// Blood Bowl-flavored coach handles, not "real names" — the community convention.
+const COACH_PSEUDOS = [
+  'TitanRouge', 'CrocMalin', 'FurieVerte', "L-Ecorcheur", 'MisterSplat', 'GrosBill', 'SangFroid',
+  'CasseOs', 'Ratichon', 'Frappadingue', 'Belourdo', 'TataViolente', 'PapyCogneur', 'LaTornade',
+  'DocteurDoom', 'CaptainCrash', 'MamanOurs', 'LeBoucherDuCoin', 'ZigZagBoy', "L-Insaisissable",
+  'TontonPatate', 'VladLeFol', 'MissDropKick', 'LeCafardFou', 'GroPoing', 'SirPlaquage',
+  'LadyCarnage', 'PetitPoulet', 'GrandChelem', 'LeFacteurFou', 'BabaCool', 'TontonFlingueur',
+  'DameDeFer', 'MonstreDuLundi', 'CoachChaos', 'LordSplat', 'LaBrute38', 'SkullCrusher',
+  'MamieRafale', 'PapaOgre', 'LeRequinBlanc', "L-Ombre", 'TitiTerreur', 'FouFurieux',
+  'MisterMeeple', 'LaGriffe', 'DocSavage', 'CaptainClutch', 'LordDesOs', 'ReineDesCasse',
+  'MonsieurMuscle', 'PitBullDu92', 'TatieCatastrophe', 'LeVengeur', 'NainDeChoc', 'RoiDuFoul',
+  'DameDuChaos', 'BrutalBob', 'LaMachine', 'SuperCoach', 'AgentOrange',
 ];
-const LAST_NAMES = [
-  'Dupont', 'Bernard', 'Moreau', 'Lefevre', 'Girard', 'Bonnet', 'Roux', 'Fontaine', 'Rousseau',
-  'Vincent', 'Muller', 'Lambert', 'Fournier', 'Robin', 'Faure', 'Blanchard', 'Guerin', 'Boyer',
+const SQUAD_NAMES = [
+  'Les Lanceurs de Pow', 'Les Blitzeurs Fous', 'Les Rois du Foul', 'Les Seigneurs du Turnover',
+  'Les Maitres du Crowdsurf', 'Les Marchands de Cases', 'Les Comptables du KO',
+  'Les Artisans du Splat', 'Les Poetes du Placage', 'Les Douaniers du Chaos',
 ];
 const TEAM_ADJ = [
   'Fous', 'Enrages', 'Sanglants', 'Maudits', 'Implacables', 'Rugissants', 'Vicieux', 'Increvables',
@@ -65,16 +84,16 @@ const TEAM_NOUN = [
   'Bouchers', 'Titans', 'Gobelins', 'Dents-de-sabre', 'Tornades', 'Marteaux', 'Charognards',
   'Berserkers', 'Colosses', 'Faucheurs', 'Spectres', 'Golems',
 ];
-const SQUAD_NAMES = [
-  'France', 'Belgique', 'Suisse', 'Quebec', 'Luxembourg', 'Bretagne', 'Occitanie', 'Normandie',
-  'Wallonie', 'Acadie',
-];
 
-function uniqueNames(count, pool1, pool2, template) {
+function uniqueFromPool(count, pool) {
+  return shuffle(pool).slice(0, count);
+}
+
+function uniqueTeamNames(count) {
   const seen = new Set();
   const out = [];
   while (out.length < count) {
-    const candidate = template(pool1[randint(0, pool1.length - 1)], pool2[randint(0, pool2.length - 1)]);
+    const candidate = `Les ${TEAM_ADJ[randint(0, TEAM_ADJ.length - 1)]} ${TEAM_NOUN[randint(0, TEAM_NOUN.length - 1)]}`;
     if (seen.has(candidate)) continue;
     seen.add(candidate);
     out.push(candidate);
@@ -94,8 +113,8 @@ const squads = SQUAD_NAMES.slice(0, SQUAD_COUNT).map((name) => ({
 }));
 
 // ---- Teams ----
-const coachNames = uniqueNames(50, FIRST_NAMES, LAST_NAMES, (a, b) => `${a} ${b}`);
-const teamNames = uniqueNames(50, TEAM_ADJ, TEAM_NOUN, (a, b) => `Les ${a} ${b}`);
+const coachNames = uniqueFromPool(50, COACH_PSEUDOS);
+const teamNames = uniqueTeamNames(50);
 const teams = [];
 for (let i = 0; i < 50; i++) {
   const squad = squads[Math.floor(i / SQUAD_SIZE) % squads.length];
@@ -164,7 +183,7 @@ function pairInOrder(orderedIds, priorOpponents) {
   return pairs;
 }
 
-function fabricateResult(playedAt, team1Id, team2Id) {
+function fabricateScore(playedAt, team1Id, team2Id) {
   const input = {
     playedAt,
     team1Td: randint(0, 4),
@@ -175,7 +194,12 @@ function fabricateResult(playedAt, team1Id, team2Id) {
     team2Agg: randint(1, 6),
     concededByTeamId: null,
   };
-  const score = computeMatchScore(input, team1Id, team2Id);
+  return computeMatchScore(input, team1Id, team2Id);
+}
+
+/** A fully completed match: both sides confirmed. */
+function completedResult(playedAt, team1Id, team2Id) {
+  const score = fabricateScore(playedAt, team1Id, team2Id);
   const submittedAt = new Date(`${playedAt}T18:00:00.000Z`).toISOString();
   return {
     ...score,
@@ -188,12 +212,28 @@ function fabricateResult(playedAt, team1Id, team2Id) {
   };
 }
 
+/** One side submitted a result, the other hasn't confirmed it yet. */
+function awaitingConfirmationResult(playedAt, team1Id, team2Id) {
+  const score = fabricateScore(playedAt, team1Id, team2Id);
+  const submittedAt = new Date(`${playedAt}T20:00:00.000Z`).toISOString();
+  return {
+    ...score,
+    playedAt,
+    concededByTeamId: null,
+    submittedByTeamId: team1Id,
+    submittedAt,
+    confirmedByTeamId: null,
+    completedAt: null,
+  };
+}
+
 // ---- Rounds: double-swiss pairing (squad-level, then rank-matched within the pair) ----
 const teamSquad = new Map(teams.map((t) => [t.id, t.squadId]));
 const challenges = [];
 const rounds = [];
+const IN_PROGRESS_ROUND = ROUNDS_FULLY_COMPLETE + 1;
 
-for (let roundNumber = 1; roundNumber <= PLAYED_ROUNDS + 1; roundNumber++) {
+for (let roundNumber = 1; roundNumber <= IN_PROGRESS_ROUND; roundNumber++) {
   const priorSquadOpponents = buildPriorOpponents(challenges, (teamId) => teamSquad.get(teamId));
   const squadOrder =
     roundNumber === 1
@@ -204,8 +244,9 @@ for (let roundNumber = 1; roundNumber <= PLAYED_ROUNDS + 1; roundNumber++) {
   const individualOrder =
     roundNumber === 1 ? shuffle(teams.map((t) => t.id)) : computeStandings(teams, challenges).map((s) => s.teamId);
 
-  const isPlayed = roundNumber <= PLAYED_ROUNDS;
-  const playedAt = dateDaysAgo((PLAYED_ROUNDS - roundNumber + 1) * 7);
+  const isFullyPlayed = roundNumber <= ROUNDS_FULLY_COMPLETE;
+  const isInProgress = roundNumber === IN_PROGRESS_ROUND;
+  const roundAgeDays = (IN_PROGRESS_ROUND - roundNumber) * 7; // round 3 ("now") = 0 days ago
 
   for (const [squadA, squadB] of squadPairs) {
     const membersA = individualOrder.filter((id) => teamSquad.get(id) === squadA);
@@ -214,21 +255,42 @@ for (let roundNumber = 1; roundNumber <= PLAYED_ROUNDS + 1; roundNumber++) {
     for (let i = 0; i < pairCount; i++) {
       const team1Id = membersA[i];
       const team2Id = membersB[i];
-      const createdAt = isoDaysAgo((PLAYED_ROUNDS - roundNumber + 2) * 7);
+      const createdAt = isoDaysAgo(roundAgeDays + 2);
+      let status = 'accepted';
+      let result = null;
+
+      if (isFullyPlayed) {
+        const playedAt = dateDaysAgo(roundAgeDays);
+        status = 'completed';
+        result = completedResult(playedAt, team1Id, team2Id);
+      } else if (isInProgress) {
+        const playedAt = dateDaysAgo(randint(0, 2));
+        const roll = rand();
+        if (roll < ROUND3_COMPLETED_SHARE) {
+          status = 'completed';
+          result = completedResult(playedAt, team1Id, team2Id);
+        } else if (roll < ROUND3_COMPLETED_SHARE + ROUND3_AWAITING_SHARE) {
+          status = 'awaiting_confirmation';
+          result = awaitingConfirmationResult(playedAt, team1Id, team2Id);
+        } // else: stays 'accepted', result null — not played yet
+      }
+
       challenges.push({
         id: uuid(),
         team1Id,
         team2Id,
-        status: isPlayed ? 'completed' : 'accepted',
+        status,
         round: roundNumber,
         createdAt,
-        updatedAt: isPlayed ? new Date(`${playedAt}T18:00:00.000Z`).toISOString() : createdAt,
-        result: isPlayed ? fabricateResult(playedAt, team1Id, team2Id) : null,
+        updatedAt: result ? result.completedAt || result.submittedAt : createdAt,
+        result,
       });
     }
   }
 
-  rounds.push({ number: roundNumber, status: isPlayed ? 'launched' : 'draft' });
+  // Every generated round has been launched (coaches need it launched to submit results) —
+  // including round 3, which is why it can be "in progress" at all.
+  rounds.push({ number: roundNumber, status: 'launched' });
 }
 
 // ---- Tournament ----
@@ -257,8 +319,14 @@ const tournament = {
 
 fs.writeFileSync(outputPath, JSON.stringify(tournament, null, 2) + '\n');
 
+const round3 = challenges.filter((c) => c.round === IN_PROGRESS_ROUND);
 console.log(`Ecrit : ${outputPath}`);
 console.log(`Tournament id : ${tournament.id}`);
 console.log(`Admin token   : ${tournament.adminToken}`);
 console.log(`Mot de passe (toutes les equipes) : ${TEAM_PASSWORD}`);
-console.log(`${teams.length} equipes, ${squads.length} escouades, ${challenges.length} matchs (${challenges.filter((c) => c.status === 'completed').length} termines).`);
+console.log(`${teams.length} equipes, ${squads.length} escouades, ${rounds.length} rondes generees (ronde ${IN_PROGRESS_ROUND} en cours).`);
+console.log(
+  `Ronde ${IN_PROGRESS_ROUND} : ${round3.filter((c) => c.status === 'completed').length} terminee(s), ` +
+    `${round3.filter((c) => c.status === 'awaiting_confirmation').length} en attente de confirmation, ` +
+    `${round3.filter((c) => c.status === 'accepted').length} pas encore jouee(s).`
+);

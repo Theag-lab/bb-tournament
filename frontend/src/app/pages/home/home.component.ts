@@ -60,22 +60,22 @@ export class HomeComponent implements OnInit, OnDestroy {
     },
     {
       image: '/screenshots/team.png',
-      alt: "Fiche d'équipe",
-      title: 'Une fiche par équipe',
-      description: 'Roster, statistiques et historique des matchs — chaque équipe du classement est cliquable.',
+      alt: "Roster",
+      title: 'Vision sur le roster',
+      description: 'Roster validé, statistiques et historique des matchs — chaque équipe du classement est cliquable.',
+    },
+    {
+      image: '/screenshots/round4-squad.png',
+      alt: 'Tournoi par squad',
+      title: 'Format par équipe, visualisation des rounds',
+      description: 'Escouades, double classement, BashLord et AggroLord déclinés par équipe et en individuel.',
     },
     {
       image: '/screenshots/admin.png',
       alt: 'Panneau administrateur',
       title: 'Panneau admin complet',
       description: 'Rondes, rosters, description du tournoi, export NAF — tout au même endroit, sans jonglerie.',
-    },
-    {
-      image: '/screenshots/team-format.png',
-      alt: 'Tournoi par équipe',
-      title: 'Format par équipe façon NAF World Cup',
-      description: 'Escouades, double classement, BashLord et AggroLord déclinés par équipe et en individuel.',
-    },
+    }
   ];
 
   activeSlide = 0;

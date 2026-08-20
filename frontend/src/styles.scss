@@ -283,6 +283,73 @@ table {
   margin: 0;
 }
 
+// Tab bars — used by the public scoreboard (score/awards/rounds/description) and the admin
+// dashboard (section tabs, round sub-tabs).
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+
+  &:hover {
+    color: var(--text);
+  }
+
+  &.active {
+    color: var(--text);
+    border-bottom-color: var(--primary);
+  }
+}
+
+// Smaller variant for a nested tab bar (e.g. round sub-tabs inside the "Rondes" admin tab).
+.tabs-sub {
+  border-bottom: none;
+  margin-bottom: 1rem;
+
+  .tab-btn {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+
+    &.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+  }
+}
+
+// Keeps a team-format round's matches visually grouped by squad pairing: a divider above each
+// new group, and a subtle alternating tint so consecutive groups are easy to tell apart at a
+// glance. Used both by the public round tables (tr) and the admin round match cards (div).
+.match-group-start td {
+  border-top: 2px solid var(--primary);
+}
+
+.match-group-alt {
+  background: var(--surface-2);
+}
+
+.challenge-group-start {
+  border-top: 2px solid var(--primary);
+  padding-top: 1rem;
+  margin-top: 1rem;
+}
+
 .link-copy {
   display: flex;
   align-items: center;

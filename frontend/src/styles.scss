@@ -277,6 +277,12 @@ table {
   color: var(--text-muted);
 }
 
+.field-error {
+  color: #ff9c94;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
 .link-copy {
   display: flex;
   align-items: center;

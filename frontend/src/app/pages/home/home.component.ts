@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import {
@@ -7,6 +7,9 @@ import {
   MAX_SQUAD_SIZE,
   MIN_ROUND_COUNT,
   MIN_SQUAD_SIZE,
+  TOURNAMENT_ID_MAX_LENGTH,
+  TOURNAMENT_ID_MIN_LENGTH,
+  TOURNAMENT_ID_PATTERN,
   type TournamentFormat,
   type TournamentMode,
 } from '@bb-tournament/shared';
@@ -16,6 +19,27 @@ import { adminUrl, copyToClipboard } from '../../core/links';
 
 type WizardStep = 'name' | 'format' | 'mode' | 'squad-size' | 'rounds' | 'validation' | 'review';
 
+/** Suggests a URL-safe tournament id from its name — kept in sync until the admin edits it by hand. */
+function slugify(value: string, maxLength: number): string {
+  const slug = value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // strip accents (é -> e, etc.)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, maxLength);
+  return slug.replace(/-+$/g, ''); // truncation may leave a trailing hyphen
+}
+
+interface ScreenshotSlide {
+  image: string;
+  alt: string;
+  title: string;
+  description: string;
+}
+
+const CAROUSEL_INTERVAL_MS = 5000;
+
 @Component({
   selector: 'app-home',
   standalone: true,
@@ -23,16 +47,88 @@ type WizardStep = 'name' | 'format' | 'mode' | 'squad-size' | 'rounds' | 'valida
   templateUrl: './home.component.html',
   styleUrl: './home.component.scss',
 })
-export class HomeComponent {
+export class HomeComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+
+  readonly slides: ScreenshotSlide[] = [
+    {
+      image: '/screenshots/scoreboard.png',
+      alt: 'Tableau des scores public',
+      title: 'Classement en direct',
+      description: 'Points, V-N-D, touchdowns et casualties, actualisés toutes les 15 secondes — partageable en un lien.',
+    },
+    {
+      image: '/screenshots/team.png',
+      alt: "Fiche d'équipe",
+      title: 'Une fiche par équipe',
+      description: 'Roster, statistiques et historique des matchs — chaque équipe du classement est cliquable.',
+    },
+    {
+      image: '/screenshots/admin.png',
+      alt: 'Panneau administrateur',
+      title: 'Panneau admin complet',
+      description: 'Rondes, rosters, description du tournoi, export NAF — tout au même endroit, sans jonglerie.',
+    },
+    {
+      image: '/screenshots/team-format.png',
+      alt: 'Tournoi par équipe',
+      title: 'Format par équipe façon NAF World Cup',
+      description: 'Escouades, double classement, BashLord et AggroLord déclinés par équipe et en individuel.',
+    },
+  ];
+
+  activeSlide = 0;
+  private carouselTimer: ReturnType<typeof setInterval> | null = null;
+  readonly brokenImages = new Set<number>();
+
+  ngOnInit(): void {
+    this.carouselTimer = setInterval(() => this.nextSlide(), CAROUSEL_INTERVAL_MS);
+  }
+
+  ngOnDestroy(): void {
+    if (this.carouselTimer) clearInterval(this.carouselTimer);
+  }
+
+  nextSlide(): void {
+    this.activeSlide = (this.activeSlide + 1) % this.slides.length;
+  }
+
+  prevSlide(): void {
+    this.activeSlide = (this.activeSlide - 1 + this.slides.length) % this.slides.length;
+  }
+
+  goToSlide(index: number): void {
+    this.activeSlide = index;
+  }
+
+  onSlideImageError(index: number): void {
+    this.brokenImages.add(index);
+  }
+
+  pauseCarousel(): void {
+    if (this.carouselTimer) {
+      clearInterval(this.carouselTimer);
+      this.carouselTimer = null;
+    }
+  }
+
+  resumeCarousel(): void {
+    if (!this.carouselTimer) {
+      this.carouselTimer = setInterval(() => this.nextSlide(), CAROUSEL_INTERVAL_MS);
+    }
+  }
 
   readonly minRoundCount = MIN_ROUND_COUNT;
   readonly maxRoundCount = MAX_ROUND_COUNT;
   readonly minSquadSize = MIN_SQUAD_SIZE;
   readonly maxSquadSize = MAX_SQUAD_SIZE;
+  readonly idMinLength = TOURNAMENT_ID_MIN_LENGTH;
+  readonly idMaxLength = TOURNAMENT_ID_MAX_LENGTH;
 
   name = '';
+  id = '';
+  private idManuallyEdited = false;
   format: TournamentFormat = 'individual';
   mode: TournamentMode = 'ladder';
   roundCount = 3;
@@ -65,6 +161,32 @@ export class HomeComponent {
     return format === 'individual' ? 'Individuel' : 'Par équipe';
   }
 
+  onNameChange(value: string): void {
+    this.name = value;
+    if (!this.idManuallyEdited) this.id = slugify(value, this.idMaxLength);
+  }
+
+  onIdChange(value: string): void {
+    this.id = value;
+    this.idManuallyEdited = true;
+  }
+
+  get idError(): string | null {
+    const id = this.id.trim();
+    if (!id) return 'Identifiant requis';
+    if (id.length < this.idMinLength || id.length > this.idMaxLength) {
+      return `Entre ${this.idMinLength} et ${this.idMaxLength} caractères`;
+    }
+    if (!TOURNAMENT_ID_PATTERN.test(id)) {
+      return 'Lettres minuscules, chiffres et tirets uniquement (ex : coupe-automne-2026)';
+    }
+    return null;
+  }
+
+  get previewUrl(): string {
+    return `${location.origin}/tournaments/${this.id.trim() || '…'}`;
+  }
+
   get currentStep(): WizardStep {
     const steps = this.steps;
     return steps[Math.min(this.stepIndex, steps.length - 1)];
@@ -92,7 +214,7 @@ export class HomeComponent {
   canGoNext(): boolean {
     switch (this.currentStep) {
       case 'name':
-        return this.name.trim().length > 0;
+        return this.name.trim().length > 0 && !this.idError;
       case 'rounds':
         return this.roundCount >= this.minRoundCount && this.roundCount <= this.maxRoundCount;
       case 'squad-size':
@@ -119,6 +241,7 @@ export class HomeComponent {
     try {
       const res = await this.api.createTournament({
         name,
+        id: this.id.trim(),
         requireRosterValidation: this.requireRosterValidation,
         format: this.format,
         mode: this.format === 'individual' ? this.mode : undefined,
@@ -148,8 +271,15 @@ export class HomeComponent {
   joinExisting(): void {
     const raw = this.joinTournamentId.trim();
     if (!raw) return;
-    const match = raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
-    const id = match ? match[0] : raw;
+    let id = raw;
+    try {
+      // Accept a full scoreboard/admin URL, extracting the id right after "/tournaments/".
+      const segments = new URL(raw).pathname.split('/').filter(Boolean);
+      const index = segments.indexOf('tournaments');
+      if (index !== -1 && segments[index + 1]) id = segments[index + 1];
+    } catch {
+      // Not a URL — treat the raw input as the id itself (works for both legacy UUIDs and slugs).
+    }
     this.router.navigate(['/tournaments', id]);
   }
 

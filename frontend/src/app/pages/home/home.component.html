@@ -1,4 +1,121 @@
-<section class="card" *ngIf="!createdAdminLink">
+<section class="hero">
+  <h1>Organisez votre tournoi Blood Bowl <span class="accent">sans prise de tête</span></h1>
+  <p class="lead">
+    Tournoi en individuel ou en équipe, ladder libre, rondes suisses — classement en direct, feuilles de
+    match, screenshoot de roster, export NAF. Tout ce qu'il faut, rien de superflu.
+  </p>
+  <div class="hero-actions">
+    <a class="btn btn-primary btn-lg" href="#create">Créer mon tournoi</a>
+    <a class="btn btn-lg" href="#join">J'ai déjà un tournoi</a>
+  </div>
+  <ul class="hero-stats">
+    <li><strong>0 €</strong><span>coût, pour toujours</span></li>
+    <li><strong>0</strong><span>compte à créer</span></li>
+    <li><strong>3</strong><span>formats de tournoi</span></li>
+  </ul>
+</section>
+
+<section class="carousel-section">
+  <div
+    class="carousel"
+    (mouseenter)="pauseCarousel()"
+    (mouseleave)="resumeCarousel()"
+    role="region"
+    aria-roledescription="carousel"
+    aria-label="Captures d'écran de l'application"
+  >
+    <div class="carousel-viewport">
+      <div
+        class="carousel-track"
+        [style.transform]="'translateX(-' + (activeSlide * 100) + '%)'"
+      >
+        <div class="carousel-slide" *ngFor="let slide of slides; let i = index">
+          <div class="screenshot-frame">
+            <div class="screenshot-frame-bar">
+              <span></span><span></span><span></span>
+            </div>
+            <img
+              *ngIf="!brokenImages.has(i)"
+              [src]="slide.image"
+              [alt]="slide.alt"
+              (error)="onSlideImageError(i)"
+            />
+            <div class="screenshot-placeholder" *ngIf="brokenImages.has(i)">
+              <span class="screenshot-placeholder-icon">🖼️</span>
+              <span>Capture à venir</span>
+            </div>
+          </div>
+          <h3>{{ slide.title }}</h3>
+          <p class="muted">{{ slide.description }}</p>
+        </div>
+      </div>
+    </div>
+    <button type="button" class="carousel-nav carousel-prev" (click)="prevSlide()" aria-label="Capture précédente">‹</button>
+    <button type="button" class="carousel-nav carousel-next" (click)="nextSlide()" aria-label="Capture suivante">›</button>
+    <div class="carousel-dots">
+      <button
+        type="button"
+        *ngFor="let slide of slides; let i = index"
+        class="carousel-dot"
+        [class.active]="i === activeSlide"
+        (click)="goToSlide(i)"
+        [attr.aria-label]="'Aller à la capture ' + (i + 1)"
+      ></button>
+    </div>
+  </div>
+</section>
+
+<section class="features">
+  <div class="feature">
+    <span class="feature-icon">🏆</span>
+    <h3>3 formats de tournoi</h3>
+    <p class="muted">Défi libre, rondes suisses, ou double rondes suisses par équipe.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">⚡</span>
+    <h3>Classement en direct</h3>
+    <p class="muted">Un lien public à partager, mis à jour toutes les 15 secondes, sans rafraîchir manuellement.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">🔑</span>
+    <h3>Zéro compte</h3>
+    <p class="muted">Un lien d'équipe et un mot de passe suffisent. L'admin garde un lien séparé, à part.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">📤</span>
+    <h3>Export NAF</h3>
+    <p class="muted">Générez le XML des résultats pour la NAF en un clic depuis le panneau admin.</p>
+  </div>
+</section>
+
+<section class="how-it-works">
+  <h2>Comment ça marche</h2>
+  <ol class="steps">
+    <li>
+      <span class="step-number">1</span>
+      <div>
+        <h3>Créez le tournoi</h3>
+        <p class="muted">Nom, identifiant, format — un tunnel guidé de quelques étapes, vous recevez un lien admin.</p>
+      </div>
+    </li>
+    <li>
+      <span class="step-number">2</span>
+      <div>
+        <h3>Partagez le lien</h3>
+        <p class="muted">Les coachs s'inscrivent eux-mêmes avec leur équipe, leur race et un mot de passe libre.</p>
+      </div>
+    </li>
+    <li>
+      <span class="step-number">3</span>
+      <div>
+        <h3>Jouez, suivez, exportez</h3>
+        <p class="muted">Feuilles de match, classement en direct, et export NAF quand le tournoi est terminé.</p>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<section class="card" id="create" *ngIf="!createdAdminLink">
   <h1>Créer un tournoi Blood Bowl</h1>
   <p class="muted">Étape {{ stepNumber }} / {{ stepCount }}</p>
 
@@ -12,10 +129,25 @@
           <input
             id="tournament-name"
             name="name"
-            [(ngModel)]="name"
+            [ngModel]="name"
+            (ngModelChange)="onNameChange($event)"
             placeholder="Ex : Coupe d'automne 2026"
             required
           />
+        </div>
+        <div class="field">
+          <label for="tournament-id">Identifiant du tournoi (utilisé dans l'URL)</label>
+          <input
+            id="tournament-id"
+            name="id"
+            [ngModel]="id"
+            (ngModelChange)="onIdChange($event)"
+            placeholder="Ex : coupe-automne-2026"
+            [maxlength]="idMaxLength"
+            required
+          />
+          <p class="muted" *ngIf="!idError">{{ previewUrl }}</p>
+          <p class="field-error" *ngIf="idError && id">{{ idError }}</p>
         </div>
       </div>
 
@@ -129,6 +261,8 @@
         <dl class="team-facts">
           <dt>Nom</dt>
           <dd>{{ name }}</dd>
+          <dt>URL</dt>
+          <dd>{{ previewUrl }}</dd>
           <dt>Type</dt>
           <dd>{{ formatLabel(format) }}</dd>
           <ng-container *ngIf="format === 'individual'">
@@ -176,7 +310,7 @@
   <button type="button" class="btn btn-primary" (click)="goToScoreboard()">Voir le tableau des scores</button>
 </section>
 
-<section class="card">
+<section class="card" id="join">
   <h2>Rejoindre un tournoi existant</h2>
   <div class="field">
     <label for="join-id">Identifiant du tournoi</label>

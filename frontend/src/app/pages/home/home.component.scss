@@ -1,3 +1,289 @@
 :host {
   display: block;
 }
+
+.hero {
+  text-align: center;
+  padding: 3rem 1rem 2.5rem;
+  margin-bottom: 1.5rem;
+
+  .eyebrow {
+    display: inline-block;
+    font-size: 0.85rem;
+    color: var(--warning);
+    background: rgba(212, 161, 58, 0.12);
+    border: 1px solid var(--warning);
+    border-radius: 999px;
+    padding: 0.3rem 0.9rem;
+    margin-bottom: 1rem;
+  }
+
+  h1 {
+    font-size: clamp(1.8rem, 4vw, 2.75rem);
+    margin: 0 0 0.9rem;
+    max-width: 42rem;
+    margin-inline: auto;
+
+    .accent {
+      color: var(--primary);
+    }
+  }
+
+  .lead {
+    max-width: 38rem;
+    margin: 0 auto 1.75rem;
+    color: var(--text-muted);
+    font-size: 1.05rem;
+  }
+}
+
+.hero-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
+
+.btn-lg {
+  padding: 0.75rem 1.4rem;
+  font-size: 1.05rem;
+}
+
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: 2.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-wrap: wrap;
+
+  li {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  strong {
+    font-size: 1.6rem;
+    color: var(--primary);
+  }
+
+  span {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+}
+
+.carousel-section {
+  margin-bottom: 2rem;
+}
+
+.carousel {
+  position: relative;
+  max-width: 46rem;
+  margin: 0 auto;
+}
+
+.carousel-viewport {
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+
+.carousel-track {
+  display: flex;
+  transition: transform 0.4s ease;
+}
+
+.carousel-slide {
+  flex: 0 0 100%;
+  text-align: center;
+  padding: 0 0.5rem;
+
+  h3 {
+    margin: 1rem 0 0.35rem;
+  }
+
+  p {
+    max-width: 32rem;
+    margin: 0 auto;
+    font-size: 0.9rem;
+  }
+}
+
+.screenshot-frame {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+
+  img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+}
+
+.screenshot-frame-bar {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+
+  span {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: var(--border);
+  }
+}
+
+.screenshot-placeholder {
+  aspect-ratio: 16 / 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+
+  .screenshot-placeholder-icon {
+    font-size: 2rem;
+  }
+}
+
+.carousel-nav {
+  position: absolute;
+  top: 40%;
+  transform: translateY(-50%);
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--border);
+  }
+}
+
+.carousel-prev {
+  left: -0.5rem;
+}
+
+.carousel-next {
+  right: -0.5rem;
+}
+
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.carousel-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  border: none;
+  background: var(--border);
+  cursor: pointer;
+  padding: 0;
+
+  &.active {
+    background: var(--primary);
+  }
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2.5rem;
+}
+
+.feature {
+  text-align: center;
+
+  .feature-icon {
+    font-size: 1.8rem;
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  h3 {
+    margin: 0 0 0.35rem;
+    font-size: 1rem;
+  }
+
+  p {
+    font-size: 0.85rem;
+    margin: 0;
+  }
+}
+
+.how-it-works {
+  margin-bottom: 2.5rem;
+
+  h2 {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+}
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1.5rem;
+  max-width: 50rem;
+  margin-inline: auto;
+
+  li {
+    display: flex;
+    gap: 0.9rem;
+  }
+
+  h3 {
+    margin: 0 0 0.3rem;
+    font-size: 1rem;
+  }
+
+  p {
+    font-size: 0.85rem;
+    margin: 0;
+  }
+}
+
+.step-number {
+  flex-shrink: 0;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .hero {
+    padding: 2rem 0.5rem 1.75rem;
+  }
+
+  .carousel-nav {
+    display: none;
+  }
+}

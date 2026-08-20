@@ -236,6 +236,7 @@ export interface UpdateTournamentDescriptionRequest {
 
 export interface CreateTournamentRequest {
   name: string;
+  id?: string; // admin-chosen tournament id (becomes the public URL); random UUID if omitted
   requireRosterValidation?: boolean;
   mode?: TournamentMode;
   roundCount?: number; // required when mode !== 'ladder'
@@ -243,6 +244,15 @@ export interface CreateTournamentRequest {
   squadSize?: number; // required when format === 'team'
   squadScoring?: Partial<SquadScoringConfig>; // overrides on top of DEFAULT_SQUAD_SCORING
 }
+
+/**
+ * Deliberately narrow charset (lowercase letters, digits, single hyphens between segments) so the
+ * id never needs URL-encoding and reads cleanly in a shared link — no uppercase-vs-lowercase
+ * ambiguity, no spaces, no unicode.
+ */
+export const TOURNAMENT_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+export const TOURNAMENT_ID_MIN_LENGTH = 3;
+export const TOURNAMENT_ID_MAX_LENGTH = 50;
 
 export interface UpdateRosterStatusRequest {
   status: RosterStatus;

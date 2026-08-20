@@ -7,6 +7,9 @@ import {
   MIN_ROUND_COUNT,
   MIN_SQUAD_SIZE,
   TOURNAMENT_DESCRIPTION_MAX_LENGTH,
+  TOURNAMENT_ID_MAX_LENGTH,
+  TOURNAMENT_ID_MIN_LENGTH,
+  TOURNAMENT_ID_PATTERN,
   type CreateTournamentRequest,
   type CreateTournamentResponse,
   type Tournament,
@@ -18,7 +21,7 @@ import * as storage from '../storage';
 import { requireAdmin } from '../auth';
 import { toAdminTournamentView, toPublicTournament } from '../sanitize';
 import { mergeSquadScoring } from './squads';
-import { badRequest } from '../errors';
+import { AppError, badRequest, conflict } from '../errors';
 
 const MAX_NAME_LENGTH = 80;
 const VALID_MODES: TournamentMode[] = ['ladder', 'swiss', 'swiss_with_challenge'];
@@ -29,6 +32,23 @@ export async function createTournament(c: Context) {
   const name = body?.name?.trim();
   if (!name) throw badRequest('Tournament name is required');
   if (name.length > MAX_NAME_LENGTH) throw badRequest(`Tournament name must be at most ${MAX_NAME_LENGTH} characters`);
+
+  const rawId = body?.id?.trim();
+  if (rawId) {
+    if (rawId.length < TOURNAMENT_ID_MIN_LENGTH || rawId.length > TOURNAMENT_ID_MAX_LENGTH) {
+      throw badRequest(
+        `Tournament id must be between ${TOURNAMENT_ID_MIN_LENGTH} and ${TOURNAMENT_ID_MAX_LENGTH} characters`,
+        'invalid_tournament_id'
+      );
+    }
+    if (!TOURNAMENT_ID_PATTERN.test(rawId)) {
+      throw badRequest(
+        'Tournament id can only contain lowercase letters, digits, and single hyphens between them',
+        'invalid_tournament_id'
+      );
+    }
+  }
+  const id = rawId || uuidv4();
 
   const format: TournamentFormat = body?.format && VALID_FORMATS.includes(body.format) ? body.format : 'individual';
 
@@ -57,7 +77,7 @@ export async function createTournament(c: Context) {
 
   const now = new Date().toISOString();
   const tournament: Tournament = {
-    id: uuidv4(),
+    id,
     name,
     description: '',
     requireRosterValidation: body?.requireRosterValidation === true,
@@ -74,7 +94,14 @@ export async function createTournament(c: Context) {
     challenges: [],
   };
 
-  await storage.createTournament(tournament);
+  try {
+    await storage.createTournament(tournament);
+  } catch (err) {
+    if (rawId && err instanceof AppError && err.code === 'id_collision') {
+      throw conflict(`L'identifiant "${rawId}" est déjà utilisé par un autre tournoi`, 'tournament_id_taken');
+    }
+    throw err;
+  }
 
   const response: CreateTournamentResponse = {
     tournamentId: tournament.id,

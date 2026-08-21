@@ -1,0 +1,10 @@
+{
+  "hosted-zone:account=521785249107:domainName=bb-tournament.eu:region=us-east-1": {
+    "Id": "/hostedzone/Z067617221N6MZ3G5DH2F",
+    "Name": "bb-tournament.eu."
+  },
+  "hosted-zone:account=521785249107:domainName=bb-tournament.eu:region=eu-central-1": {
+    "Id": "/hostedzone/Z067617221N6MZ3G5DH2F",
+    "Name": "bb-tournament.eu."
+  }
+}

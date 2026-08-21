@@ -6,11 +6,24 @@ import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigwv2integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as route53targets from 'aws-cdk-lib/aws-route53-targets';
+
+export interface BbTournamentStackProps extends cdk.StackProps {
+  /**
+   * Custom domain for the CloudFront distribution + the ACM certificate (already issued in
+   * us-east-1) to serve it with. Both optional: omitting them keeps the stack on the free default
+   * `*.cloudfront.net` domain, exactly as before this domain was purchased.
+   */
+  domainName?: string;
+  certificate?: acm.ICertificate;
+}
 
 export class BbTournamentStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props?: BbTournamentStackProps) {
     super(scope, id, props);
 
     // --- Tournament data storage: one JSON object per tournament, no database ---
@@ -99,6 +112,8 @@ export class BbTournamentStack extends cdk.Stack {
     const distribution = new cloudfront.Distribution(this, 'Distribution', {
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
       defaultRootObject: 'index.html',
+      domainNames: props?.domainName ? [props.domainName] : undefined,
+      certificate: props?.certificate,
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -134,7 +149,20 @@ export class BbTournamentStack extends cdk.Stack {
       distributionPaths: ['/*'],
     });
 
-    new cdk.CfnOutput(this, 'SiteUrl', { value: `https://${distribution.domainName}` });
+    // The domain was bought via Route53 Domains, which auto-creates a hosted zone for it — point
+    // the apex at CloudFront with a native Alias record (handles the apex, unlike a plain CNAME,
+    // which DNS doesn't allow at a zone's root) instead of asking for a manual DNS record.
+    if (props?.domainName) {
+      const hostedZone = route53.HostedZone.fromLookup(this, 'HostedZone', { domainName: props.domainName });
+      const target = route53.RecordTarget.fromAlias(new route53targets.CloudFrontTarget(distribution));
+      new route53.ARecord(this, 'SiteAliasRecordA', { zone: hostedZone, target });
+      new route53.AaaaRecord(this, 'SiteAliasRecordAAAA', { zone: hostedZone, target });
+    }
+
+    new cdk.CfnOutput(this, 'SiteUrl', {
+      value: `https://${props?.domainName ?? distribution.domainName}`,
+    });
+    new cdk.CfnOutput(this, 'DistributionDomainName', { value: distribution.domainName });
     new cdk.CfnOutput(this, 'ApiEndpoint', { value: httpApi.apiEndpoint });
     new cdk.CfnOutput(this, 'DataBucketName', { value: dataBucket.bucketName });
     new cdk.CfnOutput(this, 'AssetsBucketName', { value: assetsBucket.bucketName });

@@ -1,5 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Challenge, DEFAULT_SQUAD_SCORING, Tournament, computeSquadStandings, computeStandings } from '@bb-tournament/shared';
+import {
+  Challenge,
+  DEFAULT_INDIVIDUAL_SCORING,
+  DEFAULT_SQUAD_SCORING,
+  Tournament,
+  computeSquadStandings,
+  computeStandings,
+} from '@bb-tournament/shared';
 import { badRequest, forbidden, notFound } from './errors';
 
 // Statuses that mean "this pre-round challenge represents a real commitment" — used when
@@ -123,7 +130,7 @@ export function generateNextRound(t: Tournament): void {
   let candidateIds = t.teams.map((tm) => tm.id).filter((id) => !lockedTeamIds.has(id));
   candidateIds =
     roundNumber > 1
-      ? computeStandings(t.teams, t.challenges)
+      ? computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING)
           .map((s) => s.teamId)
           .filter((id) => !lockedTeamIds.has(id))
       : shuffle(candidateIds);
@@ -194,7 +201,9 @@ function generateNextTeamRound(t: Tournament): void {
   const squadOrder = computeSquadStandings(t.squads, t.teams, t.challenges, scoring).map((s) => s.squadId);
   const squadPairs = pairInOrder(squadOrder, priorSquadOpponents);
 
-  const individualOrder = computeStandings(t.teams, t.challenges).map((s) => s.teamId);
+  const individualOrder = computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING).map(
+    (s) => s.teamId
+  );
 
   const newChallenges: Challenge[] = [];
   for (const [squadA, squadB] of squadPairs) {

@@ -17,6 +17,7 @@ import type {
   RosterImageUploadUrlResponse,
   RosterStatus,
   SubmitResultRequest,
+  UpdateIndividualScoringRequest,
   UpdateSquadRequest,
   UpdateSquadScoringRequest,
 } from '@bb-tournament/shared';
@@ -72,6 +73,16 @@ export class ApiService {
       this.http.patch<PublicTournament>(
         `${API_BASE}/tournaments/${tournamentId}/description`,
         { description },
+        { params: { token } }
+      )
+    );
+  }
+
+  updateOrganizer(tournamentId: string, token: string, organizerCoachName: string) {
+    return firstValueFrom(
+      this.http.patch<PublicTournament>(
+        `${API_BASE}/tournaments/${tournamentId}/organizer`,
+        { organizerCoachName },
         { params: { token } }
       )
     );
@@ -263,6 +274,14 @@ export class ApiService {
   updateSquadScoring(tournamentId: string, token: string, body: UpdateSquadScoringRequest) {
     return firstValueFrom(
       this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/squad-scoring`, body, {
+        params: { token },
+      })
+    );
+  }
+
+  updateIndividualScoring(tournamentId: string, token: string, body: UpdateIndividualScoringRequest) {
+    return firstValueFrom(
+      this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/individual-scoring`, body, {
         params: { token },
       })
     );

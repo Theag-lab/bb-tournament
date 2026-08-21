@@ -7,6 +7,7 @@ import {
   MAX_SQUAD_SIZE,
   MIN_ROUND_COUNT,
   MIN_SQUAD_SIZE,
+  ORGANIZER_COACH_NAME_MAX_LENGTH,
   TOURNAMENT_ID_MAX_LENGTH,
   TOURNAMENT_ID_MIN_LENGTH,
   TOURNAMENT_ID_PATTERN,
@@ -125,8 +126,10 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly maxSquadSize = MAX_SQUAD_SIZE;
   readonly idMinLength = TOURNAMENT_ID_MIN_LENGTH;
   readonly idMaxLength = TOURNAMENT_ID_MAX_LENGTH;
+  readonly organizerCoachNameMaxLength = ORGANIZER_COACH_NAME_MAX_LENGTH;
 
   name = '';
+  organizerCoachName = '';
   id = '';
   private idManuallyEdited = false;
   format: TournamentFormat = 'individual';
@@ -214,7 +217,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   canGoNext(): boolean {
     switch (this.currentStep) {
       case 'name':
-        return this.name.trim().length > 0 && !this.idError;
+        return this.name.trim().length > 0 && this.organizerCoachName.trim().length > 0 && !this.idError;
       case 'rounds':
         return this.roundCount >= this.minRoundCount && this.roundCount <= this.maxRoundCount;
       case 'squad-size':
@@ -241,6 +244,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     try {
       const res = await this.api.createTournament({
         name,
+        organizerCoachName: this.organizerCoachName.trim(),
         id: this.id.trim(),
         requireRosterValidation: this.requireRosterValidation,
         format: this.format,

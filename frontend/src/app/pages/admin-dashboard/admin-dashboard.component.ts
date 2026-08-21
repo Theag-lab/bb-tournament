@@ -3,14 +3,18 @@ import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
+  ALL_TIEBREAKER_CRITERIA,
+  ORGANIZER_COACH_NAME_MAX_LENGTH,
   TOURNAMENT_DESCRIPTION_MAX_LENGTH,
   type AdminTeamView,
   type AdminTournamentView,
+  type IndividualScoringConfig,
   type PublicTournament,
   type RoundInfo,
   type Squad,
   type SquadScoringConfig,
   type SubmitResultRequest,
+  type TiebreakerCriterion,
 } from '@bb-tournament/shared';
 import { ApiService } from '../../core/api.service';
 import { extractErrorMessage } from '../../core/http-error';
@@ -22,6 +26,25 @@ import { MatchResultFormComponent } from '../../shared/match-result-form/match-r
 const POLL_INTERVAL_MS = 15000;
 
 type AdminTab = 'overview' | 'rounds' | 'teams' | 'squads' | 'challenges';
+
+function cloneIndividualScoring(config: IndividualScoringConfig): IndividualScoringConfig {
+  return {
+    ...config,
+    tiebreakers: [...config.tiebreakers],
+    td: { ...config.td },
+    cas: { ...config.cas },
+    agg: { ...config.agg },
+  };
+}
+
+export const TIEBREAKER_LABELS: Record<TiebreakerCriterion, string> = {
+  fewest_td_conceded: 'TD encaissés (moins = mieux)',
+  opponent_score: "Force du calendrier (Buchholz)",
+  net_td: 'Différentiel de TD',
+  net_cas: 'Différentiel de casses',
+  net_agg: "Différentiel d'agressions",
+  random: 'Tirage aléatoire (stable)',
+};
 
 interface DerivedLookups {
   tournament: AdminTournamentView | null;
@@ -78,6 +101,11 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   descriptionPreview = false;
   savingDescription = false;
   descriptionError: string | null = null;
+
+  readonly organizerCoachNameMaxLength = ORGANIZER_COACH_NAME_MAX_LENGTH;
+  organizerCoachNameDraft = '';
+  savingOrganizer = false;
+  organizerError: string | null = null;
 
   activeAdminTab: AdminTab = 'overview';
 
@@ -153,7 +181,9 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       this.tournament = await this.api.getAdminTournament(this.tournamentId, this.token);
       if (!silent) {
         this.descriptionDraft = this.tournament.description;
+        this.organizerCoachNameDraft = this.tournament.organizerCoachName;
         if (this.tournament.squadScoring) this.squadScoringDraft = { ...this.tournament.squadScoring };
+        this.individualScoringDraft = cloneIndividualScoring(this.tournament.individualScoring);
       }
       this.loadError = null;
     } catch (err) {
@@ -177,6 +207,22 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       this.descriptionError = extractErrorMessage(err);
     } finally {
       this.savingDescription = false;
+    }
+  }
+
+  async saveOrganizer(): Promise<void> {
+    const name = this.organizerCoachNameDraft.trim();
+    if (!name) return;
+    this.savingOrganizer = true;
+    this.organizerError = null;
+    try {
+      const pub = await this.api.updateOrganizer(this.tournamentId, this.token, name);
+      this.tournament = { ...this.tournament!, organizerCoachName: pub.organizerCoachName };
+      this.organizerCoachNameDraft = pub.organizerCoachName;
+    } catch (err) {
+      this.organizerError = extractErrorMessage(err);
+    } finally {
+      this.savingOrganizer = false;
     }
   }
 
@@ -545,6 +591,50 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       this.squadError = extractErrorMessage(err);
     } finally {
       this.savingSquadScoring = false;
+    }
+  }
+
+  readonly tiebreakerLabels = TIEBREAKER_LABELS;
+  readonly allTiebreakerCriteria = ALL_TIEBREAKER_CRITERIA;
+
+  individualScoringDraft: IndividualScoringConfig | null = null;
+  savingIndividualScoring = false;
+  individualScoringError: string | null = null;
+
+  availableTiebreakers(): TiebreakerCriterion[] {
+    const used = new Set(this.individualScoringDraft?.tiebreakers ?? []);
+    return this.allTiebreakerCriteria.filter((c) => !used.has(c));
+  }
+
+  addTiebreaker(criterion: string): void {
+    if (!criterion || !this.individualScoringDraft) return;
+    if (!this.allTiebreakerCriteria.includes(criterion as TiebreakerCriterion)) return;
+    this.individualScoringDraft.tiebreakers.push(criterion as TiebreakerCriterion);
+  }
+
+  removeTiebreaker(index: number): void {
+    this.individualScoringDraft?.tiebreakers.splice(index, 1);
+  }
+
+  moveTiebreaker(index: number, direction: -1 | 1): void {
+    const list = this.individualScoringDraft?.tiebreakers;
+    if (!list) return;
+    const target = index + direction;
+    if (target < 0 || target >= list.length) return;
+    [list[index], list[target]] = [list[target], list[index]];
+  }
+
+  async saveIndividualScoring(): Promise<void> {
+    if (!this.individualScoringDraft) return;
+    this.savingIndividualScoring = true;
+    this.individualScoringError = null;
+    try {
+      this.tournament = await this.api.updateIndividualScoring(this.tournamentId, this.token, this.individualScoringDraft);
+      this.individualScoringDraft = cloneIndividualScoring(this.tournament.individualScoring);
+    } catch (err) {
+      this.individualScoringError = extractErrorMessage(err);
+    } finally {
+      this.savingIndividualScoring = false;
     }
   }
 }

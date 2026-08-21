@@ -65,7 +65,7 @@ export function buildNafExport(tournament: Tournament): string {
   return (
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<nafReport xmlns:blo="http://www.bloodbowl.net">\n` +
-    `<organiser>${escapeXml(tournament.name)}</organiser>\n` +
+    `<organiser>${escapeXml(tournament.organizerCoachName || tournament.name)}</organiser>\n` +
     `<coaches>\n${coachesXml}\n</coaches>\n` +
     `${gamesXml}\n` +
     `</nafReport>\n`

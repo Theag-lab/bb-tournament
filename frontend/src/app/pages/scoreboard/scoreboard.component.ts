@@ -290,10 +290,8 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   }
 
   get canSubmitJoin(): boolean {
-    if (!this.joinName.trim() || !this.joinCoachName.trim() || !this.joinRace.trim() || !this.joinPassword.trim()) {
-      return false;
-    }
-    if (!this.isTeamFormat) return true;
+    if (!this.joinCoachName.trim() || !this.joinRace.trim() || !this.joinPassword.trim()) return false;
+    if (!this.isTeamFormat) return !!this.joinName.trim();
     return this.joinSquadChoice === 'existing' ? !!this.joinSquadId : !!this.joinNewSquadName.trim();
   }
 
@@ -307,7 +305,7 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     this.joinError = null;
     try {
       const res = await this.api.createTeam(this.tournamentId, {
-        name,
+        name: this.isTeamFormat ? undefined : name,
         coachName,
         race,
         password,

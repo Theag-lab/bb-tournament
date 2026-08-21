@@ -24,7 +24,7 @@
       seul moyen de revenir gérer cette équipe.
     </p>
     <form (ngSubmit)="saveProfile()">
-      <div class="field">
+      <div class="field" *ngIf="!isTeamFormat">
         <label for="edit-name">Nom de l'équipe</label>
         <input id="edit-name" name="editName" [(ngModel)]="editName" required />
       </div>
@@ -34,9 +34,10 @@
       </div>
       <div class="field">
         <label for="edit-race">Race</label>
-        <select id="edit-race" name="editRace" [(ngModel)]="editRace" required>
+        <select id="edit-race" name="editRace" [(ngModel)]="editRace" [disabled]="rosterImageLocked" required>
           <option *ngFor="let r of races" [value]="r">{{ r }}</option>
         </select>
+        <p class="muted" *ngIf="rosterImageLocked">Votre roster a été validé : la race ne peut plus être modifiée.</p>
       </div>
       <div class="field">
         <label for="edit-naf-number">Numéro NAF (optionnel)</label>

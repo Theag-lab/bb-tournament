@@ -113,6 +113,10 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     return this.tournament?.teams.find((t) => t.id === this.teamId) ?? null;
   }
 
+  get isTeamFormat(): boolean {
+    return this.tournament?.format === 'team';
+  }
+
   get otherTeams(): PublicTeam[] {
     return this.tournament?.teams.filter((t) => t.id !== this.teamId) ?? [];
   }
@@ -181,14 +185,17 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     const race = this.editRace.trim();
     const nafNumber = this.editNafNumber.trim();
     const password = this.editPassword.trim();
-    if (!name || !coachName || !race || !password) return;
+    if (!coachName || !race || !password) return;
+    if (!this.isTeamFormat && !name) return;
     this.savingProfile = true;
     this.actionError = null;
     try {
       this.tournament = await this.api.updateTeam(this.tournamentId, this.teamId, this.auth, {
-        name,
+        name: this.isTeamFormat ? undefined : name,
         coachName,
-        race,
+        // Omitted (not just unchanged) once the roster is validated — the backend rejects any
+        // race field at all past that point, even if it matches the current value.
+        race: this.rosterImageLocked ? undefined : race,
         nafNumber: nafNumber || null,
         password,
       });

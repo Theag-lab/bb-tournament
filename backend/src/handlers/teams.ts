@@ -33,24 +33,38 @@ function validateNafNumber(raw: string | null | undefined): string | null {
 }
 
 function validateTeamInput(body: Partial<CreateTeamRequest> | null): {
-  name: string;
+  name: string | undefined;
   coachName: string;
   race: string;
   password: string;
   nafNumber: string | null;
 } {
-  const name = body?.name?.trim();
+  const name = body?.name?.trim() || undefined;
   const coachName = body?.coachName?.trim();
   const race = body?.race?.trim();
-  if (!name) throw badRequest('Team name is required');
   if (!coachName) throw badRequest('Coach name is required');
   if (!race) throw badRequest('Race is required');
   for (const [field, value] of [['name', name], ['coachName', coachName], ['race', race]] as const) {
-    if (value.length > MAX_FIELD_LENGTH) throw badRequest(`${field} must be at most ${MAX_FIELD_LENGTH} characters`);
+    if (value && value.length > MAX_FIELD_LENGTH) throw badRequest(`${field} must be at most ${MAX_FIELD_LENGTH} characters`);
   }
   const password = validatePassword(body?.password);
   const nafNumber = validateNafNumber(body?.nafNumber);
   return { name, coachName, race, password, nafNumber };
+}
+
+/**
+ * In a team-format tournament the coach never enters their own team name (the squad is the
+ * meaningful identity) — this derives an internal placeholder from the coach's name, disambiguated
+ * if needed, so `Team.name` (still required by the schema/storage) stays populated without
+ * prompting for it.
+ */
+function generateDefaultTeamName(existingTeams: Team[], coachName: string): string {
+  const base = coachName.slice(0, MAX_FIELD_LENGTH);
+  let candidate = base;
+  for (let suffix = 2; existingTeams.some((tm) => tm.name.toLowerCase() === candidate.toLowerCase()); suffix++) {
+    candidate = `${base} (${suffix})`.slice(0, MAX_FIELD_LENGTH);
+  }
+  return candidate;
 }
 
 /**
@@ -111,13 +125,15 @@ function assertCredentialsFree(
 export async function createTeam(c: Context) {
   const tournamentId = c.req.param('tournamentId')!;
   const body = await c.req.json<CreateTeamRequest>().catch(() => null);
-  const { name, coachName, race, password, nafNumber } = validateTeamInput(body);
+  const { name: rawName, coachName, race, password, nafNumber } = validateTeamInput(body);
 
   let newTeamId = '';
   await storage.updateTournament(tournamentId, (t) => {
     if (t.mode !== 'ladder' && t.rounds.length > 0) {
       throw forbidden('Registration is closed once the tournament rounds have started', 'registration_closed');
     }
+    if (!rawName && t.format !== 'team') throw badRequest('Team name is required');
+    const name = rawName ?? generateDefaultTeamName(t.teams, coachName);
     if (t.teams.some((team) => team.name.toLowerCase() === name.toLowerCase())) {
       throw conflict(`A team named "${name}" already exists in this tournament`, 'team_name_taken');
     }
@@ -199,6 +215,9 @@ export async function updateTeam(c: Context) {
     if (!admin) authenticateTeam(t, teamId, password);
 
     if (body.name !== undefined) {
+      if (!admin && t.format === 'team') {
+        throw forbidden('Team name cannot be changed in a team-format tournament', 'team_name_locked');
+      }
       const name = body.name.trim();
       if (!name) throw badRequest('Team name is required');
       if (name.length > MAX_FIELD_LENGTH) throw badRequest(`name must be at most ${MAX_FIELD_LENGTH} characters`);
@@ -213,6 +232,9 @@ export async function updateTeam(c: Context) {
       team.coachName = coachName;
     }
     if (body.race !== undefined) {
+      if (!admin && t.requireRosterValidation && team.rosterStatus === 'validated') {
+        throw forbidden('Race cannot be changed once the roster has been validated', 'race_locked');
+      }
       const race = body.race.trim();
       if (!race) throw badRequest('Race is required');
       team.race = race;

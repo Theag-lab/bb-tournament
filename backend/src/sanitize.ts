@@ -1,5 +1,6 @@
 import {
   AdminTournamentView,
+  DEFAULT_INDIVIDUAL_SCORING,
   DEFAULT_SQUAD_SCORING,
   PublicTournament,
   SquadStandingEntry,
@@ -34,6 +35,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
     id: t.id,
     name: t.name,
     description: t.description,
+    organizerCoachName: t.organizerCoachName || t.name,
     requireRosterValidation: t.requireRosterValidation,
     mode: t.mode,
     roundCount: t.roundCount,
@@ -44,6 +46,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
     format: t.format,
     squadSize: t.squadSize,
     squadScoring: t.squadScoring,
+    individualScoring: t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
     squads: t.squads,
     createdAt: t.createdAt,
     teams: t.teams.map((team) => {
@@ -72,7 +75,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
         updatedAt: c.updatedAt,
         result: c.result,
       })),
-    standings: computeStandings(t.teams, t.challenges),
+    standings: computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING),
     squadStandings: squadStandingsOf(t),
   };
 }
@@ -82,6 +85,7 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
     id: t.id,
     name: t.name,
     description: t.description,
+    organizerCoachName: t.organizerCoachName || t.name,
     requireRosterValidation: t.requireRosterValidation,
     mode: t.mode,
     roundCount: t.roundCount,
@@ -89,6 +93,7 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
     format: t.format,
     squadSize: t.squadSize,
     squadScoring: t.squadScoring,
+    individualScoring: t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
     squads: t.squads,
     createdAt: t.createdAt,
     teams: t.teams.map((team) => ({
@@ -113,7 +118,7 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
       updatedAt: c.updatedAt,
       result: c.result,
     })),
-    standings: computeStandings(t.teams, t.challenges),
+    standings: computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING),
     squadStandings: squadStandingsOf(t),
   };
 }

@@ -4,6 +4,7 @@ import {
   Challenge,
   ChallengeActionRequest,
   CreateChallengeRequest,
+  DEFAULT_INDIVIDUAL_SCORING,
   SubmitResultRequest,
   Tournament,
   computeMatchScore,
@@ -209,7 +210,12 @@ export async function submitResult(c: Context) {
       throw badRequest('concededByTeamId must be one of the two teams in this match');
     }
 
-    const score = computeMatchScore(input, challenge.team1Id, challenge.team2Id);
+    const score = computeMatchScore(
+      input,
+      challenge.team1Id,
+      challenge.team2Id,
+      t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING
+    );
     const now = new Date().toISOString();
 
     if (challenge.status === 'awaiting_confirmation' && challenge.result) {
@@ -329,7 +335,12 @@ export async function adminSetResult(c: Context) {
     }
     if (challenge.status === 'pending') challenge.status = 'accepted';
 
-    const score = computeMatchScore(input, challenge.team1Id, challenge.team2Id);
+    const score = computeMatchScore(
+      input,
+      challenge.team1Id,
+      challenge.team2Id,
+      t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING
+    );
     const now = new Date().toISOString();
     challenge.result = {
       ...score,

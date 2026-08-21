@@ -315,7 +315,7 @@
     <h2>Inscrire une équipe</h2>
     <div class="alert alert-error" *ngIf="joinError">{{ joinError }}</div>
     <form (ngSubmit)="submitJoin()">
-      <div class="field">
+      <div class="field" *ngIf="!isTeamFormat">
         <label for="team-name">Nom de l'équipe</label>
         <input id="team-name" name="teamName" [(ngModel)]="joinName" required />
       </div>

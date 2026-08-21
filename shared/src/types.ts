@@ -72,15 +72,21 @@ export const MIN_SQUAD_SIZE = 2;
 export const MAX_SQUAD_SIZE = 20;
 
 /**
- * Squad-level match scoring, independent from the individual W/D/L points (POINTS_WIN etc. in
- * scoring.ts). Buckets a match's TD-difference into one of 6 tiers exactly as specified by the
- * tournament organiser: victoire totale / victoire / petite victoire / nul / petite défaite /
- * défaite — asymmetric by design (3 win tiers, only 2 loss tiers; a crushing win is called out
- * specially but any non-small loss is just "défaite", no separate "big loss" tier).
+ * Squad-level round scoring, independent from the individual W/D/L points (see
+ * IndividualScoringConfig in this file). A squad plays exactly one
+ * opposing squad per round (its members' matches are that round's "boards", like a chess team
+ * match); the round's outcome is bucketed into one of 6 tiers by the squad's net board
+ * differential (boards won minus boards lost that round — NOT the TD-difference of any single
+ * match) exactly as specified by the tournament organiser: victoire totale / victoire / petite
+ * victoire / nul / petite défaite / défaite — asymmetric by design (3 win tiers, only 2 loss
+ * tiers; a crushing win is called out specially but any non-small loss is just "défaite", no
+ * separate "big loss" tier). E.g. winning 5 boards to 0 (diff +5) is "victoire totale" while
+ * winning 3-2 (diff +1) is only "petite victoire" — both used to count as the same plain "win"
+ * before this became board-diff-based.
  */
 export interface SquadScoringConfig {
-  smallMarginMaxDiff: number; // TD-difference in [1, this] => "petite" tier (win or loss side)
-  bigMarginMinDiff: number; // TD-difference >= this => "victoire totale" (win side only)
+  smallMarginMaxDiff: number; // board-diff in [1, this] => "petite" tier (win or loss side)
+  bigMarginMinDiff: number; // board-diff >= this => "victoire totale" (win side only)
   pointsBigWin: number;
   pointsWin: number;
   pointsSmallWin: number;
@@ -100,6 +106,60 @@ export const DEFAULT_SQUAD_SCORING: SquadScoringConfig = {
   pointsLoss: 0,
 };
 
+/**
+ * Individual-standings tiebreaker criteria, only used when `IndividualScoringConfig.mode ===
+ * 'points_tiebreaker'`. Applied in the order given by `IndividualScoringConfig.tiebreakers`,
+ * each one breaking ties left by the criteria before it.
+ */
+export type TiebreakerCriterion = 'fewest_td_conceded' | 'opponent_score' | 'net_td' | 'net_cas' | 'net_agg' | 'random';
+
+export const ALL_TIEBREAKER_CRITERIA: TiebreakerCriterion[] = [
+  'fewest_td_conceded',
+  'opponent_score',
+  'net_td',
+  'net_cas',
+  'net_agg',
+  'random',
+];
+
+export type IndividualScoringMode = 'points_tiebreaker' | 'raw_points';
+
+/** 'total' = the team's own stat count for the match, 'diff' = that stat's net difference vs the opponent. */
+export type RawPointsStatBasis = 'total' | 'diff';
+
+export interface RawPointsComponent {
+  basis: RawPointsStatBasis;
+  multiplier: number; // points awarded per unit of the chosen stat; 0 disables this component
+}
+
+/**
+ * Individual-standings scoring config, configurable per tournament. Applies to every tournament
+ * regardless of `format` — 'team' format tournaments still compute individual standings alongside
+ * squad standings (see SquadScoringConfig for the separate squad-level scoring).
+ *
+ * - 'points_tiebreaker' (classic): `pointsWin`/`pointsDraw`/`pointsLoss` decide ranking, ties are
+ *   broken by `tiebreakers` in order.
+ * - 'raw_points': ranking is purely the additive total of pointsWin/pointsDraw plus the TD/CAS/Agg
+ *   components (e.g. 400 pts for a win + 3 pts per TD). `tiebreakers` is ignored.
+ */
+export interface IndividualScoringConfig {
+  mode: IndividualScoringMode;
+  pointsWin: number;
+  pointsDraw: number;
+  pointsLoss: number;
+  /** Applied to the conceding team instead of pointsLoss (typically negative — a penalty). */
+  pointsConcessionPenalty: number;
+  tiebreakers: TiebreakerCriterion[];
+  td: RawPointsComponent;
+  cas: RawPointsComponent;
+  agg: RawPointsComponent;
+}
+
+export const MIN_SCORING_POINTS = -1000;
+export const MAX_SCORING_POINTS = 1000;
+export const MIN_SCORING_MULTIPLIER = -100;
+export const MAX_SCORING_MULTIPLIER = 100;
+
 export interface Team {
   id: string;
   password: string;
@@ -117,6 +177,10 @@ export interface Tournament {
   id: string;
   name: string;
   description: string; // markdown source, editable by the admin
+  // Coach name of the person organizing the tournament — required at creation. Doubles as an
+  // accountability record (who's creating tournaments on the site) and populates the NAF export's
+  // mandatory <organiser> field (previously mis-populated with the tournament name).
+  organizerCoachName: string;
   requireRosterValidation: boolean; // when true, coaches submit rosters for admin approval
   mode: TournamentMode;
   roundCount: number | null; // null for ladder mode, required otherwise
@@ -125,6 +189,7 @@ export interface Tournament {
   squadSize: number | null; // required when format === 'team', otherwise null
   squadScoring: SquadScoringConfig | null; // set when format === 'team', otherwise null
   squads: Squad[];
+  individualScoring: IndividualScoringConfig;
   adminToken: string;
   createdAt: string;
   teams: Team[];
@@ -132,6 +197,7 @@ export interface Tournament {
 }
 
 export const TOURNAMENT_DESCRIPTION_MAX_LENGTH = 20000;
+export const ORGANIZER_COACH_NAME_MAX_LENGTH = 80;
 
 // ---- Public (sanitized) shapes returned to non-owners ----
 
@@ -197,6 +263,7 @@ export interface PublicTournament {
   id: string;
   name: string;
   description: string;
+  organizerCoachName: string;
   requireRosterValidation: boolean;
   mode: TournamentMode;
   roundCount: number | null;
@@ -205,6 +272,7 @@ export interface PublicTournament {
   squadSize: number | null;
   squadScoring: SquadScoringConfig | null;
   squads: Squad[];
+  individualScoring: IndividualScoringConfig;
   createdAt: string;
   teams: PublicTeam[];
   challenges: PublicChallenge[];
@@ -220,6 +288,7 @@ export interface AdminTournamentView {
   id: string;
   name: string;
   description: string;
+  organizerCoachName: string;
   requireRosterValidation: boolean;
   mode: TournamentMode;
   roundCount: number | null;
@@ -228,6 +297,7 @@ export interface AdminTournamentView {
   squadSize: number | null;
   squadScoring: SquadScoringConfig | null;
   squads: Squad[];
+  individualScoring: IndividualScoringConfig;
   createdAt: string;
   teams: AdminTeamView[];
   challenges: PublicChallenge[];
@@ -239,8 +309,13 @@ export interface UpdateTournamentDescriptionRequest {
   description: string;
 }
 
+export interface UpdateTournamentOrganizerRequest {
+  organizerCoachName: string;
+}
+
 export interface CreateTournamentRequest {
   name: string;
+  organizerCoachName: string; // required — the organizing coach's name (also used in the NAF export)
   id?: string; // admin-chosen tournament id (becomes the public URL); random UUID if omitted
   requireRosterValidation?: boolean;
   mode?: TournamentMode;
@@ -248,7 +323,10 @@ export interface CreateTournamentRequest {
   format?: TournamentFormat;
   squadSize?: number; // required when format === 'team'
   squadScoring?: Partial<SquadScoringConfig>; // overrides on top of DEFAULT_SQUAD_SCORING
+  individualScoring?: Partial<IndividualScoringConfig>; // overrides on top of DEFAULT_INDIVIDUAL_SCORING
 }
+
+export type UpdateIndividualScoringRequest = Partial<IndividualScoringConfig>;
 
 /**
  * Deliberately narrow charset (lowercase letters, digits, single hyphens between segments) so the
@@ -274,7 +352,9 @@ export interface CreateTournamentResponse {
 }
 
 export interface CreateTeamRequest {
-  name: string;
+  // Required for 'individual' tournaments; ignored/auto-generated for 'team' format, where the
+  // squad name is the meaningful identity and the coach never enters their own team name.
+  name?: string;
   coachName: string;
   race: string;
   password: string;

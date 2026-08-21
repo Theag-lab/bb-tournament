@@ -28,6 +28,8 @@ app.post('/tournaments', tournaments.createTournament);
 app.get('/tournaments/:tournamentId', tournaments.getPublicTournament);
 app.get('/tournaments/:tournamentId/admin', tournaments.getAdminTournament);
 app.patch('/tournaments/:tournamentId/description', tournaments.updateDescription);
+app.patch('/tournaments/:tournamentId/organizer', tournaments.updateOrganizer);
+app.patch('/tournaments/:tournamentId/individual-scoring', tournaments.updateIndividualScoring);
 app.get('/tournaments/:tournamentId/naf-export', naf.exportNaf);
 
 app.post('/tournaments/:tournamentId/teams', teams.createTeam);

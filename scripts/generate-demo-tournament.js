@@ -1,31 +1,46 @@
 #!/usr/bin/env node
 /**
- * Generates a static Tournament JSON fixture (team format, 50 pseudo-named coaches in 10 squads,
- * 5 rounds planned) for demo/screenshot purposes. Does NOT write to S3 or call any API — this
- * only produces a local JSON file matching the exact `Tournament` shape from shared/src/types.ts.
+ * Generates a static Tournament JSON fixture (50 pseudo-named coaches, swiss mode, 5 rounds
+ * planned) for demo/screenshot purposes. Does NOT write to S3 or call any API — this only
+ * produces a local JSON file matching the exact `Tournament` shape from shared/src/types.ts.
  * Reuses the real scoring/standings/pairing logic from the built shared package so the generated
  * data is internally consistent with what the app itself would produce.
+ *
+ * Supports both tournament formats:
+ *  - 'team' (default): teams grouped into 10 squads of 5, double-swiss pairing (squad-level then
+ *    rank-matched within the pair).
+ *  - 'individual': no squads, plain swiss pairing directly on individual standings.
  *
  * Rounds 1-2 are fully completed. Round 3 is deliberately "in progress" — a realistic mix of
  * completed, awaiting_confirmation (one side submitted) and not-yet-played matches — and is the
  * last round generated: exactly like the real app, round 4 can't be generated until round 3 is
  * fully completed, so it deliberately does not exist yet in this fixture.
  *
- * Usage: node scripts/generate-demo-tournament.js [output-path] [tournament-id]
+ * Usage: node scripts/generate-demo-tournament.js [output-path] [tournament-id] [format]
+ *   format: 'team' (default) or 'individual'
  */
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const {
   RACES,
+  DEFAULT_INDIVIDUAL_SCORING,
   DEFAULT_SQUAD_SCORING,
   computeMatchScore,
   computeStandings,
   computeSquadStandings,
 } = require('../shared/dist');
 
-const outputPath = path.resolve(process.cwd(), process.argv[2] || 'scripts/demo-tournament.json');
-const TOURNAMENT_ID = process.argv[3] || 'tournoi-demo';
+const FORMAT = process.argv[4] || 'team';
+if (FORMAT !== 'team' && FORMAT !== 'individual') {
+  console.error(`Format invalide : "${FORMAT}" (attendu : "team" ou "individual")`);
+  process.exit(1);
+}
+const outputPath = path.resolve(
+  process.cwd(),
+  process.argv[2] || (FORMAT === 'individual' ? 'scripts/demo-indiv-tournament.json' : 'scripts/demo-tournament.json')
+);
+const TOURNAMENT_ID = process.argv[3] || (FORMAT === 'individual' ? 'demo-indiv' : 'tournoi-demo');
 const TEAM_PASSWORD = 'demo1234';
 const SQUAD_SIZE = 5;
 const SQUAD_COUNT = 10;
@@ -105,19 +120,22 @@ const now = new Date();
 const isoDaysAgo = (days) => new Date(now.getTime() - days * 86400000).toISOString();
 const dateDaysAgo = (days) => isoDaysAgo(days).slice(0, 10);
 
-// ---- Squads ----
-const squads = SQUAD_NAMES.slice(0, SQUAD_COUNT).map((name) => ({
-  id: uuid(),
-  name,
-  createdAt: isoDaysAgo(30),
-}));
+// ---- Squads (team format only) ----
+const squads =
+  FORMAT === 'team'
+    ? SQUAD_NAMES.slice(0, SQUAD_COUNT).map((name) => ({
+        id: uuid(),
+        name,
+        createdAt: isoDaysAgo(30),
+      }))
+    : [];
 
 // ---- Teams ----
 const coachNames = uniqueFromPool(50, COACH_PSEUDOS);
 const teamNames = uniqueTeamNames(50);
 const teams = [];
 for (let i = 0; i < 50; i++) {
-  const squad = squads[Math.floor(i / SQUAD_SIZE) % squads.length];
+  const squad = FORMAT === 'team' ? squads[Math.floor(i / SQUAD_SIZE) % squads.length] : null;
   teams.push({
     id: uuid(),
     password: TEAM_PASSWORD,
@@ -125,7 +143,7 @@ for (let i = 0; i < 50; i++) {
     coachName: coachNames[i],
     race: RACES[i % RACES.length],
     nafNumber: rand() < 0.6 ? String(randint(10000, 89999)) : null,
-    squadId: squad.id,
+    squadId: squad ? squad.id : null,
     createdAt: isoDaysAgo(29),
     rosterImage: null,
     rosterStatus: 'created',
@@ -194,7 +212,7 @@ function fabricateScore(playedAt, team1Id, team2Id) {
     team2Agg: randint(1, 6),
     concededByTeamId: null,
   };
-  return computeMatchScore(input, team1Id, team2Id);
+  return computeMatchScore(input, team1Id, team2Id, DEFAULT_INDIVIDUAL_SCORING);
 }
 
 /** A fully completed match: both sides confirmed. */
@@ -233,59 +251,74 @@ const challenges = [];
 const rounds = [];
 const IN_PROGRESS_ROUND = ROUNDS_FULLY_COMPLETE + 1;
 
-for (let roundNumber = 1; roundNumber <= IN_PROGRESS_ROUND; roundNumber++) {
-  const priorSquadOpponents = buildPriorOpponents(challenges, (teamId) => teamSquad.get(teamId));
-  const squadOrder =
-    roundNumber === 1
-      ? shuffle(squads.map((s) => s.id))
-      : computeSquadStandings(squads, teams, challenges, DEFAULT_SQUAD_SCORING).map((s) => s.squadId);
-  const squadPairs = pairInOrder(squadOrder, priorSquadOpponents);
-
-  const individualOrder =
-    roundNumber === 1 ? shuffle(teams.map((t) => t.id)) : computeStandings(teams, challenges).map((s) => s.teamId);
-
+function generateRoundMatches(pairs, roundNumber) {
   const isFullyPlayed = roundNumber <= ROUNDS_FULLY_COMPLETE;
   const isInProgress = roundNumber === IN_PROGRESS_ROUND;
   const roundAgeDays = (IN_PROGRESS_ROUND - roundNumber) * 7; // round 3 ("now") = 0 days ago
 
-  for (const [squadA, squadB] of squadPairs) {
-    const membersA = individualOrder.filter((id) => teamSquad.get(id) === squadA);
-    const membersB = individualOrder.filter((id) => teamSquad.get(id) === squadB);
-    const pairCount = Math.min(membersA.length, membersB.length);
-    for (let i = 0; i < pairCount; i++) {
-      const team1Id = membersA[i];
-      const team2Id = membersB[i];
-      const createdAt = isoDaysAgo(roundAgeDays + 2);
-      let status = 'accepted';
-      let result = null;
+  for (const [team1Id, team2Id] of pairs) {
+    const createdAt = isoDaysAgo(roundAgeDays + 2);
+    let status = 'accepted';
+    let result = null;
 
-      if (isFullyPlayed) {
-        const playedAt = dateDaysAgo(roundAgeDays);
+    if (isFullyPlayed) {
+      const playedAt = dateDaysAgo(roundAgeDays);
+      status = 'completed';
+      result = completedResult(playedAt, team1Id, team2Id);
+    } else if (isInProgress) {
+      const playedAt = dateDaysAgo(randint(0, 2));
+      const roll = rand();
+      if (roll < ROUND3_COMPLETED_SHARE) {
         status = 'completed';
         result = completedResult(playedAt, team1Id, team2Id);
-      } else if (isInProgress) {
-        const playedAt = dateDaysAgo(randint(0, 2));
-        const roll = rand();
-        if (roll < ROUND3_COMPLETED_SHARE) {
-          status = 'completed';
-          result = completedResult(playedAt, team1Id, team2Id);
-        } else if (roll < ROUND3_COMPLETED_SHARE + ROUND3_AWAITING_SHARE) {
-          status = 'awaiting_confirmation';
-          result = awaitingConfirmationResult(playedAt, team1Id, team2Id);
-        } // else: stays 'accepted', result null — not played yet
-      }
-
-      challenges.push({
-        id: uuid(),
-        team1Id,
-        team2Id,
-        status,
-        round: roundNumber,
-        createdAt,
-        updatedAt: result ? result.completedAt || result.submittedAt : createdAt,
-        result,
-      });
+      } else if (roll < ROUND3_COMPLETED_SHARE + ROUND3_AWAITING_SHARE) {
+        status = 'awaiting_confirmation';
+        result = awaitingConfirmationResult(playedAt, team1Id, team2Id);
+      } // else: stays 'accepted', result null — not played yet
     }
+
+    challenges.push({
+      id: uuid(),
+      team1Id,
+      team2Id,
+      status,
+      round: roundNumber,
+      createdAt,
+      updatedAt: result ? result.completedAt || result.submittedAt : createdAt,
+      result,
+    });
+  }
+}
+
+for (let roundNumber = 1; roundNumber <= IN_PROGRESS_ROUND; roundNumber++) {
+  const individualOrder =
+    roundNumber === 1
+      ? shuffle(teams.map((t) => t.id))
+      : computeStandings(teams, challenges, DEFAULT_INDIVIDUAL_SCORING).map((s) => s.teamId);
+
+  if (FORMAT === 'team') {
+    const priorSquadOpponents = buildPriorOpponents(challenges, (teamId) => teamSquad.get(teamId));
+    const squadOrder =
+      roundNumber === 1
+        ? shuffle(squads.map((s) => s.id))
+        : computeSquadStandings(squads, teams, challenges, DEFAULT_SQUAD_SCORING).map((s) => s.squadId);
+    const squadPairs = pairInOrder(squadOrder, priorSquadOpponents);
+
+    const pairs = [];
+    for (const [squadA, squadB] of squadPairs) {
+      const membersA = individualOrder.filter((id) => teamSquad.get(id) === squadA);
+      const membersB = individualOrder.filter((id) => teamSquad.get(id) === squadB);
+      const pairCount = Math.min(membersA.length, membersB.length);
+      for (let i = 0; i < pairCount; i++) {
+        pairs.push([membersA[i], membersB[i]]);
+      }
+    }
+    generateRoundMatches(pairs, roundNumber);
+  } else {
+    // Plain swiss pairing directly on individual standings — no squad grouping.
+    const priorOpponents = buildPriorOpponents(challenges, (teamId) => teamId);
+    const pairs = pairInOrder(individualOrder, priorOpponents);
+    generateRoundMatches(pairs, roundNumber);
   }
 
   // Every generated round has been launched (coaches need it launched to submit results) —
@@ -294,23 +327,33 @@ for (let roundNumber = 1; roundNumber <= IN_PROGRESS_ROUND; roundNumber++) {
 }
 
 // ---- Tournament ----
+const description =
+  FORMAT === 'team'
+    ? "# Coupe Francophone de Demo 2026\n\n" +
+      "Tournoi de demonstration genere automatiquement (donnees fictives) pour tester l'affichage " +
+      "du site : 50 coachs repartis en 10 escouades de 5, format NAF World Cup.\n\n" +
+      "## Reglement\n\n- Matchs en 1 mi-temps courte, table maison\n- Casting NAF standard\n- " +
+      "Concession forcee a 3-0 en faveur de l'adversaire\n"
+    : "# Coupe Francophone de Demo 2026\n\n" +
+      "Tournoi de demonstration genere automatiquement (donnees fictives) pour tester l'affichage " +
+      "du site : 50 coachs en ronde suisse individuelle.\n\n" +
+      "## Reglement\n\n- Matchs en 1 mi-temps courte, table maison\n- Casting NAF standard\n- " +
+      "Concession forcee a 3-0 en faveur de l'adversaire\n";
+
 const tournament = {
   id: TOURNAMENT_ID,
-  name: 'Coupe Francophone de Demo 2026',
-  description:
-    "# Coupe Francophone de Demo 2026\n\n" +
-    "Tournoi de demonstration genere automatiquement (donnees fictives) pour tester l'affichage " +
-    "du site : 50 coachs repartis en 10 escouades de 5, format NAF World Cup.\n\n" +
-    "## Reglement\n\n- Matchs en 1 mi-temps courte, table maison\n- Casting NAF standard\n- " +
-    "Concession forcee a 3-0 en faveur de l'adversaire\n",
+  name: FORMAT === 'team' ? 'Coupe Francophone de Demo 2026' : 'Coupe Francophone de Demo 2026 (Individuel)',
+  description,
+  organizerCoachName: 'CoachOrganisateur',
   requireRosterValidation: false,
   mode: 'swiss',
   roundCount: ROUND_COUNT,
   rounds,
-  format: 'team',
-  squadSize: SQUAD_SIZE,
-  squadScoring: DEFAULT_SQUAD_SCORING,
+  format: FORMAT,
+  squadSize: FORMAT === 'team' ? SQUAD_SIZE : null,
+  squadScoring: FORMAT === 'team' ? DEFAULT_SQUAD_SCORING : null,
   squads,
+  individualScoring: DEFAULT_INDIVIDUAL_SCORING,
   adminToken: uuid(),
   createdAt: isoDaysAgo(30),
   teams,

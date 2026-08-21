@@ -136,6 +136,17 @@
           />
         </div>
         <div class="field">
+          <label for="organizer-coach-name">Nom du coach organisateur</label>
+          <input
+            id="organizer-coach-name"
+            name="organizerCoachName"
+            [(ngModel)]="organizerCoachName"
+            placeholder="Ex : Jean Dupont"
+            [maxlength]="organizerCoachNameMaxLength"
+            required
+          />
+        </div>
+        <div class="field">
           <label for="tournament-id">Identifiant du tournoi (utilisé dans l'URL)</label>
           <input
             id="tournament-id"
@@ -261,6 +272,8 @@
         <dl class="team-facts">
           <dt>Nom</dt>
           <dd>{{ name }}</dd>
+          <dt>Organisateur</dt>
+          <dd>{{ organizerCoachName }}</dd>
           <dt>URL</dt>
           <dd>{{ previewUrl }}</dd>
           <dt>Type</dt>

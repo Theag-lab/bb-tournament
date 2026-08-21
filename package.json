@@ -16,6 +16,9 @@
     "build:frontend": "npm run build -w frontend",
     "build:infra": "npm run build -w infra",
     "build": "npm run build:shared && npm run build:backend && npm run build:frontend && npm run build:infra",
+    "test:shared": "npm run test -w shared",
+    "test:backend": "npm run build:shared && npm run test -w backend",
+    "test": "npm run test:shared && npm run test:backend",
     "deploy": "npm run build && npm run cdk:deploy",
     "cdk:deploy": "npm run deploy -w infra",
     "cdk:diff": "npm run diff -w infra"

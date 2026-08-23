@@ -9,23 +9,27 @@ import {
   type AdminTeamView,
   type AdminTournamentView,
   type IndividualScoringConfig,
+  type Pool,
   type PublicTournament,
   type RoundInfo,
   type Squad,
   type SquadScoringConfig,
+  type StandingEntry,
   type SubmitResultRequest,
   type TiebreakerCriterion,
 } from '@bb-tournament/shared';
 import { ApiService } from '../../core/api.service';
 import { extractErrorMessage } from '../../core/http-error';
-import { copyToClipboard, participantUrl, rosterImageUrl, scoreboardUrl } from '../../core/links';
+import { copyToClipboard, kioskUrl, participantUrl, rosterImageUrl, scoreboardUrl } from '../../core/links';
 import { renderMarkdown } from '../../core/markdown';
 import { rosterStatusLabel } from '../../core/roster-status';
 import { MatchResultFormComponent } from '../../shared/match-result-form/match-result-form.component';
+import { BracketGraphComponent } from '../../shared/bracket-graph/bracket-graph.component';
+import { TeamImportComponent } from './team-import/team-import.component';
 
 const POLL_INTERVAL_MS = 15000;
 
-type AdminTab = 'overview' | 'rounds' | 'teams' | 'squads' | 'challenges';
+type AdminTab = 'overview' | 'rounds' | 'teams' | 'squads' | 'pools' | 'bracket' | 'challenges';
 
 function cloneIndividualScoring(config: IndividualScoringConfig): IndividualScoringConfig {
   return {
@@ -38,21 +42,24 @@ function cloneIndividualScoring(config: IndividualScoringConfig): IndividualScor
 }
 
 export const TIEBREAKER_LABELS: Record<TiebreakerCriterion, string> = {
+  head_to_head: 'Confrontation directe',
   fewest_td_conceded: 'TD encaissés (moins = mieux)',
-  opponent_score: "Force du calendrier (Buchholz)",
+  opponent_score: "Points adverses (Buchholz)",
   net_td: 'Différentiel de TD',
   net_cas: 'Différentiel de casses',
   net_agg: "Différentiel d'agressions",
-  random: 'Tirage aléatoire (stable)',
+  random: 'Au pif (stable)',
 };
 
 interface DerivedLookups {
   tournament: AdminTournamentView | null;
   teamsById: Map<string, AdminTeamView>;
   squadsById: Map<string, Squad>;
+  poolsById: Map<string, Pool>;
   teamsWithChallenges: Set<string>;
   squadMemberCounts: Map<string, number>;
   squadRankIndex: Map<string, number>;
+  poolMemberCounts: Map<string, number>;
 }
 
 export interface RoundMatchRow {
@@ -70,7 +77,7 @@ export interface RoundMatchRow {
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, MatchResultFormComponent],
+  imports: [CommonModule, FormsModule, RouterLink, MatchResultFormComponent, BracketGraphComponent, TeamImportComponent],
   templateUrl: './admin-dashboard.component.html',
   styleUrl: './admin-dashboard.component.scss',
 })
@@ -91,6 +98,11 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
 
   copiedTeamId: string | null = null;
   scoreboardCopied = false;
+  kioskCopied = false;
+
+  roundTimerDurationMinutesDraft = 0;
+  savingRoundTimer = false;
+  roundTimerError: string | null = null;
 
   editingResultChallengeId: string | null = null;
 
@@ -113,9 +125,11 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     tournament: null,
     teamsById: new Map(),
     squadsById: new Map(),
+    poolsById: new Map(),
     teamsWithChallenges: new Set(),
     squadMemberCounts: new Map(),
     squadRankIndex: new Map(),
+    poolMemberCounts: new Map(),
   };
 
   /**
@@ -128,15 +142,17 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     if (this.derivedCache.tournament === this.tournament) return this.derivedCache;
     const teamsById = new Map((this.tournament?.teams ?? []).map((t) => [t.id, t]));
     const squadsById = new Map((this.tournament?.squads ?? []).map((s) => [s.id, s]));
+    const poolsById = new Map((this.tournament?.pools ?? []).map((p) => [p.id, p]));
     const teamsWithChallenges = new Set<string>();
     const squadMemberCounts = new Map<string, number>();
+    const poolMemberCounts = new Map<string, number>();
     for (const c of this.tournament?.challenges ?? []) {
       teamsWithChallenges.add(c.team1Id);
       teamsWithChallenges.add(c.team2Id);
     }
     for (const team of this.tournament?.teams ?? []) {
-      if (!team.squadId) continue;
-      squadMemberCounts.set(team.squadId, (squadMemberCounts.get(team.squadId) ?? 0) + 1);
+      if (team.squadId) squadMemberCounts.set(team.squadId, (squadMemberCounts.get(team.squadId) ?? 0) + 1);
+      if (team.poolId) poolMemberCounts.set(team.poolId, (poolMemberCounts.get(team.poolId) ?? 0) + 1);
     }
     // squadStandings is already ranked best-first — this just turns that into an O(1) rank lookup.
     const squadRankIndex = new Map<string, number>();
@@ -145,9 +161,11 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       tournament: this.tournament,
       teamsById,
       squadsById,
+      poolsById,
       teamsWithChallenges,
       squadMemberCounts,
       squadRankIndex,
+      poolMemberCounts,
     };
     return this.derivedCache;
   }
@@ -184,6 +202,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
         this.organizerCoachNameDraft = this.tournament.organizerCoachName;
         if (this.tournament.squadScoring) this.squadScoringDraft = { ...this.tournament.squadScoring };
         this.individualScoringDraft = cloneIndividualScoring(this.tournament.individualScoring);
+        this.roundTimerDurationMinutesDraft = Math.round(this.tournament.roundTimer.durationSeconds / 60);
       }
       this.loadError = null;
     } catch (err) {
@@ -223,6 +242,21 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       this.organizerError = extractErrorMessage(err);
     } finally {
       this.savingOrganizer = false;
+    }
+  }
+
+  savingDisplaySettings = false;
+  displaySettingsError: string | null = null;
+
+  async setShowTeamNames(showTeamNames: boolean): Promise<void> {
+    this.savingDisplaySettings = true;
+    this.displaySettingsError = null;
+    try {
+      this.tournament = await this.api.updateDisplaySettings(this.tournamentId, this.token, showTeamNames);
+    } catch (err) {
+      this.displaySettingsError = extractErrorMessage(err);
+    } finally {
+      this.savingDisplaySettings = false;
     }
   }
 
@@ -271,8 +305,60 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     this.scoreboardCopied = await copyToClipboard(scoreboardUrl(this.tournamentId));
   }
 
+  kioskLinkUrl(): string {
+    return kioskUrl(this.tournamentId);
+  }
+
+  async copyKioskLink(): Promise<void> {
+    this.kioskCopied = await copyToClipboard(this.kioskLinkUrl());
+  }
+
+  async saveRoundTimerDuration(): Promise<void> {
+    this.savingRoundTimer = true;
+    this.roundTimerError = null;
+    try {
+      const durationSeconds = Math.round(this.roundTimerDurationMinutesDraft * 60);
+      this.tournament = await this.api.updateRoundTimer(this.tournamentId, this.token, { durationSeconds });
+    } catch (err) {
+      this.roundTimerError = extractErrorMessage(err);
+    } finally {
+      this.savingRoundTimer = false;
+    }
+  }
+
+  async startRoundTimer(): Promise<void> {
+    this.savingRoundTimer = true;
+    this.roundTimerError = null;
+    try {
+      this.tournament = await this.api.updateRoundTimer(this.tournamentId, this.token, { start: true });
+    } catch (err) {
+      this.roundTimerError = extractErrorMessage(err);
+    } finally {
+      this.savingRoundTimer = false;
+    }
+  }
+
+  async resetRoundTimer(): Promise<void> {
+    this.savingRoundTimer = true;
+    this.roundTimerError = null;
+    try {
+      this.tournament = await this.api.updateRoundTimer(this.tournamentId, this.token, { reset: true });
+    } catch (err) {
+      this.roundTimerError = extractErrorMessage(err);
+    } finally {
+      this.savingRoundTimer = false;
+    }
+  }
+
   nafExportUrl(): string {
     return this.api.nafExportUrl(this.tournamentId, this.token);
+  }
+
+  showTeamImport = false;
+
+  onTeamsImported(tournament: AdminTournamentView): void {
+    this.tournament = tournament;
+    this.showTeamImport = false;
   }
 
   async deleteTeam(teamId: string): Promise<void> {
@@ -369,8 +455,16 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     return this.tournament?.format === 'team';
   }
 
+  get isPoolsKnockout(): boolean {
+    return this.tournament?.mode === 'pools_knockout';
+  }
+
   teamSquadId(teamId: string): string | null {
     return this.derived.teamsById.get(teamId)?.squadId ?? null;
+  }
+
+  teamPoolId(teamId: string): string | null {
+    return this.derived.teamsById.get(teamId)?.poolId ?? null;
   }
 
   teamRace(teamId: string): string {
@@ -382,13 +476,19 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     return this.derived.squadsById.get(squadId)?.name ?? '—';
   }
 
+  poolName(poolId: string | null): string {
+    if (!poolId) return '—';
+    return this.derived.poolsById.get(poolId)?.name ?? '—';
+  }
+
   /**
-   * In a team-format tournament, a coach's own team name adds a third identity on top of
-   * coach+squad and isn't the meaningful unit there — the round cards show "coach (race)" plus
-   * the squad-vs-squad line instead, rather than the individual team name.
+   * Round cards show the coach's name as the primary identity, not the team name — for
+   * team-format matches that's paired with the race inline (a third "team name" identity on top
+   * of coach+squad isn't the meaningful unit there); for individual-format matches the race is
+   * shown separately as a subtext line instead (see the template) rather than the team name.
    */
   matchPrimaryLabel(teamId: string): string {
-    if (!this.isTeamFormat) return this.teamName(teamId);
+    if (!this.isTeamFormat) return this.teamCoach(teamId);
     return `${this.teamCoach(teamId)} (${this.teamRace(teamId)})`;
   }
 
@@ -410,8 +510,41 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
    * the left, regardless of which side happens to be team1/team2 in the raw data. Same logic as the
    * public scoreboard's roundMatchGroups.
    */
+  /** Pool-phase rounds only (round number <= poolRoundCount) — groups matches by pool, in pool order. */
+  private poolRoundMatchGroups(matches: PublicTournament['challenges']): RoundMatchRow[] {
+    const groupsByPool = new Map<string, PublicTournament['challenges']>();
+    for (const challenge of matches) {
+      const poolId = this.teamPoolId(challenge.team1Id) ?? '';
+      if (!groupsByPool.has(poolId)) groupsByPool.set(poolId, []);
+      groupsByPool.get(poolId)!.push(challenge);
+    }
+    const poolOrder = (this.tournament?.pools ?? []).map((p) => p.id);
+    const orderedPoolIds = Array.from(groupsByPool.keys()).sort((a, b) => poolOrder.indexOf(a) - poolOrder.indexOf(b));
+
+    const rows: RoundMatchRow[] = [];
+    orderedPoolIds.forEach((poolId, groupIndex) => {
+      groupsByPool.get(poolId)!.forEach((challenge, i) => {
+        rows.push({
+          challenge,
+          groupStart: i === 0 && groupIndex > 0,
+          groupIndex,
+          leftTeamId: challenge.team1Id,
+          rightTeamId: challenge.team2Id,
+          leftTd: challenge.result?.team1Td ?? null,
+          rightTd: challenge.result?.team2Td ?? null,
+          leftCas: challenge.result?.team1Cas ?? null,
+          rightCas: challenge.result?.team2Cas ?? null,
+        });
+      });
+    });
+    return rows;
+  }
+
   roundMatchGroups(roundNumber: number): RoundMatchRow[] {
     const matches = this.roundMatches(roundNumber);
+    if (this.isPoolsKnockout && this.tournament?.poolRoundCount !== null && roundNumber <= (this.tournament?.poolRoundCount ?? 0)) {
+      return this.poolRoundMatchGroups(matches);
+    }
     if (!this.isTeamFormat) {
       return matches.map((challenge) => ({
         challenge,
@@ -593,6 +726,77 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       this.savingSquadScoring = false;
     }
   }
+
+  poolBusy = false;
+  poolError: string | null = null;
+
+  poolMemberCount(poolId: string): number {
+    return this.derived.poolMemberCounts.get(poolId) ?? 0;
+  }
+
+  poolStandings(poolId: string): StandingEntry[] {
+    return this.tournament?.poolStandings.find((p) => p.poolId === poolId)?.standings ?? [];
+  }
+
+  poolTeams(poolId: string): AdminTeamView[] {
+    return (this.tournament?.teams ?? []).filter((t) => t.poolId === poolId);
+  }
+
+  get unassignedTeams(): AdminTeamView[] {
+    return (this.tournament?.teams ?? []).filter((t) => t.poolId === null);
+  }
+
+  async generatePools(): Promise<void> {
+    this.poolBusy = true;
+    this.poolError = null;
+    try {
+      this.tournament = await this.api.generatePools(this.tournamentId, this.token);
+    } catch (err) {
+      this.poolError = extractErrorMessage(err);
+    } finally {
+      this.poolBusy = false;
+    }
+  }
+
+  async assignTeamPool(teamId: string, poolId: string): Promise<void> {
+    this.poolBusy = true;
+    this.poolError = null;
+    try {
+      this.tournament = await this.api.assignTeamPool(this.tournamentId, this.token, teamId, poolId || null);
+    } catch (err) {
+      this.poolError = extractErrorMessage(err);
+    } finally {
+      this.poolBusy = false;
+    }
+  }
+
+  /** True once every pool round has been generated and every one of its matches is completed. */
+  get poolPhaseComplete(): boolean {
+    const t = this.tournament;
+    if (!t || t.poolRoundCount === null) return false;
+    if (t.rounds.length < t.poolRoundCount) return false;
+    const poolChallenges = t.challenges.filter((c) => c.round !== null && c.round <= t.poolRoundCount!);
+    return poolChallenges.length > 0 && poolChallenges.every((c) => c.status === 'completed');
+  }
+
+  get canLaunchKnockout(): boolean {
+    return this.isPoolsKnockout && this.poolPhaseComplete && this.tournament?.bracket === null;
+  }
+
+  async launchKnockoutPhase(): Promise<void> {
+    this.roundBusy = true;
+    this.roundError = null;
+    try {
+      this.tournament = await this.api.launchKnockoutPhase(this.tournamentId, this.token);
+    } catch (err) {
+      this.roundError = extractErrorMessage(err);
+    } finally {
+      this.roundBusy = false;
+    }
+  }
+
+  readonly bracketTeamName = (teamId: string) => this.teamName(teamId);
+  readonly bracketTeamRace = (teamId: string) => this.teamRace(teamId);
 
   readonly tiebreakerLabels = TIEBREAKER_LABELS;
   readonly allTiebreakerCriteria = ALL_TIEBREAKER_CRITERIA;

@@ -178,7 +178,7 @@ export function recomputeMatchPoints(
  * always resolves the same way (so standings don't reshuffle on every poll), while carrying no
  * relationship to anything meaningful about the team — an arbitrary but fixed coin-flip result.
  */
-function stableRandomKey(teamId: string): number {
+export function stableRandomKey(teamId: string): number {
   let hash = 0;
   for (let i = 0; i < teamId.length; i++) {
     hash = (hash * 31 + teamId.charCodeAt(i)) | 0;
@@ -186,8 +186,10 @@ function stableRandomKey(teamId: string): number {
   return hash;
 }
 
-/** One comparator per selectable TiebreakerCriterion; more info wins (returns < 0 means `a` ranks first). */
-const TIEBREAKER_COMPARATORS: Record<TiebreakerCriterion, (a: StandingEntry, b: StandingEntry) => number> = {
+/** One comparator per selectable TiebreakerCriterion except 'head_to_head', which needs the
+ * match list rather than just the two aggregate StandingEntry — handled separately below.
+ * More info wins (returns < 0 means `a` ranks first). */
+const TIEBREAKER_COMPARATORS: Record<Exclude<TiebreakerCriterion, 'head_to_head'>, (a: StandingEntry, b: StandingEntry) => number> = {
   fewest_td_conceded: (a, b) => a.tdAgainst - b.tdAgainst,
   opponent_score: (a, b) => b.opponentScore - a.opponentScore,
   net_td: (a, b) => b.tdFor - b.tdAgainst - (a.tdFor - a.tdAgainst),
@@ -195,6 +197,38 @@ const TIEBREAKER_COMPARATORS: Record<TiebreakerCriterion, (a: StandingEntry, b: 
   net_agg: (a, b) => b.aggFor - b.aggAgainst - (a.aggFor - a.aggAgainst),
   random: (a, b) => stableRandomKey(a.teamId) - stableRandomKey(b.teamId),
 };
+
+/**
+ * Resolves head-to-head dominance between exactly two teams from their completed meetings only:
+ * the team with strictly more wins over the other (by classic TD comparison, independent of the
+ * scoring mode) wins it. Returns null when they never met, or split their meetings evenly
+ * (including the degenerate "met once and drew" case) — there's no signal to act on either way, so
+ * this tiebreaker criterion falls through to the next one.
+ */
+export function headToHeadWinner(challenges: Challenge[], teamAId: string, teamBId: string): string | null {
+  let aWins = 0;
+  let bWins = 0;
+  for (const c of challenges) {
+    if (c.status !== 'completed' || !c.result) continue;
+    const involvesA = c.team1Id === teamAId || c.team2Id === teamAId;
+    const involvesB = c.team1Id === teamBId || c.team2Id === teamBId;
+    if (!involvesA || !involvesB) continue;
+    const r = c.result;
+    if (r.team1Td === r.team2Td) continue; // drew this meeting, no signal from it
+    const winnerId = r.team1Td > r.team2Td ? c.team1Id : c.team2Id;
+    if (winnerId === teamAId) aWins++;
+    else if (winnerId === teamBId) bWins++;
+  }
+  if (aWins === bWins) return null;
+  return aWins > bWins ? teamAId : teamBId;
+}
+
+function compareHeadToHead(challenges: Challenge[], a: StandingEntry, b: StandingEntry): number {
+  const winner = headToHeadWinner(challenges, a.teamId, b.teamId);
+  if (winner === a.teamId) return -1;
+  if (winner === b.teamId) return 1;
+  return 0;
+}
 
 /**
  * Standings ordering: total points first, per `config`. In 'points_tiebreaker' mode, ties are then
@@ -275,7 +309,7 @@ export function computeStandings(teams: Team[], challenges: Challenge[], config:
   return Array.from(byTeam.values()).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     for (const criterion of criteria) {
-      const cmp = TIEBREAKER_COMPARATORS[criterion](a, b);
+      const cmp = criterion === 'head_to_head' ? compareHeadToHead(challenges, a, b) : TIEBREAKER_COMPARATORS[criterion](a, b);
       if (cmp !== 0) return cmp;
     }
     // Final deterministic fallback so equal totals never leave the order ambiguous, even if

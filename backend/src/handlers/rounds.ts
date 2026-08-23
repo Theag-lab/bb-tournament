@@ -3,6 +3,7 @@ import type { SwapRoundMatchesRequest } from '@bb-tournament/shared';
 import * as storage from '../storage';
 import { requireAdmin } from '../auth';
 import { generateNextRound, launchRound, swapRoundMatches } from '../rounds';
+import { launchKnockoutPhase } from '../bracket';
 import { toAdminTournamentView } from '../sanitize';
 import { badRequest } from '../errors';
 
@@ -40,6 +41,19 @@ export async function swapMatches(c: Context) {
 
   const tournament = await storage.getTournament(tournamentId);
   return c.json(toAdminTournamentView(tournament));
+}
+
+export async function launchKnockout(c: Context) {
+  const tournamentId = c.req.param('tournamentId')!;
+  const token = c.req.query('token');
+
+  await storage.updateTournament(tournamentId, (t) => {
+    requireAdmin(t, token);
+    launchKnockoutPhase(t);
+  });
+
+  const tournament = await storage.getTournament(tournamentId);
+  return c.json(toAdminTournamentView(tournament), 201);
 }
 
 export async function launch(c: Context) {

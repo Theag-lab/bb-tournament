@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist dist-test",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/**/*.test.js"
+    "test": "tsc -p tsconfig.test.json && find dist-test -name '*.test.js' -print0 | xargs -0 node --test"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

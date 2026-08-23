@@ -1,0 +1,8 @@
+textarea {
+  width: 100%;
+  font-family: monospace;
+}
+
+.import-row-error {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}

@@ -1,0 +1,67 @@
+<p class="muted">
+  Collez le contenu d'un tableur (CSV, virgule, point-virgule, tabulation ou barre verticale — détecté
+  automatiquement), sans ligne d'en-tête : une équipe par ligne, colonnes dans l'ordre
+  <strong>nom du coach, race, numéro NAF (optionnel)</strong>. Le nom d'équipe sera le nom du coach, et le mot de
+  passe temporaire de chaque équipe sera aussi son nom de coach — à communiquer aux coachs, qui pourront le
+  changer depuis leur page d'équipe.
+</p>
+
+<textarea
+  name="importCsvText"
+  rows="8"
+  [(ngModel)]="csvText"
+  placeholder="Jean Dupont, Human&#10;Marie Martin, Orc, 12345"
+></textarea>
+
+<div class="actions" style="margin: 0.5rem 0">
+  <button type="button" class="btn" [disabled]="!csvText.trim()" (click)="analyze()">Analyser</button>
+</div>
+
+<div class="alert alert-error" *ngIf="parseError">{{ parseError }}</div>
+<div class="alert alert-error" *ngIf="submitError" style="white-space: pre-line">{{ submitError }}</div>
+<div class="alert alert-info" *ngIf="importedCount !== null">{{ importedCount }} équipe(s) importée(s) avec succès.</div>
+
+<ng-container *ngIf="rows.length > 0">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Coach (= nom d'équipe)</th>
+          <th>Race (saisie)</th>
+          <th>Race retenue</th>
+          <th>NAF</th>
+          <th>Erreurs</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of rows; let i = index" [class.import-row-error]="rowErrors(row, i).length > 0">
+          <td>{{ row.lineNo }}</td>
+          <td>{{ row.coachName || '—' }}</td>
+          <td class="muted">{{ row.rawRace || '—' }}</td>
+          <td>
+            <select [name]="'race-' + i" [ngModel]="row.raceOverride ?? row.matchedRace ?? ''" (ngModelChange)="row.raceOverride = $event || null">
+              <option value="" disabled>— choisir —</option>
+              <option *ngFor="let r of races" [value]="r">{{ r }}</option>
+            </select>
+          </td>
+          <td>{{ row.nafNumber || '—' }}</td>
+          <td class="muted">
+            <span *ngFor="let e of rowErrors(row, i)">{{ e }}<br /></span>
+          </td>
+          <td>
+            <button type="button" class="btn btn-danger" (click)="removeRow(i)">Retirer</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="actions" style="margin-top: 0.75rem">
+    <button type="button" class="btn btn-primary" [disabled]="busy || hasErrors" (click)="submit()">
+      {{ busy ? 'Import…' : 'Importer ' + rows.length + ' équipe(s)' }}
+    </button>
+    <p class="muted" *ngIf="hasErrors" style="margin: 0">Corrigez les lignes en erreur avant de pouvoir importer.</p>
+  </div>
+</ng-container>

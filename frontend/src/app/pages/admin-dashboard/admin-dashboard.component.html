@@ -47,6 +47,24 @@
       Escouades ({{ t.squads.length }})
     </button>
     <button
+      *ngIf="t.mode === 'pools_knockout'"
+      type="button"
+      class="tab-btn"
+      [class.active]="activeAdminTab === 'pools'"
+      (click)="activeAdminTab = 'pools'"
+    >
+      Poules ({{ t.pools.length }})
+    </button>
+    <button
+      *ngIf="t.mode === 'pools_knockout' && t.bracket !== null"
+      type="button"
+      class="tab-btn"
+      [class.active]="activeAdminTab === 'bracket'"
+      (click)="activeAdminTab = 'bracket'"
+    >
+      Tableau final
+    </button>
+    <button
       type="button"
       class="tab-btn"
       [class.active]="activeAdminTab === 'challenges'"
@@ -83,6 +101,27 @@
       >
         {{ savingOrganizer ? 'Enregistrement…' : "Enregistrer l'organisateur" }}
       </button>
+    </section>
+
+    <section class="card">
+      <h2>Affichage public</h2>
+      <div class="alert alert-error" *ngIf="displaySettingsError">{{ displaySettingsError }}</div>
+      <label class="checkbox-field">
+        <input
+          type="checkbox"
+          name="showTeamNames"
+          [ngModel]="t.showTeamNames"
+          [disabled]="savingDisplaySettings"
+          (ngModelChange)="setShowTeamNames($event)"
+        />
+        <span>
+          Afficher le nom d'équipe sur le tableau des scores public
+          <span class="muted">
+            — à désactiver si le nom d'équipe fait juste doublon avec le nom du coach (ex. après un import CSV) ;
+            la race reste toujours affichée.
+          </span>
+        </span>
+      </label>
     </section>
 
     <section class="card">
@@ -279,18 +318,68 @@
 
   <ng-container *ngIf="activeAdminTab === 'rounds' && t.mode !== 'ladder'">
     <section class="card">
-      <h2>Gestion des rondes ({{ t.format === 'team' ? 'double suisse par escouade' : t.mode === 'swiss' ? 'suisse' : 'suisse + défis' }})</h2>
-      <p class="muted">{{ t.rounds.length }} / {{ t.roundCount }} ronde(s) générée(s).</p>
+      <h2>
+        Gestion des rondes
+        ({{
+          t.format === 'team'
+            ? 'double suisse par escouade'
+            : t.mode === 'swiss'
+            ? 'suisse'
+            : t.mode === 'pools_knockout'
+            ? 'poules puis élimination directe'
+            : 'suisse + défis'
+        }})
+      </h2>
       <div class="alert alert-error" *ngIf="roundError">{{ roundError }}</div>
 
-      <button
-        type="button"
-        class="btn btn-primary"
-        [disabled]="roundBusy || t.rounds.length >= (t.roundCount || 0)"
-        (click)="generateRound()"
-      >
-        {{ roundBusy ? 'Génération…' : 'Générer la ronde ' + (t.rounds.length + 1) }}
-      </button>
+      <ng-container *ngIf="!isPoolsKnockout">
+        <p class="muted">{{ t.rounds.length }} / {{ t.roundCount }} ronde(s) générée(s).</p>
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="roundBusy || t.rounds.length >= (t.roundCount || 0)"
+          (click)="generateRound()"
+        >
+          {{ roundBusy ? 'Génération…' : 'Générer la ronde ' + (t.rounds.length + 1) }}
+        </button>
+      </ng-container>
+
+      <ng-container *ngIf="isPoolsKnockout">
+        <ng-container *ngIf="!poolPhaseComplete">
+          <p class="muted">{{ t.rounds.length }} / {{ t.poolRoundCount }} ronde(s) de poule générée(s).</p>
+          <p class="muted" *ngIf="t.pools.length === 0">
+            Générez d'abord les poules dans l'onglet "Poules" avant de lancer la première ronde.
+          </p>
+          <button
+            type="button"
+            class="btn btn-primary"
+            [disabled]="roundBusy || t.pools.length === 0 || t.rounds.length >= (t.poolRoundCount || 0)"
+            (click)="generateRound()"
+          >
+            {{ roundBusy ? 'Génération…' : 'Générer la ronde de poule ' + (t.rounds.length + 1) }}
+          </button>
+        </ng-container>
+
+        <ng-container *ngIf="canLaunchKnockout">
+          <p class="muted">Toutes les rondes de poule sont terminées.</p>
+          <button type="button" class="btn btn-primary" [disabled]="roundBusy" (click)="launchKnockoutPhase()">
+            {{ roundBusy ? 'Lancement…' : 'Lancer la phase finale' }}
+          </button>
+        </ng-container>
+
+        <ng-container *ngIf="t.bracket !== null">
+          <p class="muted" *ngIf="t.knockoutChampionTeamId">🏆 Vainqueur du tournoi : {{ teamName(t.knockoutChampionTeamId) }}</p>
+          <button
+            *ngIf="!t.knockoutChampionTeamId"
+            type="button"
+            class="btn btn-primary"
+            [disabled]="roundBusy"
+            (click)="generateRound()"
+          >
+            {{ roundBusy ? 'Génération…' : 'Générer la ronde suivante du tableau' }}
+          </button>
+        </ng-container>
+      </ng-container>
 
       <div class="tabs tabs-sub" *ngIf="t.rounds.length > 0" style="margin-top: 1rem">
         <button
@@ -353,6 +442,12 @@
           <div class="subtext" *ngIf="isTeamFormat">
             {{ squadName(teamSquadId(row.leftTeamId)) }} vs {{ squadName(teamSquadId(row.rightTeamId)) }}
           </div>
+          <div class="subtext" *ngIf="!isTeamFormat">
+            {{ teamRace(row.leftTeamId) }} vs {{ teamRace(row.rightTeamId) }}
+          </div>
+          <div class="subtext" *ngIf="isPoolsKnockout && r.number <= (t.poolRoundCount || 0)">
+            {{ poolName(teamPoolId(row.leftTeamId)) }}
+          </div>
 
           <p *ngIf="row.challenge.result" class="muted">
             Joué le {{ row.challenge.result.playedAt }} — Score : {{ row.leftTd }} -
@@ -382,9 +477,63 @@
 
       <p class="muted" *ngIf="t.rounds.length === 0">Aucune ronde générée pour le moment.</p>
     </section>
+
+    <section class="card">
+      <h2>Page de projection</h2>
+      <p class="muted">
+        Écran à projeter en salle : numéro de ronde, chrono, matchs terminés et QR code vers le tableau des scores.
+      </p>
+      <div class="alert alert-error" *ngIf="roundTimerError">{{ roundTimerError }}</div>
+
+      <div class="actions" style="margin-bottom: 1rem">
+        <a class="btn" [href]="kioskLinkUrl()" target="_blank" rel="noopener">Ouvrir la page de projection</a>
+        <button type="button" class="btn" (click)="copyKioskLink()">
+          {{ kioskCopied ? 'Lien copié !' : 'Copier le lien' }}
+        </button>
+      </div>
+
+      <div class="field">
+        <label for="round-timer-minutes">Durée du chrono (minutes)</label>
+        <input
+          id="round-timer-minutes"
+          type="number"
+          name="roundTimerDurationMinutesDraft"
+          [(ngModel)]="roundTimerDurationMinutesDraft"
+          min="1"
+        />
+      </div>
+
+      <div class="actions">
+        <button type="button" class="btn" [disabled]="savingRoundTimer" (click)="saveRoundTimerDuration()">
+          Enregistrer la durée
+        </button>
+        <button type="button" class="btn btn-primary" [disabled]="savingRoundTimer" (click)="startRoundTimer()">
+          Démarrer le chrono
+        </button>
+        <button type="button" class="btn btn-danger" [disabled]="savingRoundTimer" (click)="resetRoundTimer()">
+          Réinitialiser
+        </button>
+      </div>
+    </section>
   </ng-container>
 
   <ng-container *ngIf="activeAdminTab === 'teams'">
+    <section class="card">
+      <div class="title-row">
+        <h2>Importer des équipes</h2>
+        <button type="button" class="btn" (click)="showTeamImport = !showTeamImport">
+          {{ showTeamImport ? 'Fermer' : 'Importer depuis un CSV' }}
+        </button>
+      </div>
+      <app-team-import
+        *ngIf="showTeamImport"
+        [tournamentId]="tournamentId"
+        [token]="token"
+        [tournament]="t"
+        (imported)="onTeamsImported($event)"
+      ></app-team-import>
+    </section>
+
     <section class="card">
       <h2>Équipes ({{ t.teams.length }})</h2>
       <div class="table-wrap">
@@ -396,6 +545,7 @@
               <th>Race</th>
               <th>NAF</th>
               <th *ngIf="t.format === 'team'">Escouade</th>
+              <th *ngIf="t.mode === 'pools_knockout'">Poule</th>
               <th>Mot de passe</th>
               <th>Lien participant</th>
               <th></th>
@@ -418,6 +568,17 @@
                   <option *ngFor="let squad of t.squads; trackBy: trackById" [value]="squad.id">{{ squad.name }}</option>
                 </select>
               </td>
+              <td *ngIf="t.mode === 'pools_knockout'">
+                <select
+                  [name]="'pool-' + team.id"
+                  [ngModel]="team.poolId ?? ''"
+                  (ngModelChange)="assignTeamPool(team.id, $event)"
+                  [disabled]="poolBusy"
+                >
+                  <option value="">— aucune —</option>
+                  <option *ngFor="let pool of t.pools; trackBy: trackById" [value]="pool.id">{{ pool.name }}</option>
+                </select>
+              </td>
               <td><strong>{{ team.password }}</strong></td>
               <td>
                 <button type="button" class="btn" (click)="copyTeamLink(team.id, team.password)">
@@ -437,7 +598,12 @@
               </td>
             </tr>
             <tr *ngIf="t.teams.length === 0">
-              <td [attr.colspan]="t.format === 'team' ? 8 : 7" class="muted">Aucune équipe inscrite pour le moment.</td>
+              <td
+                [attr.colspan]="7 + (t.format === 'team' ? 1 : 0) + (t.mode === 'pools_knockout' ? 1 : 0)"
+                class="muted"
+              >
+                Aucune équipe inscrite pour le moment.
+              </td>
             </tr>
           </tbody>
         </table>
@@ -553,6 +719,111 @@
       <button type="button" class="btn btn-primary" [disabled]="savingSquadScoring" (click)="saveSquadScoring()">
         {{ savingSquadScoring ? 'Enregistrement…' : 'Enregistrer le barème' }}
       </button>
+    </section>
+  </ng-container>
+
+  <ng-container *ngIf="activeAdminTab === 'pools' && t.mode === 'pools_knockout'">
+    <section class="card">
+      <h2>Poules ({{ t.pools.length }})</h2>
+      <p class="muted">
+        Taille cible : {{ t.poolSize }} équipes par poule · {{ t.poolRoundCount }} ronde(s) en poule ·
+        {{ t.qualifiersPerPool }} qualifié(s) par poule pour la phase finale.
+      </p>
+      <div class="alert alert-error" *ngIf="poolError">{{ poolError }}</div>
+
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="poolBusy || t.rounds.length > 0"
+        [title]="t.rounds.length > 0 ? 'Impossible : des rondes ont déjà été générées' : ''"
+        (click)="generatePools()"
+      >
+        {{ poolBusy ? 'Génération…' : (t.pools.length > 0 ? 'Régénérer les poules' : 'Générer les poules') }}
+      </button>
+      <p class="muted" *ngIf="t.rounds.length > 0">
+        Les poules ne peuvent plus être régénérées automatiquement une fois des rondes générées ; réaffectez les
+        équipes individuellement ci-dessous si besoin.
+      </p>
+
+      <div class="pool-block" *ngFor="let pool of t.pools; trackBy: trackById">
+        <h3>{{ pool.name }} ({{ poolMemberCount(pool.id) }})</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Équipe</th>
+                <th>Coach</th>
+                <th>Pts</th>
+                <th>V-N-D</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let s of poolStandings(pool.id)">
+                <td>{{ teamName(s.teamId) }}</td>
+                <td>{{ teamCoach(s.teamId) }}</td>
+                <td>{{ s.points }}</td>
+                <td>{{ s.wins }}-{{ s.draws }}-{{ s.losses }}</td>
+                <td>
+                  <select
+                    [name]="'pool-move-' + s.teamId"
+                    [ngModel]="pool.id"
+                    (ngModelChange)="assignTeamPool(s.teamId, $event)"
+                    [disabled]="poolBusy"
+                  >
+                    <option *ngFor="let p of t.pools; trackBy: trackById" [value]="p.id">{{ p.name }}</option>
+                  </select>
+                </td>
+              </tr>
+              <tr *ngIf="poolTeams(pool.id).length === 0">
+                <td colspan="5" class="muted">Aucune équipe dans cette poule.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="pool-block" *ngIf="unassignedTeams.length > 0">
+        <h3>Équipes non affectées ({{ unassignedTeams.length }})</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Équipe</th>
+                <th>Coach</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let team of unassignedTeams; trackBy: trackById">
+                <td>{{ team.name }}</td>
+                <td>{{ team.coachName }}</td>
+                <td>
+                  <select
+                    [name]="'pool-assign-' + team.id"
+                    [ngModel]="''"
+                    (ngModelChange)="assignTeamPool(team.id, $event)"
+                    [disabled]="poolBusy"
+                  >
+                    <option value="" disabled selected>— choisir une poule —</option>
+                    <option *ngFor="let p of t.pools; trackBy: trackById" [value]="p.id">{{ p.name }}</option>
+                  </select>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p class="muted" *ngIf="t.pools.length === 0">Aucune poule générée pour le moment.</p>
+    </section>
+  </ng-container>
+
+  <ng-container *ngIf="activeAdminTab === 'bracket' && t.bracket !== null">
+    <section class="card">
+      <h2>Tableau final</h2>
+      <p class="muted" *ngIf="t.knockoutChampionTeamId">🏆 Vainqueur du tournoi : {{ teamName(t.knockoutChampionTeamId) }}</p>
+      <app-bracket-graph [rounds]="t.bracket" [teamName]="bracketTeamName" [teamRace]="bracketTeamRace"></app-bracket-graph>
     </section>
   </ng-container>
 

@@ -2,6 +2,10 @@ export function scoreboardUrl(tournamentId: string): string {
   return `${location.origin}/tournaments/${tournamentId}`;
 }
 
+export function kioskUrl(tournamentId: string): string {
+  return `${location.origin}/tournaments/${tournamentId}/kiosk`;
+}
+
 export function participantUrl(tournamentId: string, teamId: string, password: string): string {
   return `${location.origin}/tournaments/${tournamentId}/team/${teamId}/${encodeURIComponent(password)}`;
 }

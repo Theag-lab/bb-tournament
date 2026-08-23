@@ -2,9 +2,14 @@ import type { Context } from 'hono';
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 import {
+  MAX_TEAM_IMPORT_ROWS,
   NAF_NUMBER_PATTERN,
+  derivePasswordFromCoachName,
+  matchRace,
   type CreateTeamRequest,
   type CreateTeamResponse,
+  type ImportTeamsRequest,
+  type ImportTeamsResponse,
   type ResolveTeamResponse,
   type RosterStatus,
   type Squad,
@@ -13,7 +18,7 @@ import {
   type UpdateRosterStatusRequest,
 } from '@bb-tournament/shared';
 import * as storage from '../storage';
-import { authenticateTeam, findTeamById, isAdmin, validatePassword } from '../auth';
+import { authenticateTeam, findTeamById, isAdmin, requireAdmin, validatePassword } from '../auth';
 import { toAdminTournamentView, toPublicTournament } from '../sanitize';
 import { badRequest, conflict, forbidden, notFound, unauthorized } from '../errors';
 import { assetsBucketName, rosterImageKey } from '../rosterImage';
@@ -149,6 +154,7 @@ export async function createTeam(c: Context) {
       race,
       nafNumber,
       squadId,
+      poolId: null,
       createdAt: now,
       rosterImage: null,
       rosterStatus: 'created',
@@ -158,6 +164,129 @@ export async function createTeam(c: Context) {
   });
 
   const response: CreateTeamResponse = { teamId: newTeamId };
+  return c.json(response, 201);
+}
+
+/**
+ * Validates and prepares every row of a bulk import against the tournament's CURRENT team list,
+ * pure and exported for direct unit testing. Fixed row shape: coachName, race, optional
+ * nafNumber — team name is always the coach name (no separate team-name column). Returns every
+ * validation error found (not just the first) so the caller can reject the whole batch with a
+ * complete picture, and the ready-to-push `Team` objects for when there are none.
+ */
+export function prepareImportedTeams(
+  existingTeams: Team[],
+  rows: { coachName?: string; race?: string; nafNumber?: string }[]
+): { errors: string[]; teams: Team[] } {
+  const now = new Date().toISOString();
+  const errors: string[] = [];
+  const prepared: Team[] = [];
+  const seenCoachNamesInBatch = new Set<string>();
+  const seenTeamNamesInBatch = new Set<string>();
+
+  rows.forEach((row, i) => {
+    const lineNo = i + 1;
+    const coachName = row?.coachName?.trim();
+    const rawRace = row?.race?.trim();
+
+    if (!coachName) {
+      errors.push(`Ligne ${lineNo} : nom de coach manquant`);
+      return;
+    }
+    if (coachName.length > MAX_FIELD_LENGTH) {
+      errors.push(`Ligne ${lineNo} : nom de coach trop long (max ${MAX_FIELD_LENGTH} caractères)`);
+      return;
+    }
+    if (!rawRace) {
+      errors.push(`Ligne ${lineNo} : race manquante`);
+      return;
+    }
+    const matched = matchRace(rawRace);
+    if (!matched) {
+      errors.push(`Ligne ${lineNo} : race "${rawRace}" non reconnue`);
+      return;
+    }
+
+    let nafNumber: string | null = null;
+    const rawNaf = row?.nafNumber?.trim();
+    if (rawNaf) {
+      if (!NAF_NUMBER_PATTERN.test(rawNaf)) {
+        errors.push(`Ligne ${lineNo} : numéro NAF invalide`);
+        return;
+      }
+      nafNumber = rawNaf;
+    }
+
+    const name = coachName; // team name = coach name for bulk imports, no separate column
+    const lowerCoach = coachName.toLowerCase();
+    const lowerName = name.toLowerCase();
+    const password = derivePasswordFromCoachName(coachName);
+
+    if (seenCoachNamesInBatch.has(lowerCoach)) {
+      errors.push(`Ligne ${lineNo} : coach "${coachName}" en double dans le fichier`);
+      return;
+    }
+    if (existingTeams.some((tm) => tm.coachName.toLowerCase() === lowerCoach && tm.password === password)) {
+      errors.push(`Ligne ${lineNo} : coach "${coachName}" déjà inscrit dans ce tournoi`);
+      return;
+    }
+    if (seenTeamNamesInBatch.has(lowerName) || existingTeams.some((tm) => tm.name.toLowerCase() === lowerName)) {
+      errors.push(`Ligne ${lineNo} : nom d'équipe "${name}" déjà utilisé`);
+      return;
+    }
+
+    seenCoachNamesInBatch.add(lowerCoach);
+    seenTeamNamesInBatch.add(lowerName);
+    prepared.push({
+      id: uuidv4(),
+      password,
+      name,
+      coachName,
+      race: matched.race,
+      nafNumber,
+      squadId: null,
+      poolId: null,
+      createdAt: now,
+      rosterImage: null,
+      rosterStatus: 'created',
+    });
+  });
+
+  return { errors, teams: prepared };
+}
+
+/**
+ * Admin bulk import (CSV pasted client-side, parsed/fuzzy-matched there — see
+ * frontend's team-import component). All rows are validated up front (see
+ * `prepareImportedTeams`); if any row fails, nothing is created (storage.updateTournament only
+ * persists if the mutator returns without throwing) — the admin fixes the flagged rows and
+ * resubmits, rather than ending up with a partially-imported roster.
+ */
+export async function importTeams(c: Context) {
+  const tournamentId = c.req.param('tournamentId')!;
+  const token = c.req.query('token');
+  const body = await c.req.json<ImportTeamsRequest>().catch(() => null);
+  const rows = body?.rows;
+  if (!Array.isArray(rows) || rows.length === 0) throw badRequest('rows must be a non-empty array');
+  if (rows.length > MAX_TEAM_IMPORT_ROWS) {
+    throw badRequest(`Cannot import more than ${MAX_TEAM_IMPORT_ROWS} teams at once`);
+  }
+
+  let teamIds: string[] = [];
+  await storage.updateTournament(tournamentId, (t) => {
+    requireAdmin(t, token);
+    if (t.mode !== 'ladder' && t.rounds.length > 0) {
+      throw forbidden('Registration is closed once the tournament rounds have started', 'registration_closed');
+    }
+
+    const { errors, teams: prepared } = prepareImportedTeams(t.teams, rows);
+    if (errors.length > 0) throw badRequest(errors.join('\n'), 'import_validation_failed');
+
+    t.teams.push(...prepared);
+    teamIds = prepared.map((tm) => tm.id);
+  });
+
+  const response: ImportTeamsResponse = { teamIds };
   return c.json(response, 201);
 }
 

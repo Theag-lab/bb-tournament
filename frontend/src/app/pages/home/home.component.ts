@@ -3,8 +3,12 @@ import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import {
+  MAX_POOL_SIZE,
+  MAX_QUALIFIERS_PER_POOL,
   MAX_ROUND_COUNT,
   MAX_SQUAD_SIZE,
+  MIN_POOL_SIZE,
+  MIN_QUALIFIERS_PER_POOL,
   MIN_ROUND_COUNT,
   MIN_SQUAD_SIZE,
   ORGANIZER_COACH_NAME_MAX_LENGTH,
@@ -18,7 +22,7 @@ import { ApiService } from '../../core/api.service';
 import { extractErrorMessage } from '../../core/http-error';
 import { adminUrl, copyToClipboard } from '../../core/links';
 
-type WizardStep = 'name' | 'format' | 'mode' | 'squad-size' | 'rounds' | 'validation' | 'review';
+type WizardStep = 'name' | 'format' | 'mode' | 'squad-size' | 'rounds' | 'pools' | 'validation' | 'review';
 
 /** Suggests a URL-safe tournament id from its name — kept in sync until the admin edits it by hand. */
 function slugify(value: string, maxLength: number): string {
@@ -124,6 +128,10 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly maxRoundCount = MAX_ROUND_COUNT;
   readonly minSquadSize = MIN_SQUAD_SIZE;
   readonly maxSquadSize = MAX_SQUAD_SIZE;
+  readonly minPoolSize = MIN_POOL_SIZE;
+  readonly maxPoolSize = MAX_POOL_SIZE;
+  readonly minQualifiersPerPool = MIN_QUALIFIERS_PER_POOL;
+  readonly maxQualifiersPerPool = MAX_QUALIFIERS_PER_POOL;
   readonly idMinLength = TOURNAMENT_ID_MIN_LENGTH;
   readonly idMaxLength = TOURNAMENT_ID_MAX_LENGTH;
   readonly organizerCoachNameMaxLength = ORGANIZER_COACH_NAME_MAX_LENGTH;
@@ -136,6 +144,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   mode: TournamentMode = 'ladder';
   roundCount = 3;
   squadSize = 4;
+  poolSize = 4;
+  poolRoundCount = 3;
+  qualifiersPerPool = 2;
   requireRosterValidation = false;
 
   busy = false;
@@ -152,7 +163,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     const steps: WizardStep[] = ['name', 'format'];
     if (this.format === 'individual') {
       steps.push('mode');
-      if (this.mode !== 'ladder') steps.push('rounds');
+      if (this.mode === 'pools_knockout') steps.push('pools');
+      else if (this.mode !== 'ladder') steps.push('rounds');
     } else {
       steps.push('squad-size', 'rounds');
     }
@@ -211,6 +223,8 @@ export class HomeComponent implements OnInit, OnDestroy {
         return 'Rondes suisses';
       case 'swiss_with_challenge':
         return 'Rondes suisses avec défis en 1ère ronde';
+      case 'pools_knockout':
+        return 'Poules puis élimination directe';
     }
   }
 
@@ -222,6 +236,15 @@ export class HomeComponent implements OnInit, OnDestroy {
         return this.roundCount >= this.minRoundCount && this.roundCount <= this.maxRoundCount;
       case 'squad-size':
         return this.squadSize >= this.minSquadSize && this.squadSize <= this.maxSquadSize;
+      case 'pools':
+        return (
+          this.poolSize >= this.minPoolSize &&
+          this.poolSize <= this.maxPoolSize &&
+          this.poolRoundCount >= this.minRoundCount &&
+          this.poolRoundCount <= this.maxRoundCount &&
+          this.qualifiersPerPool >= this.minQualifiersPerPool &&
+          this.qualifiersPerPool < this.poolSize
+        );
       default:
         return true;
     }
@@ -251,6 +274,9 @@ export class HomeComponent implements OnInit, OnDestroy {
         mode: this.format === 'individual' ? this.mode : undefined,
         roundCount: this.needsRoundCount ? this.roundCount : undefined,
         squadSize: this.format === 'team' ? this.squadSize : undefined,
+        poolSize: this.isPoolsKnockout ? this.poolSize : undefined,
+        poolRoundCount: this.isPoolsKnockout ? this.poolRoundCount : undefined,
+        qualifiersPerPool: this.isPoolsKnockout ? this.qualifiersPerPool : undefined,
       });
       this.createdTournamentId = res.tournamentId;
       this.createdAdminLink = adminUrl(res.tournamentId, res.adminToken);
@@ -261,9 +287,17 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Team format is always multi-round; individual format only needs roundCount outside ladder. */
+  get isPoolsKnockout(): boolean {
+    return this.format === 'individual' && this.mode === 'pools_knockout';
+  }
+
+  /**
+   * Team format is always multi-round; individual format only needs roundCount outside ladder.
+   * pools_knockout has its own roundCount-equivalent (poolRoundCount) sent separately — its total
+   * round count isn't known upfront, so plain roundCount stays unset for it.
+   */
   get needsRoundCount(): boolean {
-    return this.format === 'team' || this.mode !== 'ladder';
+    return this.format === 'team' || (this.mode !== 'ladder' && this.mode !== 'pools_knockout');
   }
 
   goToScoreboard(): void {

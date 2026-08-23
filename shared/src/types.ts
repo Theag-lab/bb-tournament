@@ -42,7 +42,7 @@ export interface RosterImage {
 // Only meaningful when the tournament's requireRosterValidation is true; otherwise ignored.
 export type RosterStatus = 'created' | 'submitted' | 'validated';
 
-export type TournamentMode = 'ladder' | 'swiss' | 'swiss_with_challenge';
+export type TournamentMode = 'ladder' | 'swiss' | 'swiss_with_challenge' | 'pools_knockout';
 
 export type RoundStatus = 'draft' | 'launched'; // draft = admin-only, pairings can still be swapped
 
@@ -50,6 +50,24 @@ export interface RoundInfo {
   number: number;
   status: RoundStatus;
 }
+
+/**
+ * A single admin-controlled countdown, meant for a "current round" clock on the projector/kiosk
+ * page — not tied to a specific round number, since only one round is ever being actively played
+ * at a time; the admin restarts it (via `start`) each time a new round begins.
+ */
+export interface RoundTimerState {
+  durationSeconds: number;
+  startedAt: string | null; // ISO timestamp of the last (re)start; null = not running
+}
+
+export const MIN_ROUND_TIMER_SECONDS = 60; // 1 minute
+export const MAX_ROUND_TIMER_SECONDS = 6 * 60 * 60; // 6 hours
+export const DEFAULT_ROUND_TIMER_SECONDS = 2.5 * 60 * 60; // 2h30, a common round length
+export const DEFAULT_ROUND_TIMER: RoundTimerState = {
+  durationSeconds: DEFAULT_ROUND_TIMER_SECONDS,
+  startedAt: null,
+};
 
 export const MIN_ROUND_COUNT = 1;
 export const MAX_ROUND_COUNT = 20;
@@ -70,6 +88,17 @@ export interface Squad {
 
 export const MIN_SQUAD_SIZE = 2;
 export const MAX_SQUAD_SIZE = 20;
+
+export const MIN_POOL_SIZE = 3;
+export const MAX_POOL_SIZE = 20;
+export const MIN_QUALIFIERS_PER_POOL = 1;
+export const MAX_QUALIFIERS_PER_POOL = MAX_POOL_SIZE - 1;
+
+export interface Pool {
+  id: string;
+  name: string;
+  createdAt: string;
+}
 
 /**
  * Squad-level round scoring, independent from the individual W/D/L points (see
@@ -111,9 +140,17 @@ export const DEFAULT_SQUAD_SCORING: SquadScoringConfig = {
  * 'points_tiebreaker'`. Applied in the order given by `IndividualScoringConfig.tiebreakers`,
  * each one breaking ties left by the criteria before it.
  */
-export type TiebreakerCriterion = 'fewest_td_conceded' | 'opponent_score' | 'net_td' | 'net_cas' | 'net_agg' | 'random';
+export type TiebreakerCriterion =
+  | 'head_to_head'
+  | 'fewest_td_conceded'
+  | 'opponent_score'
+  | 'net_td'
+  | 'net_cas'
+  | 'net_agg'
+  | 'random';
 
 export const ALL_TIEBREAKER_CRITERIA: TiebreakerCriterion[] = [
+  'head_to_head',
   'fewest_td_conceded',
   'opponent_score',
   'net_td',
@@ -168,6 +205,7 @@ export interface Team {
   race: string;
   nafNumber: string | null; // coach's NAF membership number, needed for the NAF XML export
   squadId: string | null; // set when the tournament's format is 'team', otherwise always null
+  poolId: string | null; // set when the tournament's mode is 'pools_knockout', otherwise always null
   createdAt: string;
   rosterImage: RosterImage | null;
   rosterStatus: RosterStatus;
@@ -182,14 +220,29 @@ export interface Tournament {
   // mandatory <organiser> field (previously mis-populated with the tournament name).
   organizerCoachName: string;
   requireRosterValidation: boolean; // when true, coaches submit rosters for admin approval
+  // Public scoreboard display toggle — off hides team names in favour of coach name (and race,
+  // where a stat table already has a race column), useful when team name is just a duplicate of
+  // the coach name (e.g. after a bulk CSV import). Admin-only management screens are unaffected.
+  showTeamNames: boolean;
   mode: TournamentMode;
-  roundCount: number | null; // null for ladder mode, required otherwise
+  roundCount: number | null; // null for ladder mode and pools_knockout mode, required otherwise
   rounds: RoundInfo[];
   format: TournamentFormat;
   squadSize: number | null; // required when format === 'team', otherwise null
   squadScoring: SquadScoringConfig | null; // set when format === 'team', otherwise null
   squads: Squad[];
+  // Set when mode === 'pools_knockout', otherwise null. A pool-phase round is any round number
+  // <= poolRoundCount; rounds after that are the knockout phase — this is derived, not stored per
+  // round (see RoundInfo).
+  poolSize: number | null; // target pool size used to auto-generate pools
+  poolRoundCount: number | null; // number of swiss rounds played within each pool
+  qualifiersPerPool: number | null; // top N per pool advance to the knockout bracket
+  pools: Pool[];
+  // Ordered qualifier list (bracket seed order) — set once, when the admin launches the knockout
+  // phase; null while still in the pool phase. Its mere presence is the "phase transitioned" flag.
+  knockoutSeeds: string[] | null;
   individualScoring: IndividualScoringConfig;
+  roundTimer: RoundTimerState;
   adminToken: string;
   createdAt: string;
   teams: Team[];
@@ -208,6 +261,7 @@ export interface PublicTeam {
   race: string;
   nafNumber: string | null;
   squadId: string | null;
+  poolId: string | null;
   createdAt: string;
   rosterImage: RosterImage | null;
   rosterStatus: RosterStatus;
@@ -259,12 +313,44 @@ export interface SquadStandingEntry {
   gamesPlayed: number;
 }
 
+/** Pool-scoped equivalent of StandingEntry, only populated for 'pools_knockout' mode tournaments. */
+export interface PoolStandingEntry {
+  poolId: string;
+  standings: StandingEntry[];
+}
+
+/**
+ * One elimination-bracket match, always backed by a real Challenge (used for result entry).
+ * `position` is a continuous 0-based index within its round, interleaving byes and matches in
+ * bracket-advancement order, so the next round's parent slot is always `floor(position / 2)`.
+ */
+export interface BracketMatchView {
+  challengeId: string;
+  position: number;
+  team1Id: string;
+  team2Id: string;
+  winnerTeamId: string | null; // null until the match is completed
+}
+
+/** A team that auto-advances without playing (bracket size padded to the next power of two). */
+export interface BracketByeView {
+  position: number;
+  teamId: string;
+}
+
+export interface BracketRoundView {
+  roundNumber: number;
+  matches: BracketMatchView[];
+  byes: BracketByeView[]; // only ever non-empty on the first knockout round
+}
+
 export interface PublicTournament {
   id: string;
   name: string;
   description: string;
   organizerCoachName: string;
   requireRosterValidation: boolean;
+  showTeamNames: boolean;
   mode: TournamentMode;
   roundCount: number | null;
   rounds: RoundInfo[]; // launched rounds only
@@ -272,12 +358,20 @@ export interface PublicTournament {
   squadSize: number | null;
   squadScoring: SquadScoringConfig | null;
   squads: Squad[];
+  poolSize: number | null;
+  poolRoundCount: number | null;
+  qualifiersPerPool: number | null;
+  pools: Pool[];
   individualScoring: IndividualScoringConfig;
+  roundTimer: RoundTimerState;
   createdAt: string;
   teams: PublicTeam[];
   challenges: PublicChallenge[];
   standings: StandingEntry[];
   squadStandings: SquadStandingEntry[];
+  poolStandings: PoolStandingEntry[];
+  bracket: BracketRoundView[] | null;
+  knockoutChampionTeamId: string | null;
 }
 
 export interface AdminTeamView extends PublicTeam {
@@ -290,6 +384,7 @@ export interface AdminTournamentView {
   description: string;
   organizerCoachName: string;
   requireRosterValidation: boolean;
+  showTeamNames: boolean;
   mode: TournamentMode;
   roundCount: number | null;
   rounds: RoundInfo[]; // all rounds, including drafts
@@ -297,12 +392,20 @@ export interface AdminTournamentView {
   squadSize: number | null;
   squadScoring: SquadScoringConfig | null;
   squads: Squad[];
+  poolSize: number | null;
+  poolRoundCount: number | null;
+  qualifiersPerPool: number | null;
+  pools: Pool[];
   individualScoring: IndividualScoringConfig;
+  roundTimer: RoundTimerState;
   createdAt: string;
   teams: AdminTeamView[];
   challenges: PublicChallenge[];
   standings: StandingEntry[];
   squadStandings: SquadStandingEntry[];
+  poolStandings: PoolStandingEntry[];
+  bracket: BracketRoundView[] | null;
+  knockoutChampionTeamId: string | null;
 }
 
 export interface UpdateTournamentDescriptionRequest {
@@ -313,16 +416,29 @@ export interface UpdateTournamentOrganizerRequest {
   organizerCoachName: string;
 }
 
+export interface UpdateDisplaySettingsRequest {
+  showTeamNames: boolean;
+}
+
+export interface UpdateRoundTimerRequest {
+  durationSeconds?: number; // updates the configured duration; doesn't affect an already-running timer's start time
+  start?: boolean; // (re)starts the timer now, using durationSeconds if also provided, else the current one
+  reset?: boolean; // stops/clears the timer (startedAt -> null); mutually exclusive with `start`
+}
+
 export interface CreateTournamentRequest {
   name: string;
   organizerCoachName: string; // required — the organizing coach's name (also used in the NAF export)
   id?: string; // admin-chosen tournament id (becomes the public URL); random UUID if omitted
   requireRosterValidation?: boolean;
   mode?: TournamentMode;
-  roundCount?: number; // required when mode !== 'ladder'
+  roundCount?: number; // required when mode !== 'ladder' and mode !== 'pools_knockout'
   format?: TournamentFormat;
   squadSize?: number; // required when format === 'team'
   squadScoring?: Partial<SquadScoringConfig>; // overrides on top of DEFAULT_SQUAD_SCORING
+  poolSize?: number; // required when mode === 'pools_knockout'
+  poolRoundCount?: number; // required when mode === 'pools_knockout'
+  qualifiersPerPool?: number; // required when mode === 'pools_knockout'
   individualScoring?: Partial<IndividualScoringConfig>; // overrides on top of DEFAULT_INDIVIDUAL_SCORING
 }
 
@@ -378,6 +494,10 @@ export interface AssignTeamSquadRequest {
 
 export type UpdateSquadScoringRequest = Partial<SquadScoringConfig>;
 
+export interface AssignTeamPoolRequest {
+  poolId: string | null;
+}
+
 export const TEAM_PASSWORD_MIN_LENGTH = 4;
 export const TEAM_PASSWORD_MAX_LENGTH = 32;
 
@@ -387,6 +507,28 @@ export const NAF_NUMBER_PATTERN = /^[1-9][0-9]{0,6}$/;
 export interface CreateTeamResponse {
   teamId: string;
 }
+
+/**
+ * One parsed CSV row for the admin bulk-import feature (fixed column order: coach name, race,
+ * NAF number — no header row). `race` is free text as pasted; the server re-resolves it against
+ * `RACES` via `matchRace` (see textMatch.ts) rather than trusting it verbatim, even though the
+ * admin UI already resolves/lets the admin fix it client-side before submitting.
+ */
+export interface ImportTeamRow {
+  coachName: string;
+  race: string;
+  nafNumber?: string;
+}
+
+export interface ImportTeamsRequest {
+  rows: ImportTeamRow[];
+}
+
+export interface ImportTeamsResponse {
+  teamIds: string[];
+}
+
+export const MAX_TEAM_IMPORT_ROWS = 200;
 
 export interface ResolveTeamResponse {
   teamId: string;

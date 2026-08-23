@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   RACES,
+  type Pool,
   type PublicTeam,
   type PublicTournament,
   type Squad,
@@ -15,6 +16,7 @@ import { extractErrorMessage } from '../../core/http-error';
 import { copyToClipboard, participantUrl, rosterImageUrl, scoreboardUrl } from '../../core/links';
 import { renderMarkdown } from '../../core/markdown';
 import { rosterStatusLabel } from '../../core/roster-status';
+import { BracketGraphComponent } from '../../shared/bracket-graph/bracket-graph.component';
 
 const POLL_INTERVAL_MS = 15000;
 
@@ -22,8 +24,10 @@ interface DerivedLookups {
   tournament: PublicTournament | null;
   teamsById: Map<string, PublicTeam>;
   squadsById: Map<string, Squad>;
+  poolsById: Map<string, Pool>;
   squadMemberCounts: Map<string, number>;
   squadRankIndex: Map<string, number>;
+  poolMemberCounts: Map<string, number>;
 }
 
 export interface RoundMatchRow {
@@ -39,7 +43,7 @@ export interface RoundMatchRow {
 @Component({
   selector: 'app-scoreboard',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, BracketGraphComponent],
   templateUrl: './scoreboard.component.html',
   styleUrl: './scoreboard.component.scss',
 })
@@ -87,8 +91,10 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     tournament: null,
     teamsById: new Map(),
     squadsById: new Map(),
+    poolsById: new Map(),
     squadMemberCounts: new Map(),
     squadRankIndex: new Map(),
+    poolMemberCounts: new Map(),
   };
 
   /**
@@ -101,15 +107,25 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     if (this.derivedCache.tournament === this.tournament) return this.derivedCache;
     const teamsById = new Map((this.tournament?.teams ?? []).map((t) => [t.id, t]));
     const squadsById = new Map((this.tournament?.squads ?? []).map((s) => [s.id, s]));
+    const poolsById = new Map((this.tournament?.pools ?? []).map((p) => [p.id, p]));
     const squadMemberCounts = new Map<string, number>();
+    const poolMemberCounts = new Map<string, number>();
     for (const team of this.tournament?.teams ?? []) {
-      if (!team.squadId) continue;
-      squadMemberCounts.set(team.squadId, (squadMemberCounts.get(team.squadId) ?? 0) + 1);
+      if (team.squadId) squadMemberCounts.set(team.squadId, (squadMemberCounts.get(team.squadId) ?? 0) + 1);
+      if (team.poolId) poolMemberCounts.set(team.poolId, (poolMemberCounts.get(team.poolId) ?? 0) + 1);
     }
     // squadStandings is already ranked best-first — this just turns that into an O(1) rank lookup.
     const squadRankIndex = new Map<string, number>();
     (this.tournament?.squadStandings ?? []).forEach((s, i) => squadRankIndex.set(s.squadId, i));
-    this.derivedCache = { tournament: this.tournament, teamsById, squadsById, squadMemberCounts, squadRankIndex };
+    this.derivedCache = {
+      tournament: this.tournament,
+      teamsById,
+      squadsById,
+      poolsById,
+      squadMemberCounts,
+      squadRankIndex,
+      poolMemberCounts,
+    };
     return this.derivedCache;
   }
 
@@ -168,6 +184,31 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     return this.derived.teamsById.get(teamId)?.squadId ?? null;
   }
 
+  teamPoolId(teamId: string): string | null {
+    return this.derived.teamsById.get(teamId)?.poolId ?? null;
+  }
+
+  get isPoolsKnockout(): boolean {
+    return this.tournament?.mode === 'pools_knockout';
+  }
+
+  poolName(poolId: string | null): string {
+    if (!poolId) return '—';
+    return this.derived.poolsById.get(poolId)?.name ?? '—';
+  }
+
+  poolMemberCount(poolId: string): number {
+    return this.derived.poolMemberCounts.get(poolId) ?? 0;
+  }
+
+  poolStandings(poolId: string): StandingEntry[] {
+    return this.tournament?.poolStandings.find((p) => p.poolId === poolId)?.standings ?? [];
+  }
+
+  get showTeamNames(): boolean {
+    return this.tournament?.showTeamNames ?? true;
+  }
+
   /**
    * In a team-format tournament, a coach's own team name adds a third identity on top of
    * coach+squad and isn't the meaningful unit there — the round tables show "coach (race)" over
@@ -178,9 +219,15 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     return `${this.teamCoach(teamId)} (${this.teamRace(teamId)})`;
   }
 
+  /**
+   * Squad name for team-format matches (structurally meaningful — that's the squad-vs-squad
+   * pairing). Individual-format round tables show the race instead of the team name — more useful
+   * context for a matchup than the team's name, and consistent regardless of the showTeamNames
+   * display toggle (which only governs identity display elsewhere, e.g. standings).
+   */
   matchSecondaryLabel(teamId: string): string {
-    if (!this.isTeamFormat) return this.teamName(teamId);
-    return this.squadName(this.teamSquadId(teamId));
+    if (this.isTeamFormat) return this.squadName(this.teamSquadId(teamId));
+    return this.teamRace(teamId);
   }
 
   get launchedRounds() {
@@ -197,6 +244,13 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
 
   freeChallenges(): PublicTournament['challenges'] {
     return this.tournament?.challenges.filter((c) => c.round === null) ?? [];
+  }
+
+  /** "TeamName (Coach) vs TeamName (Coach)", or "Coach (Race) vs Coach (Race)" when team names are hidden. */
+  freeChallengeLabel(c: PublicTournament['challenges'][number]): string {
+    const side = (teamId: string) =>
+      this.showTeamNames ? `${this.teamName(teamId)} (${this.teamCoach(teamId)})` : `${this.teamCoach(teamId)} (${this.teamRace(teamId)})`;
+    return `${side(c.team1Id)} vs ${side(c.team2Id)}`;
   }
 
   roundMatches(roundNumber: number): PublicTournament['challenges'] {
@@ -220,8 +274,39 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
    * squad's confrontation first), and within each group the higher-ranked squad always renders on
    * the left, regardless of which side happens to be team1/team2 in the raw data.
    */
+  /** Pool-phase rounds only (round number <= poolRoundCount) — groups matches by pool, in pool order. */
+  private poolRoundMatchGroups(matches: PublicTournament['challenges']): RoundMatchRow[] {
+    const groupsByPool = new Map<string, PublicTournament['challenges']>();
+    for (const challenge of matches) {
+      const poolId = this.teamPoolId(challenge.team1Id) ?? '';
+      if (!groupsByPool.has(poolId)) groupsByPool.set(poolId, []);
+      groupsByPool.get(poolId)!.push(challenge);
+    }
+    const poolOrder = (this.tournament?.pools ?? []).map((p) => p.id);
+    const orderedPoolIds = Array.from(groupsByPool.keys()).sort((a, b) => poolOrder.indexOf(a) - poolOrder.indexOf(b));
+
+    const rows: RoundMatchRow[] = [];
+    orderedPoolIds.forEach((poolId, groupIndex) => {
+      groupsByPool.get(poolId)!.forEach((challenge, i) => {
+        rows.push({
+          challenge,
+          groupStart: i === 0 && groupIndex > 0,
+          groupIndex,
+          leftTeamId: challenge.team1Id,
+          rightTeamId: challenge.team2Id,
+          leftTd: challenge.result?.team1Td ?? null,
+          rightTd: challenge.result?.team2Td ?? null,
+        });
+      });
+    });
+    return rows;
+  }
+
   roundMatchGroups(roundNumber: number): RoundMatchRow[] {
     const matches = this.roundMatches(roundNumber);
+    if (this.isPoolsKnockout && this.tournament?.poolRoundCount !== null && roundNumber <= (this.tournament?.poolRoundCount ?? 0)) {
+      return this.poolRoundMatchGroups(matches);
+    }
     if (!this.isTeamFormat) {
       return matches.map((challenge) => ({
         challenge,
@@ -517,4 +602,30 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   rankMedal(index: number): string {
     return index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
   }
+
+  selectedPool: Pool | null = null;
+
+  openPoolById(poolId: string | null): void {
+    if (!poolId) return;
+    const pool = this.derived.poolsById.get(poolId);
+    if (pool) this.selectedPool = pool;
+  }
+
+  closePool(): void {
+    this.selectedPool = null;
+  }
+
+  /** Closes the pool modal and opens the given member's own team modal on top of it. */
+  openTeamFromPool(teamId: string): void {
+    this.selectedPool = null;
+    this.openTeamById(teamId);
+  }
+
+  selectedPoolStandings(): StandingEntry[] {
+    if (!this.selectedPool) return [];
+    return this.poolStandings(this.selectedPool.id);
+  }
+
+  readonly bracketTeamName = (teamId: string) => (this.showTeamNames ? this.teamName(teamId) : this.teamCoach(teamId));
+  readonly bracketTeamRace = (teamId: string) => this.teamRace(teamId);
 }

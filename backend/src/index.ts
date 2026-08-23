@@ -7,6 +7,7 @@ import * as teams from './handlers/teams';
 import * as challenges from './handlers/challenges';
 import * as rounds from './handlers/rounds';
 import * as squads from './handlers/squads';
+import * as pools from './handlers/pools';
 import * as naf from './handlers/naf';
 import * as rosterImage from './rosterImage';
 
@@ -29,10 +30,13 @@ app.get('/tournaments/:tournamentId', tournaments.getPublicTournament);
 app.get('/tournaments/:tournamentId/admin', tournaments.getAdminTournament);
 app.patch('/tournaments/:tournamentId/description', tournaments.updateDescription);
 app.patch('/tournaments/:tournamentId/organizer', tournaments.updateOrganizer);
+app.patch('/tournaments/:tournamentId/display-settings', tournaments.updateDisplaySettings);
+app.patch('/tournaments/:tournamentId/round-timer', tournaments.updateRoundTimer);
 app.patch('/tournaments/:tournamentId/individual-scoring', tournaments.updateIndividualScoring);
 app.get('/tournaments/:tournamentId/naf-export', naf.exportNaf);
 
 app.post('/tournaments/:tournamentId/teams', teams.createTeam);
+app.post('/tournaments/:tournamentId/teams/import', teams.importTeams);
 app.get('/tournaments/:tournamentId/teams/find', teams.findMyTeam);
 app.get('/tournaments/:tournamentId/teams/:teamId/verify', teams.verifyTeamAccess);
 app.patch('/tournaments/:tournamentId/teams/:teamId', teams.updateTeam);
@@ -47,6 +51,9 @@ app.delete('/tournaments/:tournamentId/squads/:squadId', squads.deleteSquad);
 app.patch('/tournaments/:tournamentId/teams/:teamId/squad', squads.assignTeamSquad);
 app.patch('/tournaments/:tournamentId/squad-scoring', squads.updateSquadScoring);
 
+app.post('/tournaments/:tournamentId/pools/generate', pools.generatePools);
+app.patch('/tournaments/:tournamentId/teams/:teamId/pool', pools.assignTeamPool);
+
 app.post('/tournaments/:tournamentId/challenges', challenges.createChallenge);
 app.patch('/tournaments/:tournamentId/challenges/:challengeId', challenges.actionChallenge);
 app.put('/tournaments/:tournamentId/challenges/:challengeId/result', challenges.submitResult);
@@ -56,5 +63,6 @@ app.put('/tournaments/:tournamentId/challenges/:challengeId/result/admin', chall
 app.post('/tournaments/:tournamentId/rounds', rounds.generateRound);
 app.post('/tournaments/:tournamentId/rounds/:roundNumber/swap', rounds.swapMatches);
 app.post('/tournaments/:tournamentId/rounds/:roundNumber/launch', rounds.launch);
+app.post('/tournaments/:tournamentId/knockout/launch', rounds.launchKnockout);
 
 export const handler = handle(app);

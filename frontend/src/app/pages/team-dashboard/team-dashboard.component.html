@@ -64,6 +64,34 @@
     </form>
   </section>
 
+  <section class="card" *ngIf="isPoolsKnockout">
+    <h2>Ma poule — {{ myPoolName }}</h2>
+    <p class="muted" *ngIf="myBracketStatusLabel">{{ myBracketStatusLabel }}</p>
+    <div class="table-wrap" *ngIf="myPoolId">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Coach</th>
+            <th>Équipe</th>
+            <th>V-N-D</th>
+            <th>Points</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let s of myPoolStandings; let i = index" [class.match-group-alt]="s.teamId === teamId">
+            <td>{{ i + 1 }}</td>
+            <td class="muted">{{ teamCoach(s.teamId) }}</td>
+            <td>{{ teamName(s.teamId) }}</td>
+            <td class="nowrap">{{ s.wins }}/{{ s.draws }}/{{ s.losses }}</td>
+            <td>{{ s.points }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" *ngIf="!myPoolId">Vous n'avez pas encore été affecté(e) à une poule.</p>
+  </section>
+
   <section class="card">
     <div class="title-row">
       <h2>Image du roster</h2>

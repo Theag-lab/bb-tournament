@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import type {
   AdminTournamentView,
+  AssignTeamPoolRequest,
   AssignTeamSquadRequest,
   ChallengeAction,
   CreateChallengeRequest,
@@ -11,6 +12,8 @@ import type {
   CreateTeamResponse,
   CreateTournamentRequest,
   CreateTournamentResponse,
+  ImportTeamRow,
+  ImportTeamsResponse,
   PublicTournament,
   ResolveTeamResponse,
   RosterImageUploadUrlRequest,
@@ -18,6 +21,7 @@ import type {
   RosterStatus,
   SubmitResultRequest,
   UpdateIndividualScoringRequest,
+  UpdateRoundTimerRequest,
   UpdateSquadRequest,
   UpdateSquadScoringRequest,
 } from '@bb-tournament/shared';
@@ -88,9 +92,37 @@ export class ApiService {
     );
   }
 
+  updateDisplaySettings(tournamentId: string, token: string, showTeamNames: boolean) {
+    return firstValueFrom(
+      this.http.patch<AdminTournamentView>(
+        `${API_BASE}/tournaments/${tournamentId}/display-settings`,
+        { showTeamNames },
+        { params: { token } }
+      )
+    );
+  }
+
+  updateRoundTimer(tournamentId: string, token: string, body: UpdateRoundTimerRequest) {
+    return firstValueFrom(
+      this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/round-timer`, body, {
+        params: { token },
+      })
+    );
+  }
+
   createTeam(tournamentId: string, body: CreateTeamRequest) {
     return firstValueFrom(
       this.http.post<CreateTeamResponse>(`${API_BASE}/tournaments/${tournamentId}/teams`, body)
+    );
+  }
+
+  importTeams(tournamentId: string, token: string, rows: ImportTeamRow[]) {
+    return firstValueFrom(
+      this.http.post<ImportTeamsResponse>(
+        `${API_BASE}/tournaments/${tournamentId}/teams/import`,
+        { rows },
+        { params: { token } }
+      )
     );
   }
 
@@ -284,6 +316,31 @@ export class ApiService {
       this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/individual-scoring`, body, {
         params: { token },
       })
+    );
+  }
+
+  generatePools(tournamentId: string, token: string) {
+    return firstValueFrom(
+      this.http.post<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/pools/generate`, {}, { params: { token } })
+    );
+  }
+
+  assignTeamPool(tournamentId: string, token: string, teamId: string, poolId: string | null) {
+    const body: AssignTeamPoolRequest = { poolId };
+    return firstValueFrom(
+      this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/teams/${teamId}/pool`, body, {
+        params: { token },
+      })
+    );
+  }
+
+  launchKnockoutPhase(tournamentId: string, token: string) {
+    return firstValueFrom(
+      this.http.post<AdminTournamentView>(
+        `${API_BASE}/tournaments/${tournamentId}/knockout/launch`,
+        {},
+        { params: { token } }
+      )
     );
   }
 }

@@ -1,3 +1,11 @@
 <header class="header">
   <a class="brand" [routerLink]="brandLink">🏈 BB Tournament</a>
+  <button type="button" class="info-btn" (click)="openInfo()" aria-label="À propos de ce site">❓</button>
 </header>
+
+<div class="info-drawer-backdrop" *ngIf="infoOpen" (click)="closeInfo()">
+  <aside class="info-drawer" (click)="$event.stopPropagation()">
+    <button type="button" class="btn info-drawer-close" (click)="closeInfo()">Fermer</button>
+    <div class="markdown-body" [innerHTML]="infoHtml"></div>
+  </aside>
+</div>

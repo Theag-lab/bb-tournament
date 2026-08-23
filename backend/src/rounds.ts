@@ -8,78 +8,12 @@ import {
   computeStandings,
 } from '@bb-tournament/shared';
 import { badRequest, forbidden, notFound } from './errors';
+import { assertPreviousRoundComplete, buildPriorOpponents, pairInOrder, shuffle } from './pairing';
+import { generateNextPoolsKnockoutRound } from './bracket';
 
 // Statuses that mean "this pre-round challenge represents a real commitment" — used when
 // reconciling round 1 for swiss_with_challenge: anything less than 'accepted' never happened.
 const LOCKED_IN_STATUSES = new Set(['accepted', 'awaiting_confirmation', 'completed']);
-
-function shuffle<T>(items: T[]): T[] {
-  const arr = items.slice();
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-function buildPriorOpponents(challenges: Challenge[]): Map<string, Set<string>> {
-  const map = new Map<string, Set<string>>();
-  const add = (a: string, b: string) => {
-    if (!map.has(a)) map.set(a, new Set());
-    map.get(a)!.add(b);
-  };
-  for (const ch of challenges) {
-    if (ch.status !== 'completed') continue;
-    add(ch.team1Id, ch.team2Id);
-    add(ch.team2Id, ch.team1Id);
-  }
-  return map;
-}
-
-/** Pairs teams in the given order, walking forward and preferring an opponent not already played. */
-function pairInOrder(orderedIds: string[], priorOpponents: Map<string, Set<string>>): [string, string][] {
-  const pairs: [string, string][] = [];
-  const used = new Set<string>();
-  for (let i = 0; i < orderedIds.length; i++) {
-    const a = orderedIds[i];
-    if (used.has(a)) continue;
-    used.add(a);
-
-    let opponent: string | null = null;
-    for (let j = i + 1; j < orderedIds.length; j++) {
-      const b = orderedIds[j];
-      if (used.has(b)) continue;
-      if (!priorOpponents.get(a)?.has(b)) {
-        opponent = b;
-        break;
-      }
-    }
-    if (!opponent) {
-      // No rematch-free opponent left: fall back to the nearest unused team.
-      for (let j = i + 1; j < orderedIds.length; j++) {
-        const b = orderedIds[j];
-        if (!used.has(b)) {
-          opponent = b;
-          break;
-        }
-      }
-    }
-    if (opponent) {
-      used.add(opponent);
-      pairs.push([a, opponent]);
-    }
-  }
-  return pairs;
-}
-
-function assertPreviousRoundComplete(t: Tournament, roundNumber: number): void {
-  if (roundNumber <= 1) return;
-  const previousRoundNumber = t.rounds[t.rounds.length - 1].number;
-  const previousChallenges = t.challenges.filter((c) => c.round === previousRoundNumber);
-  if (!previousChallenges.every((c) => c.status === 'completed')) {
-    throw forbidden(`Round ${previousRoundNumber} is not finished yet`, 'previous_round_unfinished');
-  }
-}
 
 /**
  * Generates the next round's pairings and appends them to the tournament (mutates in place).
@@ -88,6 +22,10 @@ function assertPreviousRoundComplete(t: Tournament, roundNumber: number): void {
  */
 export function generateNextRound(t: Tournament): void {
   if (t.mode === 'ladder') throw forbidden('This tournament has no rounds (ladder mode)');
+  if (t.mode === 'pools_knockout') {
+    generateNextPoolsKnockoutRound(t);
+    return;
+  }
   if (t.roundCount === null) throw forbidden('roundCount is not configured for this tournament');
   if (t.rounds.length >= t.roundCount) throw forbidden('All rounds have already been generated', 'all_rounds_generated');
 

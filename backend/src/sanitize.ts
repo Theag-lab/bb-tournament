@@ -1,17 +1,34 @@
 import {
   AdminTournamentView,
   DEFAULT_INDIVIDUAL_SCORING,
+  DEFAULT_ROUND_TIMER,
   DEFAULT_SQUAD_SCORING,
+  PoolStandingEntry,
   PublicTournament,
   SquadStandingEntry,
   Tournament,
   computeSquadStandings,
   computeStandings,
 } from '@bb-tournament/shared';
+import { buildBracketView, getKnockoutChampion } from './bracket';
 
 function squadStandingsOf(t: Tournament): SquadStandingEntry[] {
   if (t.format !== 'team') return [];
   return computeSquadStandings(t.squads, t.teams, t.challenges, t.squadScoring ?? DEFAULT_SQUAD_SCORING);
+}
+
+/** Pool-scoped standings, only populated for 'pools_knockout' mode tournaments. */
+function poolStandingsOf(t: Tournament): PoolStandingEntry[] {
+  if (t.mode !== 'pools_knockout') return [];
+  const config = t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING;
+  return t.pools.map((pool) => ({
+    poolId: pool.id,
+    standings: computeStandings(
+      t.teams.filter((tm) => tm.poolId === pool.id),
+      t.challenges,
+      config
+    ),
+  }));
 }
 
 /**
@@ -30,6 +47,7 @@ function rosterDetailsHiddenFromOthers(t: Tournament): boolean {
 export function toPublicTournament(t: Tournament, viewerTeamId: string | null = null): PublicTournament {
   const hideRosterDetails = rosterDetailsHiddenFromOthers(t);
   const launchedRounds = new Set(t.rounds.filter((r) => r.status === 'launched').map((r) => r.number));
+  const bracket = buildBracketView(t);
 
   return {
     id: t.id,
@@ -37,6 +55,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
     description: t.description,
     organizerCoachName: t.organizerCoachName || t.name,
     requireRosterValidation: t.requireRosterValidation,
+    showTeamNames: t.showTeamNames ?? true,
     mode: t.mode,
     roundCount: t.roundCount,
     // Round metadata (number + draft/launched status) never leaks pairing details, so it's
@@ -46,8 +65,13 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
     format: t.format,
     squadSize: t.squadSize,
     squadScoring: t.squadScoring,
-    individualScoring: t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
     squads: t.squads,
+    poolSize: t.poolSize,
+    poolRoundCount: t.poolRoundCount,
+    qualifiersPerPool: t.qualifiersPerPool,
+    pools: t.pools,
+    individualScoring: t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
+    roundTimer: t.roundTimer ?? DEFAULT_ROUND_TIMER,
     createdAt: t.createdAt,
     teams: t.teams.map((team) => {
       const hideDetails = hideRosterDetails && team.id !== viewerTeamId;
@@ -58,6 +82,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
         race: hideDetails ? '—' : team.race,
         nafNumber: team.nafNumber,
         squadId: team.squadId,
+        poolId: team.poolId,
         createdAt: team.createdAt,
         rosterImage: hideDetails ? null : team.rosterImage,
         rosterStatus: team.rosterStatus,
@@ -77,24 +102,34 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
       })),
     standings: computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING),
     squadStandings: squadStandingsOf(t),
+    poolStandings: poolStandingsOf(t),
+    bracket,
+    knockoutChampionTeamId: getKnockoutChampion(bracket),
   };
 }
 
 export function toAdminTournamentView(t: Tournament): AdminTournamentView {
+  const bracket = buildBracketView(t);
   return {
     id: t.id,
     name: t.name,
     description: t.description,
     organizerCoachName: t.organizerCoachName || t.name,
     requireRosterValidation: t.requireRosterValidation,
+    showTeamNames: t.showTeamNames ?? true,
     mode: t.mode,
     roundCount: t.roundCount,
     rounds: t.rounds,
     format: t.format,
     squadSize: t.squadSize,
     squadScoring: t.squadScoring,
-    individualScoring: t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
     squads: t.squads,
+    poolSize: t.poolSize,
+    poolRoundCount: t.poolRoundCount,
+    qualifiersPerPool: t.qualifiersPerPool,
+    pools: t.pools,
+    individualScoring: t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
+    roundTimer: t.roundTimer ?? DEFAULT_ROUND_TIMER,
     createdAt: t.createdAt,
     teams: t.teams.map((team) => ({
       id: team.id,
@@ -103,6 +138,7 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
       race: team.race,
       nafNumber: team.nafNumber,
       squadId: team.squadId,
+      poolId: team.poolId,
       createdAt: team.createdAt,
       rosterImage: team.rosterImage,
       rosterStatus: team.rosterStatus,
@@ -120,5 +156,8 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
     })),
     standings: computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING),
     squadStandings: squadStandingsOf(t),
+    poolStandings: poolStandingsOf(t),
+    bracket,
+    knockoutChampionTeamId: getKnockoutChampion(bracket),
   };
 }

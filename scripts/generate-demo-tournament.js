@@ -25,6 +25,7 @@ const crypto = require('crypto');
 const {
   RACES,
   DEFAULT_INDIVIDUAL_SCORING,
+  DEFAULT_ROUND_TIMER,
   DEFAULT_SQUAD_SCORING,
   computeMatchScore,
   computeStandings,
@@ -354,6 +355,7 @@ const tournament = {
   squadScoring: FORMAT === 'team' ? DEFAULT_SQUAD_SCORING : null,
   squads,
   individualScoring: DEFAULT_INDIVIDUAL_SCORING,
+  roundTimer: DEFAULT_ROUND_TIMER,
   adminToken: uuid(),
   createdAt: isoDaysAgo(30),
   teams,

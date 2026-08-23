@@ -4,6 +4,7 @@ import {
   computeMatchScore,
   computeSquadStandings,
   computeStandings,
+  headToHeadWinner,
   recomputeMatchPoints,
   DEFAULT_INDIVIDUAL_SCORING,
 } from './scoring';
@@ -329,6 +330,82 @@ describe('computeStandings', () => {
     ];
     const standings = computeStandings(teams, challenges, cfg);
     assert.ok(standings.every((s) => s.gamesPlayed === 0 && s.points === 0));
+  });
+
+  test('tiebreaker "head_to_head" ranks the team that won their direct meeting first, despite equal points', () => {
+    const cfg = config({ tiebreakers: ['head_to_head'] });
+    const challenges: Challenge[] = [
+      // t1 beats t2 directly.
+      completedChallenge('t1', 't2', 1, matchResult({ team1Td: 2, team2Td: 0, team1Points: 5, team2Points: 0 })),
+      // t2 then beats t3 to end up level on points with t1 (5 each) despite having lost to t1.
+      completedChallenge('t2', 't3', 2, matchResult({ team1Td: 2, team2Td: 0, team1Points: 5, team2Points: 0 })),
+    ];
+    const standings = computeStandings(teams, challenges, cfg);
+    const t1 = standings.find((s) => s.teamId === 't1')!;
+    const t2 = standings.find((s) => s.teamId === 't2')!;
+    assert.equal(t1.points, t2.points, 'sanity: t1 and t2 must actually be tied on points');
+    assert.equal(standings[0].teamId, 't1');
+  });
+
+  test('head_to_head falls through to the next criterion when the tied teams never met', () => {
+    const cfg = config({ tiebreakers: ['head_to_head', 'fewest_td_conceded'] });
+    const challenges: Challenge[] = [
+      // t1 and t2 never play each other; both reach 2 points via draws against different opponents,
+      // with t1 conceding fewer TD than t2 in its own draw.
+      completedChallenge('t1', 't3', 1, matchResult({ team1Td: 1, team2Td: 1, team1Points: 2, team2Points: 2 })),
+      completedChallenge('t2', 't4', 1, matchResult({ team1Td: 3, team2Td: 3, team1Points: 2, team2Points: 2 })),
+    ];
+    const standings = computeStandings(teams, challenges, cfg);
+    assert.equal(standings[0].teamId, 't1');
+  });
+});
+
+describe('headToHeadWinner', () => {
+  test('returns null when the two teams never met', () => {
+    const challenges = [completedChallenge('t1', 't3', 1, matchResult({ team1Td: 1, team2Td: 0 }))];
+    assert.equal(headToHeadWinner(challenges, 't1', 't2'), null);
+  });
+
+  test('returns the winner of their single meeting', () => {
+    const challenges = [completedChallenge('t1', 't2', 1, matchResult({ team1Td: 2, team2Td: 0 }))];
+    assert.equal(headToHeadWinner(challenges, 't1', 't2'), 't1');
+    assert.equal(headToHeadWinner(challenges, 't2', 't1'), 't1');
+  });
+
+  test('returns null when their single meeting was a draw', () => {
+    const challenges = [completedChallenge('t1', 't2', 1, matchResult({ team1Td: 1, team2Td: 1 }))];
+    assert.equal(headToHeadWinner(challenges, 't1', 't2'), null);
+  });
+
+  test('returns null when they split two meetings evenly', () => {
+    const challenges = [
+      completedChallenge('t1', 't2', 1, matchResult({ team1Td: 2, team2Td: 0 })),
+      completedChallenge('t2', 't1', 2, matchResult({ team1Td: 2, team2Td: 0 })),
+    ];
+    assert.equal(headToHeadWinner(challenges, 't1', 't2'), null);
+  });
+
+  test('returns the dominant team across multiple meetings', () => {
+    const challenges = [
+      completedChallenge('t1', 't2', 1, matchResult({ team1Td: 2, team2Td: 0 })),
+      completedChallenge('t2', 't1', 2, matchResult({ team1Td: 0, team2Td: 1 })), // t1 wins again
+    ];
+    assert.equal(headToHeadWinner(challenges, 't1', 't2'), 't1');
+  });
+
+  test('ignores non-completed challenges between the pair', () => {
+    const challenges = [
+      completedChallenge('t1', 't2', 1, matchResult({ team1Td: 2, team2Td: 0 }), 'awaiting_confirmation'),
+    ];
+    assert.equal(headToHeadWinner(challenges, 't1', 't2'), null);
+  });
+
+  test('ignores matches not involving both teams', () => {
+    const challenges = [
+      completedChallenge('t1', 't3', 1, matchResult({ team1Td: 2, team2Td: 0 })),
+      completedChallenge('t4', 't2', 1, matchResult({ team1Td: 2, team2Td: 0 })),
+    ];
+    assert.equal(headToHeadWinner(challenges, 't1', 't2'), null);
   });
 });
 

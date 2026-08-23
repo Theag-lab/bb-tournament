@@ -2,7 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildNafExport } from './naf';
 import { DEFAULT_INDIVIDUAL_SCORING } from './scoring';
-import type { Tournament } from './types';
+import { DEFAULT_ROUND_TIMER, type Tournament } from './types';
 
 function baseTournament(overrides: Partial<Tournament> = {}): Tournament {
   return {
@@ -11,6 +11,7 @@ function baseTournament(overrides: Partial<Tournament> = {}): Tournament {
     description: '',
     organizerCoachName: 'Jean Organisateur',
     requireRosterValidation: false,
+    showTeamNames: true,
     mode: 'ladder',
     roundCount: null,
     rounds: [],
@@ -18,7 +19,13 @@ function baseTournament(overrides: Partial<Tournament> = {}): Tournament {
     squadSize: null,
     squadScoring: null,
     squads: [],
+    poolSize: null,
+    poolRoundCount: null,
+    qualifiersPerPool: null,
+    pools: [],
+    knockoutSeeds: null,
     individualScoring: DEFAULT_INDIVIDUAL_SCORING,
+    roundTimer: DEFAULT_ROUND_TIMER,
     adminToken: 'admin-token',
     createdAt: '2026-01-01T00:00:00.000Z',
     teams: [],

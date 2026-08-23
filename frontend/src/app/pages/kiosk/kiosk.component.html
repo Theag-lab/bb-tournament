@@ -1,0 +1,35 @@
+<div class="kiosk">
+  <ng-container *ngIf="loading">
+    <p class="muted">Chargement…</p>
+  </ng-container>
+
+  <ng-container *ngIf="!loading && error">
+    <div class="alert alert-error">{{ error }}</div>
+  </ng-container>
+
+  <ng-container *ngIf="!loading && !error && tournament as t">
+    <header class="kiosk-header">
+      <h1>{{ t.name }}</h1>
+      <p class="round-label" *ngIf="currentRoundNumber !== null">Ronde {{ currentRoundNumber }}</p>
+      <p class="round-label" *ngIf="currentRoundNumber === null">En attente du lancement d'une ronde</p>
+    </header>
+
+    <main class="kiosk-main">
+      <section class="timer" [class.timer-expired]="timerExpired">
+        <div class="timer-value">{{ remainingLabel }}</div>
+        <p class="timer-status" *ngIf="!timerRunning">Chrono non démarré</p>
+        <p class="timer-status" *ngIf="timerRunning && timerExpired">Temps écoulé</p>
+      </section>
+
+      <section class="progress" *ngIf="currentRoundNumber !== null">
+        <div class="progress-value">{{ completedCount }} / {{ totalCount }}</div>
+        <p class="progress-label">matchs terminés</p>
+      </section>
+    </main>
+
+    <footer class="kiosk-footer">
+      <img [src]="qrDataUrl" alt="QR code vers le tableau des scores" class="qr" />
+      <p class="qr-label">Scanner pour le classement en direct</p>
+    </footer>
+  </ng-container>
+</div>

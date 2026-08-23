@@ -3,12 +3,19 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   ALL_TIEBREAKER_CRITERIA,
   DEFAULT_INDIVIDUAL_SCORING,
+  DEFAULT_ROUND_TIMER,
   DEFAULT_SQUAD_SCORING,
+  MAX_POOL_SIZE,
+  MAX_QUALIFIERS_PER_POOL,
   MAX_ROUND_COUNT,
+  MAX_ROUND_TIMER_SECONDS,
   MAX_SCORING_MULTIPLIER,
   MAX_SCORING_POINTS,
   MAX_SQUAD_SIZE,
+  MIN_POOL_SIZE,
+  MIN_QUALIFIERS_PER_POOL,
   MIN_ROUND_COUNT,
+  MIN_ROUND_TIMER_SECONDS,
   MIN_SCORING_MULTIPLIER,
   MIN_SCORING_POINTS,
   MIN_SQUAD_SIZE,
@@ -24,12 +31,15 @@ import {
   type IndividualScoringMode,
   type RawPointsComponent,
   type RawPointsStatBasis,
+  type RoundTimerState,
   type TiebreakerCriterion,
   type Tournament,
   type TournamentFormat,
   type TournamentMode,
   type UpdateIndividualScoringRequest,
+  type UpdateRoundTimerRequest,
   type UpdateTournamentDescriptionRequest,
+  type UpdateDisplaySettingsRequest,
   type UpdateTournamentOrganizerRequest,
 } from '@bb-tournament/shared';
 import * as storage from '../storage';
@@ -39,7 +49,7 @@ import { mergeSquadScoring } from './squads';
 import { AppError, badRequest, conflict } from '../errors';
 
 const MAX_NAME_LENGTH = 80;
-const VALID_MODES: TournamentMode[] = ['ladder', 'swiss', 'swiss_with_challenge'];
+const VALID_MODES: TournamentMode[] = ['ladder', 'swiss', 'swiss_with_challenge', 'pools_knockout'];
 const VALID_FORMATS: TournamentFormat[] = ['individual', 'team'];
 const VALID_SCORING_MODES: IndividualScoringMode[] = ['points_tiebreaker', 'raw_points'];
 const VALID_STAT_BASES: RawPointsStatBasis[] = ['total', 'diff'];
@@ -127,6 +137,48 @@ function recomputeAllMatchPoints(t: Tournament): void {
   }
 }
 
+export interface PoolsKnockoutConfig {
+  poolSize: number | null;
+  poolRoundCount: number | null;
+  qualifiersPerPool: number | null;
+}
+
+/**
+ * Validates and resolves the pools_knockout-specific creation fields. Returns all-null for any
+ * other mode (these fields stay null on the Tournament in that case — see createTournament).
+ */
+export function resolvePoolsKnockoutConfig(
+  mode: TournamentMode,
+  body: Pick<CreateTournamentRequest, 'poolSize' | 'poolRoundCount' | 'qualifiersPerPool'> | null | undefined
+): PoolsKnockoutConfig {
+  if (mode !== 'pools_knockout') return { poolSize: null, poolRoundCount: null, qualifiersPerPool: null };
+
+  const size = body?.poolSize;
+  if (typeof size !== 'number' || !Number.isInteger(size) || size < MIN_POOL_SIZE || size > MAX_POOL_SIZE) {
+    throw badRequest(`poolSize must be an integer between ${MIN_POOL_SIZE} and ${MAX_POOL_SIZE}`);
+  }
+
+  const prc = body?.poolRoundCount;
+  if (typeof prc !== 'number' || !Number.isInteger(prc) || prc < MIN_ROUND_COUNT || prc > MAX_ROUND_COUNT) {
+    throw badRequest(`poolRoundCount must be an integer between ${MIN_ROUND_COUNT} and ${MAX_ROUND_COUNT}`);
+  }
+
+  const qpp = body?.qualifiersPerPool;
+  if (
+    typeof qpp !== 'number' ||
+    !Number.isInteger(qpp) ||
+    qpp < MIN_QUALIFIERS_PER_POOL ||
+    qpp > MAX_QUALIFIERS_PER_POOL
+  ) {
+    throw badRequest(`qualifiersPerPool must be an integer between ${MIN_QUALIFIERS_PER_POOL} and ${MAX_QUALIFIERS_PER_POOL}`);
+  }
+  if (qpp >= size) {
+    throw badRequest('qualifiersPerPool must be smaller than poolSize');
+  }
+
+  return { poolSize: size, poolRoundCount: prc, qualifiersPerPool: qpp };
+}
+
 export function validateOrganizerCoachName(raw: string | undefined | null): string {
   const name = raw?.trim();
   if (!name) throw badRequest('organizerCoachName is required');
@@ -167,8 +219,15 @@ export async function createTournament(c: Context) {
   const mode: TournamentMode =
     format === 'team' ? 'swiss' : body?.mode && VALID_MODES.includes(body.mode) ? body.mode : 'ladder';
 
+  // v1 scope: pools_knockout only combines with the 'individual' format, same as the other
+  // non-ladder modes were introduced format-agnostic but team-format tournaments force 'swiss'
+  // above — pools_knockout simply isn't offered as a team-format choice.
+  if (mode === 'pools_knockout' && format === 'team') {
+    throw badRequest("Le mode poules puis élimination directe n'est pas compatible avec le format équipe");
+  }
+
   let roundCount: number | null = null;
-  if (mode !== 'ladder') {
+  if (mode !== 'ladder' && mode !== 'pools_knockout') {
     const rc = body?.roundCount;
     if (typeof rc !== 'number' || !Number.isInteger(rc) || rc < MIN_ROUND_COUNT || rc > MAX_ROUND_COUNT) {
       throw badRequest(`roundCount must be an integer between ${MIN_ROUND_COUNT} and ${MAX_ROUND_COUNT} for this mode`);
@@ -185,6 +244,8 @@ export async function createTournament(c: Context) {
     squadSize = size;
   }
 
+  const { poolSize, poolRoundCount, qualifiersPerPool } = resolvePoolsKnockoutConfig(mode, body);
+
   const now = new Date().toISOString();
   const tournament: Tournament = {
     id,
@@ -192,6 +253,7 @@ export async function createTournament(c: Context) {
     description: '',
     organizerCoachName,
     requireRosterValidation: body?.requireRosterValidation === true,
+    showTeamNames: true,
     mode,
     roundCount,
     rounds: [],
@@ -199,7 +261,13 @@ export async function createTournament(c: Context) {
     squadSize,
     squadScoring: format === 'team' ? mergeSquadScoring(DEFAULT_SQUAD_SCORING, body?.squadScoring) : null,
     squads: [],
+    poolSize,
+    poolRoundCount,
+    qualifiersPerPool,
+    pools: [],
+    knockoutSeeds: null,
     individualScoring: mergeIndividualScoring(DEFAULT_INDIVIDUAL_SCORING, body?.individualScoring),
+    roundTimer: DEFAULT_ROUND_TIMER,
     adminToken: uuidv4(),
     createdAt: now,
     teams: [],
@@ -276,6 +344,67 @@ export async function updateOrganizer(c: Context) {
 
   const tournament = await storage.getTournament(id);
   return c.json(toPublicTournament(tournament));
+}
+
+export async function updateDisplaySettings(c: Context) {
+  const id = c.req.param('tournamentId')!;
+  const token = c.req.query('token');
+  const body = await c.req.json<UpdateDisplaySettingsRequest>().catch(() => null);
+  if (typeof body?.showTeamNames !== 'boolean') throw badRequest('showTeamNames must be a boolean');
+
+  await storage.updateTournament(id, (t) => {
+    requireAdmin(t, token);
+    t.showTeamNames = body.showTeamNames;
+  });
+
+  const tournament = await storage.getTournament(id);
+  return c.json(toAdminTournamentView(tournament));
+}
+
+/**
+ * Pure transition function for the round-timer PATCH: validates the request and returns the next
+ * `RoundTimerState` from the current one. `now` is injectable for testability.
+ */
+export function computeNextRoundTimer(
+  current: RoundTimerState,
+  request: UpdateRoundTimerRequest | null,
+  now: () => string = () => new Date().toISOString()
+): RoundTimerState {
+  if (request?.start && request?.reset) {
+    throw badRequest('start and reset cannot both be set', 'invalid_round_timer');
+  }
+
+  let durationSeconds = current.durationSeconds;
+  if (request?.durationSeconds !== undefined) {
+    const d = request.durationSeconds;
+    if (typeof d !== 'number' || !Number.isInteger(d) || d < MIN_ROUND_TIMER_SECONDS || d > MAX_ROUND_TIMER_SECONDS) {
+      throw badRequest(
+        `durationSeconds must be an integer between ${MIN_ROUND_TIMER_SECONDS} and ${MAX_ROUND_TIMER_SECONDS}`,
+        'invalid_round_timer'
+      );
+    }
+    durationSeconds = d;
+  }
+
+  let startedAt = current.startedAt;
+  if (request?.reset) startedAt = null;
+  if (request?.start) startedAt = now();
+
+  return { durationSeconds, startedAt };
+}
+
+export async function updateRoundTimer(c: Context) {
+  const id = c.req.param('tournamentId')!;
+  const token = c.req.query('token');
+  const body = await c.req.json<UpdateRoundTimerRequest>().catch(() => null);
+
+  await storage.updateTournament(id, (t) => {
+    requireAdmin(t, token);
+    t.roundTimer = computeNextRoundTimer(t.roundTimer ?? DEFAULT_ROUND_TIMER, body);
+  });
+
+  const tournament = await storage.getTournament(id);
+  return c.json(toAdminTournamentView(tournament));
 }
 
 export async function updateIndividualScoring(c: Context) {

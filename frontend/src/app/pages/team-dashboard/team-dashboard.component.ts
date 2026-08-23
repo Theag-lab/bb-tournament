@@ -117,6 +117,50 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     return this.tournament?.format === 'team';
   }
 
+  get isPoolsKnockout(): boolean {
+    return this.tournament?.mode === 'pools_knockout';
+  }
+
+  get myPoolId(): string | null {
+    return this.myTeam?.poolId ?? null;
+  }
+
+  get myPoolName(): string {
+    const poolId = this.myPoolId;
+    if (!poolId) return '—';
+    return this.tournament?.pools.find((p) => p.id === poolId)?.name ?? '—';
+  }
+
+  get myPoolStandings(): PublicTournament['poolStandings'][number]['standings'] {
+    const poolId = this.myPoolId;
+    if (!poolId) return [];
+    return this.tournament?.poolStandings.find((p) => p.poolId === poolId)?.standings ?? [];
+  }
+
+  /**
+   * Plain-text bracket status for the team dashboard — the full graph is left to the public
+   * scoreboard's "Tableau final" tab; this just tells the coach where they stand at a glance.
+   */
+  get myBracketStatusLabel(): string | null {
+    const bracket = this.tournament?.bracket;
+    if (!this.isPoolsKnockout || !bracket || bracket.length === 0) return null;
+    let foundAnywhere = false;
+    for (const round of bracket) {
+      if (round.byes.some((b) => b.teamId === this.teamId)) {
+        foundAnywhere = true;
+        continue;
+      }
+      const match = round.matches.find((m) => m.team1Id === this.teamId || m.team2Id === this.teamId);
+      if (!match) continue;
+      foundAnywhere = true;
+      if (match.winnerTeamId === null) return `En lice — match en cours à la ronde ${round.roundNumber}`;
+      if (match.winnerTeamId !== this.teamId) return `Éliminé(e) à la ronde ${round.roundNumber}`;
+    }
+    if (!foundAnywhere) return 'Non qualifié(e) pour la phase finale';
+    if (this.tournament?.knockoutChampionTeamId === this.teamId) return '🏆 Vainqueur du tournoi !';
+    return 'Toujours en lice — en attente de la prochaine ronde du tableau';
+  }
+
   get otherTeams(): PublicTeam[] {
     return this.tournament?.teams.filter((t) => t.id !== this.teamId) ?? [];
   }
@@ -139,6 +183,10 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
 
   teamName(teamId: string): string {
     return this.tournament?.teams.find((t) => t.id === teamId)?.name ?? '—';
+  }
+
+  teamCoach(teamId: string): string {
+    return this.tournament?.teams.find((t) => t.id === teamId)?.coachName ?? '—';
   }
 
   opponentId(c: PublicTournament['challenges'][number]): string {

@@ -11,7 +11,7 @@
   <ul class="hero-stats">
     <li><strong>0 €</strong><span>prix coutant - AWS free tier</span></li>
     <li><strong>0</strong><span>compte à créer</span></li>
-    <li><strong>3</strong><span>formats de tournoi</span></li>
+    <li><strong>4</strong><span>formats de tournoi</span></li>
   </ul>
 </section>
 
@@ -236,6 +236,16 @@
               </span>
             </span>
           </label>
+          <label class="checkbox-field">
+            <input type="radio" name="mode" value="pools_knockout" [(ngModel)]="mode" />
+            <span>
+              <strong>Poules puis élimination directe</strong>
+              <span class="muted">
+                — les équipes sont réparties en poules qui jouent des rondes suisses entre elles ; les mieux
+                classées de chaque poule se qualifient ensuite pour un tableau à élimination directe.
+              </span>
+            </span>
+          </label>
         </div>
       </div>
 
@@ -251,6 +261,53 @@
             [max]="maxRoundCount"
           />
           <p class="muted">Entre {{ minRoundCount }} et {{ maxRoundCount }}.</p>
+        </div>
+      </div>
+
+      <div *ngSwitchCase="'pools'">
+        <div class="field">
+          <label for="pool-size">Taille des poules</label>
+          <input
+            id="pool-size"
+            type="number"
+            name="poolSize"
+            [(ngModel)]="poolSize"
+            [min]="minPoolSize"
+            [max]="maxPoolSize"
+          />
+          <p class="muted">
+            Taille cible ; le nombre de poules est calculé automatiquement à la génération selon le nombre
+            d'équipes inscrites. Entre {{ minPoolSize }} et {{ maxPoolSize }}.
+          </p>
+        </div>
+        <div class="field">
+          <label for="pool-round-count">Nombre de rondes en poule</label>
+          <input
+            id="pool-round-count"
+            type="number"
+            name="poolRoundCount"
+            [(ngModel)]="poolRoundCount"
+            [min]="minRoundCount"
+            [max]="maxRoundCount"
+          />
+          <p class="muted">
+            Entre {{ minRoundCount }} et {{ maxRoundCount }}. Pas forcément un round-robin complet.
+          </p>
+        </div>
+        <div class="field">
+          <label for="qualifiers-per-pool">Qualifiés par poule</label>
+          <input
+            id="qualifiers-per-pool"
+            type="number"
+            name="qualifiersPerPool"
+            [(ngModel)]="qualifiersPerPool"
+            [min]="minQualifiersPerPool"
+            [max]="poolSize - 1"
+          />
+          <p class="muted">
+            Nombre d'équipes qualifiées pour la phase finale à l'issue de chaque poule (doit être inférieur à
+            la taille de poule).
+          </p>
         </div>
       </div>
 
@@ -289,6 +346,14 @@
           <ng-container *ngIf="needsRoundCount">
             <dt>Nombre de rondes</dt>
             <dd>{{ roundCount }}</dd>
+          </ng-container>
+          <ng-container *ngIf="isPoolsKnockout">
+            <dt>Taille des poules</dt>
+            <dd>{{ poolSize }}</dd>
+            <dt>Rondes en poule</dt>
+            <dd>{{ poolRoundCount }}</dd>
+            <dt>Qualifiés par poule</dt>
+            <dd>{{ qualifiersPerPool }}</dd>
           </ng-container>
           <dt>Vérification des rosters</dt>
           <dd>{{ requireRosterValidation ? 'Activée' : 'Désactivée' }}</dd>

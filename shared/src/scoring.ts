@@ -191,6 +191,7 @@ export function stableRandomKey(teamId: string): number {
  * More info wins (returns < 0 means `a` ranks first). */
 const TIEBREAKER_COMPARATORS: Record<Exclude<TiebreakerCriterion, 'head_to_head'>, (a: StandingEntry, b: StandingEntry) => number> = {
   fewest_td_conceded: (a, b) => a.tdAgainst - b.tdAgainst,
+  most_td_scored: (a, b) => b.tdFor - a.tdFor,
   opponent_score: (a, b) => b.opponentScore - a.opponentScore,
   net_td: (a, b) => b.tdFor - b.tdAgainst - (a.tdFor - a.tdAgainst),
   net_cas: (a, b) => b.casFor - b.casAgainst - (a.casFor - a.casAgainst),

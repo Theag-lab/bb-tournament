@@ -746,13 +746,33 @@
       </p>
 
       <div class="pool-block" *ngFor="let pool of t.pools; trackBy: trackById">
-        <h3>{{ pool.name }} ({{ poolMemberCount(pool.id) }})</h3>
+        <div class="pool-block-head">
+          <h3 *ngIf="renamingPoolId !== pool.id">{{ pool.name }} ({{ poolMemberCount(pool.id) }})</h3>
+          <input
+            *ngIf="renamingPoolId === pool.id"
+            [name]="'rename-pool-' + pool.id"
+            [(ngModel)]="renamePoolDraft"
+          />
+          <div class="actions">
+            <ng-container *ngIf="renamingPoolId === pool.id; else renamePoolBtn">
+              <button type="button" class="btn btn-primary" [disabled]="poolBusy" (click)="saveRenamePool(pool.id)">
+                Enregistrer
+              </button>
+              <button type="button" class="btn" [disabled]="poolBusy" (click)="cancelRenamePool()">Annuler</button>
+            </ng-container>
+            <ng-template #renamePoolBtn>
+              <button type="button" class="btn" [disabled]="poolBusy" (click)="startRenamePool(pool.id, pool.name)">
+                Renommer
+              </button>
+            </ng-template>
+          </div>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Équipe</th>
                 <th>Coach</th>
+                <th>Race</th>
                 <th>Pts</th>
                 <th>V-N-D</th>
                 <th></th>
@@ -760,8 +780,8 @@
             </thead>
             <tbody>
               <tr *ngFor="let s of poolStandings(pool.id)">
-                <td>{{ teamName(s.teamId) }}</td>
                 <td>{{ teamCoach(s.teamId) }}</td>
+                <td>{{ teamRace(s.teamId) }}</td>
                 <td>{{ s.points }}</td>
                 <td>{{ s.wins }}-{{ s.draws }}-{{ s.losses }}</td>
                 <td>
@@ -789,15 +809,15 @@
           <table>
             <thead>
               <tr>
-                <th>Équipe</th>
                 <th>Coach</th>
+                <th>Race</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               <tr *ngFor="let team of unassignedTeams; trackBy: trackById">
-                <td>{{ team.name }}</td>
                 <td>{{ team.coachName }}</td>
+                <td>{{ team.race }}</td>
                 <td>
                   <select
                     [name]="'pool-assign-' + team.id"

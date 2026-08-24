@@ -52,6 +52,7 @@ app.patch('/tournaments/:tournamentId/teams/:teamId/squad', squads.assignTeamSqu
 app.patch('/tournaments/:tournamentId/squad-scoring', squads.updateSquadScoring);
 
 app.post('/tournaments/:tournamentId/pools/generate', pools.generatePools);
+app.patch('/tournaments/:tournamentId/pools/:poolId', pools.renamePool);
 app.patch('/tournaments/:tournamentId/teams/:teamId/pool', pools.assignTeamPool);
 
 app.post('/tournaments/:tournamentId/challenges', challenges.createChallenge);

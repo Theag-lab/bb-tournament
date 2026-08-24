@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import type {
   AdminTournamentView,
   AssignTeamPoolRequest,
+  UpdatePoolRequest,
   AssignTeamSquadRequest,
   ChallengeAction,
   CreateChallengeRequest,
@@ -322,6 +323,15 @@ export class ApiService {
   generatePools(tournamentId: string, token: string) {
     return firstValueFrom(
       this.http.post<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/pools/generate`, {}, { params: { token } })
+    );
+  }
+
+  renamePool(tournamentId: string, token: string, poolId: string, name: string) {
+    const body: UpdatePoolRequest = { name };
+    return firstValueFrom(
+      this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/pools/${poolId}`, body, {
+        params: { token },
+      })
     );
   }
 

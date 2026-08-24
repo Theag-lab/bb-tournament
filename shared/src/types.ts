@@ -143,6 +143,7 @@ export const DEFAULT_SQUAD_SCORING: SquadScoringConfig = {
 export type TiebreakerCriterion =
   | 'head_to_head'
   | 'fewest_td_conceded'
+  | 'most_td_scored'
   | 'opponent_score'
   | 'net_td'
   | 'net_cas'
@@ -152,6 +153,7 @@ export type TiebreakerCriterion =
 export const ALL_TIEBREAKER_CRITERIA: TiebreakerCriterion[] = [
   'head_to_head',
   'fewest_td_conceded',
+  'most_td_scored',
   'opponent_score',
   'net_td',
   'net_cas',
@@ -496,6 +498,10 @@ export type UpdateSquadScoringRequest = Partial<SquadScoringConfig>;
 
 export interface AssignTeamPoolRequest {
   poolId: string | null;
+}
+
+export interface UpdatePoolRequest {
+  name: string;
 }
 
 export const TEAM_PASSWORD_MIN_LENGTH = 4;

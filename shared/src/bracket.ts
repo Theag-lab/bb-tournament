@@ -81,11 +81,11 @@ function stableRandomWinner(team1Id: string, team2Id: string): string {
  * configured tiebreakers, using only the ones with single-match meaning: `net_cas`/`net_agg` on
  * this match's own stats, and `head_to_head` over the full match history in `challenges` (this can
  * still be informative even though the CURRENT match is drawn by definition here — e.g. the two
- * teams may have met earlier in the pool phase). `fewest_td_conceded` and `net_td` are skipped
- * (always equal/zero on a TD-tied match by definition) and `opponent_score` is skipped (a
- * whole-tournament strength-of-schedule stat, meaningless for one match). `random`, or running out
- * of configured criteria without a decision, falls back to a deterministic coin flip so a winner is
- * always produced.
+ * teams may have met earlier in the pool phase). `fewest_td_conceded`, `most_td_scored` and
+ * `net_td` are skipped (always equal/zero on a TD-tied match by definition) and `opponent_score`
+ * is skipped (a whole-tournament strength-of-schedule stat, meaningless for one match). `random`,
+ * or running out of configured criteria without a decision, falls back to a deterministic coin
+ * flip so a winner is always produced.
  */
 export function getKnockoutWinner(
   result: MatchResult,

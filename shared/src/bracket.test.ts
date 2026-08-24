@@ -135,7 +135,7 @@ describe('getKnockoutWinner', () => {
       result({ team1Td: 2, team2Td: 2, team1Cas: 1, team2Cas: 1, team1Agg: 0, team2Agg: 4 }),
       't1',
       't2',
-      ['opponent_score', 'net_cas', 'net_agg']
+      ['opponent_score', 'most_td_scored', 'net_cas', 'net_agg']
     );
     assert.equal(winner, 't2');
   });

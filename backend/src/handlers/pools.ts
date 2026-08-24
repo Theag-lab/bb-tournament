@@ -1,13 +1,14 @@
 import type { Context } from 'hono';
 import { v4 as uuidv4 } from 'uuid';
-import type { AssignTeamPoolRequest, Pool } from '@bb-tournament/shared';
+import type { AssignTeamPoolRequest, Pool, UpdatePoolRequest } from '@bb-tournament/shared';
 import * as storage from '../storage';
 import { findTeamById, requireAdmin } from '../auth';
 import { toAdminTournamentView } from '../sanitize';
 import { shuffle } from '../pairing';
-import { badRequest, forbidden, notFound } from '../errors';
+import { badRequest, conflict, forbidden, notFound } from '../errors';
 
 const POOL_NAME_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const MAX_POOL_NAME_LENGTH = 40;
 
 function poolName(index: number): string {
   // A, B, ..., Z, AA, AB, ... — plenty of headroom for any realistic team count.
@@ -18,6 +19,20 @@ function poolName(index: number): string {
     n = Math.floor(n / 26) - 1;
   } while (n >= 0);
   return `Poule ${name}`;
+}
+
+function validatePoolName(raw: string | undefined | null): string {
+  const name = raw?.trim();
+  if (!name) throw badRequest('Pool name is required');
+  if (name.length > MAX_POOL_NAME_LENGTH) {
+    throw badRequest(`Pool name must be at most ${MAX_POOL_NAME_LENGTH} characters`);
+  }
+  return name;
+}
+
+function assertPoolNameFree(pools: Pool[], name: string, excludePoolId?: string): void {
+  const clash = pools.some((p) => p.id !== excludePoolId && p.name.toLowerCase() === name.toLowerCase());
+  if (clash) throw conflict(`A pool named "${name}" already exists in this tournament`, 'pool_name_taken');
 }
 
 /**
@@ -64,6 +79,26 @@ export async function generatePools(c: Context) {
 
   const tournament = await storage.getTournament(tournamentId);
   return c.json(toAdminTournamentView(tournament), 201);
+}
+
+export async function renamePool(c: Context) {
+  const tournamentId = c.req.param('tournamentId')!;
+  const poolId = c.req.param('poolId')!;
+  const token = c.req.query('token');
+  const body = await c.req.json<UpdatePoolRequest>().catch(() => null);
+  const name = validatePoolName(body?.name);
+
+  await storage.updateTournament(tournamentId, (t) => {
+    requireAdmin(t, token);
+    if (t.mode !== 'pools_knockout') throw forbidden('This tournament is not in pools_knockout mode');
+    const pool = t.pools.find((p) => p.id === poolId);
+    if (!pool) throw notFound('Pool not found');
+    assertPoolNameFree(t.pools, name, poolId);
+    pool.name = name;
+  });
+
+  const tournament = await storage.getTournament(tournamentId);
+  return c.json(toAdminTournamentView(tournament));
 }
 
 export async function assignTeamPool(c: Context) {

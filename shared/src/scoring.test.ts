@@ -245,6 +245,14 @@ describe('computeStandings', () => {
       't1',
     ],
     [
+      'most_td_scored',
+      (): Challenge[] => [
+        completedChallenge('t1', 't3', 1, matchResult({ team1Td: 3, team2Td: 3, team1Points: 2, team2Points: 2 })),
+        completedChallenge('t2', 't4', 1, matchResult({ team1Td: 1, team2Td: 1, team1Points: 2, team2Points: 2 })),
+      ],
+      't1',
+    ],
+    [
       'net_cas',
       (): Challenge[] => [
         completedChallenge(

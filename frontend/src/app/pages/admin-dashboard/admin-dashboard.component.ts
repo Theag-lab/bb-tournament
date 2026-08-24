@@ -44,6 +44,7 @@ function cloneIndividualScoring(config: IndividualScoringConfig): IndividualScor
 export const TIEBREAKER_LABELS: Record<TiebreakerCriterion, string> = {
   head_to_head: 'Confrontation directe',
   fewest_td_conceded: 'TD encaissés (moins = mieux)',
+  most_td_scored: 'TD marqués (plus = mieux)',
   opponent_score: "Points adverses (Buchholz)",
   net_td: 'Différentiel de TD',
   net_cas: 'Différentiel de casses',
@@ -763,6 +764,33 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     this.poolError = null;
     try {
       this.tournament = await this.api.assignTeamPool(this.tournamentId, this.token, teamId, poolId || null);
+    } catch (err) {
+      this.poolError = extractErrorMessage(err);
+    } finally {
+      this.poolBusy = false;
+    }
+  }
+
+  renamingPoolId: string | null = null;
+  renamePoolDraft = '';
+
+  startRenamePool(poolId: string, currentName: string): void {
+    this.renamingPoolId = poolId;
+    this.renamePoolDraft = currentName;
+  }
+
+  cancelRenamePool(): void {
+    this.renamingPoolId = null;
+  }
+
+  async saveRenamePool(poolId: string): Promise<void> {
+    const name = this.renamePoolDraft.trim();
+    if (!name) return;
+    this.poolBusy = true;
+    this.poolError = null;
+    try {
+      this.tournament = await this.api.renamePool(this.tournamentId, this.token, poolId, name);
+      this.renamingPoolId = null;
     } catch (err) {
       this.poolError = extractErrorMessage(err);
     } finally {

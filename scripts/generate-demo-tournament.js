@@ -1,23 +1,26 @@
 #!/usr/bin/env node
 /**
- * Generates a static Tournament JSON fixture (50 pseudo-named coaches, swiss mode, 5 rounds
- * planned) for demo/screenshot purposes. Does NOT write to S3 or call any API — this only
- * produces a local JSON file matching the exact `Tournament` shape from shared/src/types.ts.
+ * Generates a static Tournament JSON fixture (pseudo-named coaches, swiss mode, 5 rounds planned)
+ * for demo/screenshot/performance-testing purposes. Does NOT write to S3 or call any API — this
+ * only produces a local JSON file matching the exact `Tournament` shape from shared/src/types.ts.
  * Reuses the real scoring/standings/pairing logic from the built shared package so the generated
  * data is internally consistent with what the app itself would produce.
  *
  * Supports both tournament formats:
- *  - 'team' (default): teams grouped into 10 squads of 5, double-swiss pairing (squad-level then
+ *  - 'team' (default): teams grouped into squads of 5, double-swiss pairing (squad-level then
  *    rank-matched within the pair).
  *  - 'individual': no squads, plain swiss pairing directly on individual standings.
  *
- * Rounds 1-2 are fully completed. Round 3 is deliberately "in progress" — a realistic mix of
- * completed, awaiting_confirmation (one side submitted) and not-yet-played matches — and is the
- * last round generated: exactly like the real app, round 4 can't be generated until round 3 is
- * fully completed, so it deliberately does not exist yet in this fixture.
+ * Rounds 1..roundsFullyComplete are fully completed. The next round is deliberately "in
+ * progress" — a realistic mix of completed, awaiting_confirmation (one side submitted) and
+ * not-yet-played matches — and is the last round generated: exactly like the real app, the round
+ * after it can't be generated until this one is fully completed, so it deliberately does not
+ * exist yet in this fixture.
  *
- * Usage: node scripts/generate-demo-tournament.js [output-path] [tournament-id] [format]
+ * Usage: node scripts/generate-demo-tournament.js [output-path] [tournament-id] [format] [teamCount] [roundsFullyComplete]
  *   format: 'team' (default) or 'individual'
+ *   teamCount: number of teams to generate (default 50)
+ *   roundsFullyComplete: how many rounds are fully played before the "in progress" one (default 2)
  */
 const fs = require('fs');
 const path = require('path');
@@ -42,11 +45,12 @@ const outputPath = path.resolve(
   process.argv[2] || (FORMAT === 'individual' ? 'scripts/demo-indiv-tournament.json' : 'scripts/demo-tournament.json')
 );
 const TOURNAMENT_ID = process.argv[3] || (FORMAT === 'individual' ? 'demo-indiv' : 'tournoi-demo');
+const TEAM_COUNT = process.argv[5] ? parseInt(process.argv[5], 10) : 50;
+const ROUNDS_FULLY_COMPLETE = process.argv[6] ? parseInt(process.argv[6], 10) : 2; // rounds 1..N: launched + all matches completed
 const TEAM_PASSWORD = 'demo1234';
 const SQUAD_SIZE = 5;
-const SQUAD_COUNT = 10;
+const SQUAD_COUNT = Math.max(2, Math.ceil(TEAM_COUNT / SQUAD_SIZE));
 const ROUND_COUNT = 5;
-const ROUNDS_FULLY_COMPLETE = 2; // rounds 1-2: launched + all matches completed
 // Round 3 ("en cours"): each match randomly lands in one of these three real-world states.
 const ROUND3_COMPLETED_SHARE = 0.4;
 const ROUND3_AWAITING_SHARE = 0.3;
@@ -101,20 +105,30 @@ const TEAM_NOUN = [
   'Berserkers', 'Colosses', 'Faucheurs', 'Spectres', 'Golems',
 ];
 
+/**
+ * Draws `count` unique labels from `pool`, shuffled. When `count` exceeds the pool size (e.g. a
+ * 200-team fixture drawing from ~60 coach pseudos), cycles back through the shuffled pool with an
+ * incrementing " 2", " 3", ... suffix rather than silently truncating or looping forever.
+ */
 function uniqueFromPool(count, pool) {
-  return shuffle(pool).slice(0, count);
+  const shuffled = shuffle(pool);
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const cycle = Math.floor(i / shuffled.length);
+    const base = shuffled[i % shuffled.length];
+    out.push(cycle === 0 ? base : `${base} ${cycle + 1}`);
+  }
+  return out;
 }
 
 function uniqueTeamNames(count) {
-  const seen = new Set();
-  const out = [];
-  while (out.length < count) {
-    const candidate = `Les ${TEAM_ADJ[randint(0, TEAM_ADJ.length - 1)]} ${TEAM_NOUN[randint(0, TEAM_NOUN.length - 1)]}`;
-    if (seen.has(candidate)) continue;
-    seen.add(candidate);
-    out.push(candidate);
+  const combos = [];
+  for (const adj of TEAM_ADJ) {
+    for (const noun of TEAM_NOUN) {
+      combos.push(`Les ${adj} ${noun}`);
+    }
   }
-  return out;
+  return uniqueFromPool(count, combos);
 }
 
 const now = new Date();
@@ -124,7 +138,7 @@ const dateDaysAgo = (days) => isoDaysAgo(days).slice(0, 10);
 // ---- Squads (team format only) ----
 const squads =
   FORMAT === 'team'
-    ? SQUAD_NAMES.slice(0, SQUAD_COUNT).map((name) => ({
+    ? uniqueFromPool(SQUAD_COUNT, SQUAD_NAMES).map((name) => ({
         id: uuid(),
         name,
         createdAt: isoDaysAgo(30),
@@ -132,10 +146,10 @@ const squads =
     : [];
 
 // ---- Teams ----
-const coachNames = uniqueFromPool(50, COACH_PSEUDOS);
-const teamNames = uniqueTeamNames(50);
+const coachNames = uniqueFromPool(TEAM_COUNT, COACH_PSEUDOS);
+const teamNames = uniqueTeamNames(TEAM_COUNT);
 const teams = [];
-for (let i = 0; i < 50; i++) {
+for (let i = 0; i < TEAM_COUNT; i++) {
   const squad = FORMAT === 'team' ? squads[Math.floor(i / SQUAD_SIZE) % squads.length] : null;
   teams.push({
     id: uuid(),
@@ -145,6 +159,7 @@ for (let i = 0; i < 50; i++) {
     race: RACES[i % RACES.length],
     nafNumber: rand() < 0.6 ? String(randint(10000, 89999)) : null,
     squadId: squad ? squad.id : null,
+    poolId: null,
     createdAt: isoDaysAgo(29),
     rosterImage: null,
     rosterStatus: 'created',
@@ -332,12 +347,12 @@ const description =
   FORMAT === 'team'
     ? "# Coupe Francophone de Demo 2026\n\n" +
       "Tournoi de demonstration genere automatiquement (donnees fictives) pour tester l'affichage " +
-      "du site : 50 coachs repartis en 10 escouades de 5, format NAF World Cup.\n\n" +
+      `du site : ${TEAM_COUNT} coachs repartis en ${SQUAD_COUNT} escouades de ${SQUAD_SIZE}, format NAF World Cup.\n\n` +
       "## Reglement\n\n- Matchs en 1 mi-temps courte, table maison\n- Casting NAF standard\n- " +
       "Concession forcee a 3-0 en faveur de l'adversaire\n"
     : "# Coupe Francophone de Demo 2026\n\n" +
       "Tournoi de demonstration genere automatiquement (donnees fictives) pour tester l'affichage " +
-      "du site : 50 coachs en ronde suisse individuelle.\n\n" +
+      `du site : ${TEAM_COUNT} coachs en ronde suisse individuelle.\n\n` +
       "## Reglement\n\n- Matchs en 1 mi-temps courte, table maison\n- Casting NAF standard\n- " +
       "Concession forcee a 3-0 en faveur de l'adversaire\n";
 
@@ -347,6 +362,8 @@ const tournament = {
   description,
   organizerCoachName: 'CoachOrganisateur',
   requireRosterValidation: false,
+  requireResultConfirmation: true,
+  showTeamNames: true,
   mode: 'swiss',
   roundCount: ROUND_COUNT,
   rounds,
@@ -354,6 +371,11 @@ const tournament = {
   squadSize: FORMAT === 'team' ? SQUAD_SIZE : null,
   squadScoring: FORMAT === 'team' ? DEFAULT_SQUAD_SCORING : null,
   squads,
+  poolSize: null,
+  poolRoundCount: null,
+  qualifiersPerPool: null,
+  pools: [],
+  knockoutSeeds: null,
   individualScoring: DEFAULT_INDIVIDUAL_SCORING,
   roundTimer: DEFAULT_ROUND_TIMER,
   adminToken: uuid(),

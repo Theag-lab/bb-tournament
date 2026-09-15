@@ -61,7 +61,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       image: '/screenshots/scoreboard.png',
       alt: 'Tableau des scores public',
       title: 'Classement en direct',
-      description: 'Points, V-N-D, touchdowns et casualties, actualisés toutes les 15 secondes — partageable en un lien.',
+      description: 'Points, V-N-D, touchdowns et casualties, actualisés toutes les 60 secondes — partageable en un lien.',
     },
     {
       image: '/screenshots/team.png',
@@ -148,6 +148,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   poolRoundCount = 3;
   qualifiersPerPool = 2;
   requireRosterValidation = false;
+  requireResultConfirmation = true;
 
   busy = false;
   error: string | null = null;
@@ -270,6 +271,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         organizerCoachName: this.organizerCoachName.trim(),
         id: this.id.trim(),
         requireRosterValidation: this.requireRosterValidation,
+        requireResultConfirmation: this.requireResultConfirmation,
         format: this.format,
         mode: this.format === 'individual' ? this.mode : undefined,
         roundCount: this.needsRoundCount ? this.roundCount : undefined,

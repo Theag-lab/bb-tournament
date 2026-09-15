@@ -27,7 +27,7 @@ import { MatchResultFormComponent } from '../../shared/match-result-form/match-r
 import { BracketGraphComponent } from '../../shared/bracket-graph/bracket-graph.component';
 import { TeamImportComponent } from './team-import/team-import.component';
 
-const POLL_INTERVAL_MS = 15000;
+const POLL_INTERVAL_MS = 60000;
 
 type AdminTab = 'overview' | 'rounds' | 'teams' | 'squads' | 'pools' | 'bracket' | 'challenges';
 
@@ -258,6 +258,25 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       this.displaySettingsError = extractErrorMessage(err);
     } finally {
       this.savingDisplaySettings = false;
+    }
+  }
+
+  savingResultValidation = false;
+  resultValidationError: string | null = null;
+
+  async setRequireResultConfirmation(requireResultConfirmation: boolean): Promise<void> {
+    this.savingResultValidation = true;
+    this.resultValidationError = null;
+    try {
+      this.tournament = await this.api.updateResultValidationSettings(
+        this.tournamentId,
+        this.token,
+        requireResultConfirmation
+      );
+    } catch (err) {
+      this.resultValidationError = extractErrorMessage(err);
+    } finally {
+      this.savingResultValidation = false;
     }
   }
 

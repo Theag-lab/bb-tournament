@@ -4,6 +4,57 @@ import { RACES } from './types';
 export const RACE_MATCH_THRESHOLD = 0.82;
 
 /**
+ * Official French roster labels, as used by the French-speaking NAF/Blood Bowl community —
+ * checked alongside the English `RACES` names so a pasted CSV in French (e.g. "Nains", "Orques
+ * Noir") resolves correctly instead of scoring low against every English label via Jaro-Winkler
+ * alone (a plain string-similarity metric can't bridge "Nains" to "Dwarf", they share no
+ * structure at all).
+ */
+export const FRENCH_RACE_LABELS: Record<(typeof RACES)[number], string> = {
+  Amazon: 'Amazones',
+  'Black Orc': 'Orques Noir',
+  Bretonnia: 'Bretonnien',
+  'Chaos Chosen': 'Élue du Chaos',
+  'Chaos Dwarf': 'Nain du Chaos',
+  'Chaos Renegade': 'Renégats du Chaos',
+  'Dark Elf': 'Elfes Noir',
+  Dwarf: 'Nains',
+  'Elven Union': 'Union Elfique',
+  Gnomes: 'Gnomes',
+  Goblins: 'Gobelins',
+  Halflings: 'Halflings',
+  'High Elf': 'Hauts Elfes',
+  Human: 'Humains',
+  'Imperial Nobility': 'Noblesse Impériale',
+  Khorne: 'Khorne',
+  Lizardmen: 'Hommes-Lézard',
+  'Necromantic Horror': 'Horreur Nécromantiques',
+  Norse: 'Nordiques',
+  Nurgle: 'Nurgle',
+  Ogres: 'Ogres',
+  'Old World Alliance': 'Alliance du Vieux Monde',
+  Orc: 'Orques',
+  'Shambling Undead': 'Morts-Vivants',
+  Skaven: 'Skavens',
+  Slann: 'Slann',
+  Snotlings: 'Snotlings',
+  'Tomb Kings': 'Rois des Tombes',
+  'Underworld Denizens': 'Bas Fonds',
+  Vampire: 'Vampires',
+  'Wood Elf': 'Elfes Sylvain',
+};
+
+/** Lowercased, accent-stripped, trimmed — so "Élue"/"Elue", "Ecole"/"École"-style CSV encoding
+ * quirks and case differences never affect matching, in either language. */
+function normalizeForMatching(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
  * Classic Jaro similarity (0..1): fraction of matching characters within a sliding window, adjusted
  * for transpositions among the matched characters.
  */
@@ -68,18 +119,22 @@ export interface RaceMatch {
 
 /**
  * Finds the closest official race name for a free-text input (e.g. from a pasted CSV), using
- * case/whitespace-insensitive Jaro-Winkler similarity against every entry in `RACES`. Returns null
- * when even the best match falls below `threshold` — better to flag "race not recognised" for a
- * human to resolve than to silently guess wrong.
+ * accent/case/whitespace-insensitive Jaro-Winkler similarity against every entry in `RACES` *and*
+ * its French label (`FRENCH_RACE_LABELS`) — an exact French name scores a perfect 1, and a French
+ * typo still resolves via the same fuzzy matching as an English one. Returns null when even the
+ * best match falls below `threshold` — better to flag "race not recognised" for a human to
+ * resolve than to silently guess wrong.
  */
 export function matchRace(input: string, threshold = RACE_MATCH_THRESHOLD): RaceMatch | null {
-  const normalized = input.trim().toLowerCase();
+  const normalized = normalizeForMatching(input);
   if (!normalized) return null;
 
   let best: RaceMatch | null = null;
   for (const race of RACES) {
-    const score = jaroWinklerSimilarity(normalized, race.toLowerCase());
-    if (!best || score > best.score) best = { race, score };
+    for (const label of [race, FRENCH_RACE_LABELS[race]]) {
+      const score = jaroWinklerSimilarity(normalized, normalizeForMatching(label));
+      if (!best || score > best.score) best = { race, score };
+    }
   }
   return best && best.score >= threshold ? best : null;
 }

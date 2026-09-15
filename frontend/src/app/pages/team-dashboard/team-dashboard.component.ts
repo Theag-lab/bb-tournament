@@ -17,7 +17,7 @@ import { rosterStatusLabel as labelForRosterStatus } from '../../core/roster-sta
 import { uploadToS3 } from '../../core/upload';
 import { MatchResultFormComponent } from '../../shared/match-result-form/match-result-form.component';
 
-const POLL_INTERVAL_MS = 15000;
+const POLL_INTERVAL_MS = 60000;
 
 @Component({
   selector: 'app-team-dashboard',

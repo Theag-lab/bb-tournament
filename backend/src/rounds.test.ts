@@ -37,6 +37,7 @@ function baseTournament(overrides: Partial<Tournament> = {}): Tournament {
     description: '',
     organizerCoachName: 'Jean Organisateur',
     requireRosterValidation: false,
+    requireResultConfirmation: true,
     showTeamNames: true,
     mode: 'ladder',
     roundCount: null,

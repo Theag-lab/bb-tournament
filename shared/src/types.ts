@@ -222,6 +222,12 @@ export interface Tournament {
   // mandatory <organiser> field (previously mis-populated with the tournament name).
   organizerCoachName: string;
   requireRosterValidation: boolean; // when true, coaches submit rosters for admin approval
+  // When true (default), a submitted result needs the opposing coach's confirmation before it
+  // counts (status goes 'awaiting_confirmation' -> 'completed'). When false, a single coach's
+  // submission is immediately final (status jumps straight to 'completed', no second party) — see
+  // submitResult in handlers/challenges.ts. Correcting an already-completed match still always
+  // requires the admin either way.
+  requireResultConfirmation: boolean;
   // Public scoreboard display toggle — off hides team names in favour of coach name (and race,
   // where a stat table already has a race column), useful when team name is just a duplicate of
   // the coach name (e.g. after a bulk CSV import). Admin-only management screens are unaffected.
@@ -237,7 +243,7 @@ export interface Tournament {
   // <= poolRoundCount; rounds after that are the knockout phase — this is derived, not stored per
   // round (see RoundInfo).
   poolSize: number | null; // target pool size used to auto-generate pools
-  poolRoundCount: number | null; // number of swiss rounds played within each pool
+  poolRoundCount: number | null; // number of round-robin rounds played within each pool
   qualifiersPerPool: number | null; // top N per pool advance to the knockout bracket
   pools: Pool[];
   // Ordered qualifier list (bracket seed order) — set once, when the admin launches the knockout
@@ -352,6 +358,7 @@ export interface PublicTournament {
   description: string;
   organizerCoachName: string;
   requireRosterValidation: boolean;
+  requireResultConfirmation: boolean;
   showTeamNames: boolean;
   mode: TournamentMode;
   roundCount: number | null;
@@ -386,6 +393,7 @@ export interface AdminTournamentView {
   description: string;
   organizerCoachName: string;
   requireRosterValidation: boolean;
+  requireResultConfirmation: boolean;
   showTeamNames: boolean;
   mode: TournamentMode;
   roundCount: number | null;
@@ -422,6 +430,10 @@ export interface UpdateDisplaySettingsRequest {
   showTeamNames: boolean;
 }
 
+export interface UpdateResultValidationSettingsRequest {
+  requireResultConfirmation: boolean;
+}
+
 export interface UpdateRoundTimerRequest {
   durationSeconds?: number; // updates the configured duration; doesn't affect an already-running timer's start time
   start?: boolean; // (re)starts the timer now, using durationSeconds if also provided, else the current one
@@ -433,6 +445,7 @@ export interface CreateTournamentRequest {
   organizerCoachName: string; // required — the organizing coach's name (also used in the NAF export)
   id?: string; // admin-chosen tournament id (becomes the public URL); random UUID if omitted
   requireRosterValidation?: boolean;
+  requireResultConfirmation?: boolean; // defaults to true (double validation) when omitted
   mode?: TournamentMode;
   roundCount?: number; // required when mode !== 'ladder' and mode !== 'pools_knockout'
   format?: TournamentFormat;

@@ -40,6 +40,7 @@ import {
   type UpdateRoundTimerRequest,
   type UpdateTournamentDescriptionRequest,
   type UpdateDisplaySettingsRequest,
+  type UpdateResultValidationSettingsRequest,
   type UpdateTournamentOrganizerRequest,
 } from '@bb-tournament/shared';
 import * as storage from '../storage';
@@ -253,6 +254,7 @@ export async function createTournament(c: Context) {
     description: '',
     organizerCoachName,
     requireRosterValidation: body?.requireRosterValidation === true,
+    requireResultConfirmation: body?.requireResultConfirmation !== false,
     showTeamNames: true,
     mode,
     roundCount,
@@ -355,6 +357,23 @@ export async function updateDisplaySettings(c: Context) {
   await storage.updateTournament(id, (t) => {
     requireAdmin(t, token);
     t.showTeamNames = body.showTeamNames;
+  });
+
+  const tournament = await storage.getTournament(id);
+  return c.json(toAdminTournamentView(tournament));
+}
+
+export async function updateResultValidationSettings(c: Context) {
+  const id = c.req.param('tournamentId')!;
+  const token = c.req.query('token');
+  const body = await c.req.json<UpdateResultValidationSettingsRequest>().catch(() => null);
+  if (typeof body?.requireResultConfirmation !== 'boolean') {
+    throw badRequest('requireResultConfirmation must be a boolean');
+  }
+
+  await storage.updateTournament(id, (t) => {
+    requireAdmin(t, token);
+    t.requireResultConfirmation = body.requireResultConfirmation;
   });
 
   const tournament = await storage.getTournament(id);

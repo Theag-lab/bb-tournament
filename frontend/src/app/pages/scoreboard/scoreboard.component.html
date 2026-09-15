@@ -361,8 +361,13 @@
         </select>
       </div>
       <div class="field">
-        <label for="join-password">Choisissez un mot de passe d'équipe (4 à 32 caractères)</label>
+        <label for="join-password">Choisissez un jeton d'équipe (4 à 32 caractères)</label>
         <input id="join-password" name="joinPassword" [(ngModel)]="joinPassword" minlength="4" maxlength="32" required />
+        <p class="muted">
+          Pas besoin de sortir votre mot de passe le plus secret : c'est juste le petit code qui vous permet de
+          revenir gérer votre équipe et saisir vos résultats — pas un coffre-fort, un ticket de vestiaire.
+          Attention les orgas y auront accès !
+        </p>
       </div>
 
       <ng-container *ngIf="isTeamFormat">

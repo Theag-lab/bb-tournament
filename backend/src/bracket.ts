@@ -8,19 +8,23 @@ import {
   computeStandings,
   getKnockoutWinner,
   pairFirstKnockoutRound,
+  roundRobinPairingForRound,
   type BracketByeView,
   type BracketMatchView,
   type BracketRoundView,
   type PoolQualifiers,
 } from '@bb-tournament/shared';
 import { badRequest, forbidden } from './errors';
-import { assertPreviousRoundComplete, buildPriorOpponents, pairInOrder, shuffle } from './pairing';
+import { assertPreviousRoundComplete } from './pairing';
 
 /**
- * Pool-phase round: each pool runs its own independent mini-swiss (scoped standings + pairing),
- * exactly like `generateNextTeamRound`'s per-squad pairing but flat (no squad-vs-squad matchup,
- * just direct pairing within the pool). An odd pool size leaves one team without a match that
- * round — same implicit-bye precedent already established for uneven squads, no compensating points.
+ * Pool-phase round: each pool follows its own fixed round-robin schedule (see
+ * shared/src/roundRobin.ts), scoped to that pool's current members. Unlike swiss pairing, a
+ * round-robin schedule is a pure function of pool membership, not match results — round N doesn't
+ * need round N-1 to be finished (or even started) to be generated, which is the whole point: fast
+ * coaches can get ahead instead of the pool blocking on its slowest match. An odd pool size leaves
+ * one team without a match that round (implicit bye, no compensating points), rotating fairly
+ * across the schedule.
  */
 function generatePoolPhaseRound(t: Tournament, roundNumber: number): void {
   const unassigned = t.teams.find((tm) => tm.poolId === null);
@@ -28,21 +32,13 @@ function generatePoolPhaseRound(t: Tournament, roundNumber: number): void {
     throw forbidden(`L'équipe "${unassigned.name}" n'est affectée à aucune poule`, 'team_not_in_pool');
   }
 
-  assertPreviousRoundComplete(t, roundNumber);
-
   const now = new Date().toISOString();
-  const priorOpponents = buildPriorOpponents(t.challenges);
-  const config = t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING;
   const newChallenges: Challenge[] = [];
 
   for (const pool of t.pools) {
-    const poolTeams = t.teams.filter((tm) => tm.poolId === pool.id);
-    if (poolTeams.length < 2) continue;
-    const order =
-      roundNumber > 1
-        ? computeStandings(poolTeams, t.challenges, config).map((s) => s.teamId)
-        : shuffle(poolTeams.map((tm) => tm.id));
-    const pairs = pairInOrder(order, priorOpponents);
+    const poolTeamIds = t.teams.filter((tm) => tm.poolId === pool.id).map((tm) => tm.id);
+    if (poolTeamIds.length < 2) continue;
+    const pairs = roundRobinPairingForRound(poolTeamIds, roundNumber);
     for (const [team1Id, team2Id] of pairs) {
       newChallenges.push({
         id: uuidv4(),

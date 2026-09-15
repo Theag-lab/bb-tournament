@@ -38,6 +38,7 @@ function baseTournament(overrides: Partial<Tournament> = {}): Tournament {
     description: '',
     organizerCoachName: 'Jean Organisateur',
     requireRosterValidation: false,
+    requireResultConfirmation: true,
     showTeamNames: true,
     mode: 'pools_knockout',
     roundCount: null,
@@ -131,6 +132,32 @@ describe('pools_knockout round generation lifecycle', () => {
   test('refuses to generate a pool round when a team has no pool assigned', () => {
     const t = baseTournament({ teams: [team('a1', 'pA'), team('a2', null), team('b1', 'pB'), team('b2', 'pB')] });
     assert.throws(() => generateNextPoolsKnockoutRound(t));
+  });
+
+  test('generates every pool round independently of prior-round completion — fast coaches can get ahead', () => {
+    // 4 teams in a single pool: a full round-robin needs exactly 3 rounds, none of which need any
+    // result from the others to be computed.
+    const t = baseTournament({
+      poolRoundCount: 3,
+      pools: [pool('pA', 'Poule A')],
+      teams: [team('a1', 'pA'), team('a2', 'pA'), team('a3', 'pA'), team('a4', 'pA')],
+    });
+
+    generateNextPoolsKnockoutRound(t); // round 1 — nobody has played yet
+    assert.equal(t.rounds.length, 1);
+
+    // Round 1 is left entirely unplayed on purpose; generating round 2 must not throw.
+    generateNextPoolsKnockoutRound(t); // round 2
+    assert.equal(t.rounds.length, 2);
+
+    // Round 2 is also left unplayed; round 3 must still be generatable.
+    generateNextPoolsKnockoutRound(t); // round 3
+    assert.equal(t.rounds.length, 3);
+
+    const pairKey = (c: Challenge) => [c.team1Id, c.team2Id].sort().join('-');
+    const allPairs = [1, 2, 3].flatMap((n) => t.challenges.filter((c) => c.round === n).map(pairKey));
+    assert.equal(allPairs.length, 6); // C(4,2): every pairing appears exactly once across the 3 rounds
+    assert.equal(new Set(allPairs).size, 6, 'no pairing repeats across rounds');
   });
 
   test('full lifecycle: pool round -> launch knockout -> final -> champion', () => {

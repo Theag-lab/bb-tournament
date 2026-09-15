@@ -18,7 +18,7 @@ import { renderMarkdown } from '../../core/markdown';
 import { rosterStatusLabel } from '../../core/roster-status';
 import { BracketGraphComponent } from '../../shared/bracket-graph/bracket-graph.component';
 
-const POLL_INTERVAL_MS = 15000;
+const POLL_INTERVAL_MS = 60000;
 
 interface DerivedLookups {
   tournament: PublicTournament | null;

@@ -205,6 +205,10 @@
 
         <div *ngSwitchCase="'accepted'">
           <p class="muted">Match accepté, prêt à être joué.</p>
+          <p class="muted" *ngIf="!tournament?.requireResultConfirmation">
+            Ce tournoi n'exige pas de double validation : votre saisie sera immédiatement définitive, sans
+            confirmation de l'adversaire.
+          </p>
           <button type="button" class="btn btn-primary" (click)="toggleResultForm(c.id)">
             {{ editingResultChallengeId === c.id ? 'Fermer' : 'Remplir la feuille de match' }}
           </button>

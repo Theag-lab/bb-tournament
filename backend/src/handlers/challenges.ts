@@ -268,7 +268,10 @@ export async function submitResult(c: Context) {
       return;
     }
 
-    // First submission for this challenge.
+    // First submission for this challenge. When the tournament doesn't require double
+    // validation, a single coach's submission is immediately final — no need to wait on the
+    // opponent to confirm the same numbers.
+    const requireConfirmation = t.requireResultConfirmation ?? true;
     challenge.result = {
       ...score,
       playedAt: input.playedAt,
@@ -276,9 +279,9 @@ export async function submitResult(c: Context) {
       submittedByTeamId: team.id,
       submittedAt: now,
       confirmedByTeamId: null,
-      completedAt: null,
+      completedAt: requireConfirmation ? null : now,
     };
-    challenge.status = 'awaiting_confirmation';
+    challenge.status = requireConfirmation ? 'awaiting_confirmation' : 'completed';
     challenge.updatedAt = now;
   });
 

@@ -103,6 +103,16 @@ export class ApiService {
     );
   }
 
+  updateResultValidationSettings(tournamentId: string, token: string, requireResultConfirmation: boolean) {
+    return firstValueFrom(
+      this.http.patch<AdminTournamentView>(
+        `${API_BASE}/tournaments/${tournamentId}/result-validation-settings`,
+        { requireResultConfirmation },
+        { params: { token } }
+      )
+    );
+  }
+
   updateRoundTimer(tournamentId: string, token: string, body: UpdateRoundTimerRequest) {
     return firstValueFrom(
       this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/round-timer`, body, {

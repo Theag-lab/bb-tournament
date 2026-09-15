@@ -125,6 +125,27 @@
     </section>
 
     <section class="card">
+      <h2>Feuilles de match</h2>
+      <div class="alert alert-error" *ngIf="resultValidationError">{{ resultValidationError }}</div>
+      <label class="checkbox-field">
+        <input
+          type="checkbox"
+          name="requireResultConfirmation"
+          [ngModel]="t.requireResultConfirmation"
+          [disabled]="savingResultValidation"
+          (ngModelChange)="setRequireResultConfirmation($event)"
+        />
+        <span>
+          Double validation de feuille de match
+          <span class="muted">
+            — un résultat saisi par un coach doit être confirmé par son adversaire avant de compter. Décochez pour
+            qu'un seul des deux suffise (résultat final immédiatement).
+          </span>
+        </span>
+      </label>
+    </section>
+
+    <section class="card">
       <h2>Description du tournoi</h2>
       <p class="muted">Visible par tous dans l'onglet "Description" du tableau des scores. Markdown pris en charge.</p>
       <div class="alert alert-error" *ngIf="descriptionError">{{ descriptionError }}</div>

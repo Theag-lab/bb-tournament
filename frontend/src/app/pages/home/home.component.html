@@ -1,7 +1,7 @@
 <section class="hero">
   <h1>Organisez votre tournoi Blood Bowl <span class="accent">sans prise de tête</span></h1>
   <p class="lead">
-    Tournoi en individuel ou en équipe, ladder libre, rondes suisses — classement en direct, feuilles de
+    Tournoi en individuel ou en équipe, ladder libre, rondes suisses, poules et élimination — classement en direct, feuilles de
     match, screenshoot de roster, export NAF. Tout ce qu'il faut, rien de superflu.
   </p>
   <div class="hero-actions">
@@ -68,13 +68,13 @@
 <section class="features">
   <div class="feature">
     <span class="feature-icon">🏆</span>
-    <h3>3 formats de tournoi</h3>
-    <p class="muted">Défi libre, rondes suisses, ou double rondes suisses par équipe.</p>
+    <h3>4 formats de tournoi</h3>
+    <p class="muted">Défi libre, rondes suisses, double rondes suisses par équipe, ou poule puis élimination directe.</p>
   </div>
   <div class="feature">
     <span class="feature-icon">⚡</span>
     <h3>Classement en direct</h3>
-    <p class="muted">Un lien public à partager, mis à jour toutes les 15 secondes, sans rafraîchir manuellement.</p>
+    <p class="muted">Un lien public à partager, mis à jour toutes les 30 secondes, sans rafraîchir manuellement.</p>
   </div>
   <div class="feature">
     <span class="feature-icon">🔑</span>
@@ -102,7 +102,7 @@
       <span class="step-number">2</span>
       <div>
         <h3>Partagez le lien</h3>
-        <p class="muted">Les coachs s'inscrivent eux-mêmes avec leur équipe, leur race et un mot de passe libre.</p>
+        <p class="muted">Les coachs peuvent s'inscrire eux-mêmes avec leur équipe, leur race et un mot de passe libre.</p>
       </div>
     </li>
     <li>
@@ -322,6 +322,17 @@
             </span>
           </span>
         </label>
+        <label class="checkbox-field">
+          <input type="checkbox" name="requireResultConfirmation" [(ngModel)]="requireResultConfirmation" />
+          <span>
+            Double validation de feuille de match
+            <span class="muted">
+              — un résultat saisi par un coach doit être confirmé par son adversaire avant de compter. Décochez
+              pour qu'un seul des deux suffise (résultat final immédiatement) — pratique si vos coachs se font
+              confiance, ou si l'un d'eux disparaît corps et bien après sa raclée.
+            </span>
+          </span>
+        </label>
       </div>
 
       <div *ngSwitchCase="'review'">
@@ -357,6 +368,8 @@
           </ng-container>
           <dt>Vérification des rosters</dt>
           <dd>{{ requireRosterValidation ? 'Activée' : 'Désactivée' }}</dd>
+          <dt>Double validation de feuille de match</dt>
+          <dd>{{ requireResultConfirmation ? 'Activée' : 'Désactivée' }}</dd>
         </dl>
       </div>
     </ng-container>

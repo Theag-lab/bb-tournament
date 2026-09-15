@@ -1,6 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { jaroWinklerSimilarity, matchRace } from './textMatch';
+import { FRENCH_RACE_LABELS, jaroWinklerSimilarity, matchRace } from './textMatch';
+import { RACES } from './types';
 
 describe('jaroWinklerSimilarity', () => {
   test('identical strings score 1', () => {
@@ -54,5 +55,36 @@ describe('matchRace', () => {
     const strict = matchRace('Orcz', 0.99);
     assert.ok(loose !== null);
     assert.equal(strict, null);
+  });
+});
+
+describe('matchRace — French roster labels', () => {
+  test('every RACES entry has a French label, and every French label resolves back to its race', () => {
+    for (const race of RACES) {
+      const label = FRENCH_RACE_LABELS[race];
+      assert.ok(label, `missing French label for ${race}`);
+      const match = matchRace(label);
+      assert.equal(match?.race, race, `"${label}" resolved to "${match?.race}" instead of "${race}"`);
+      assert.equal(match?.score, 1);
+    }
+  });
+
+  test('matches are accent- and case-insensitive', () => {
+    assert.equal(matchRace('élue du chaos')?.race, 'Chaos Chosen');
+    assert.equal(matchRace('ELUE DU CHAOS')?.race, 'Chaos Chosen');
+    assert.equal(matchRace('Elue Du Chaos')?.race, 'Chaos Chosen'); // accent dropped entirely
+  });
+
+  test('tolerates a typo in a French label the same way it does for English', () => {
+    const match = matchRace('Skaven'); // English already covered elsewhere; check a French typo too
+    assert.equal(match?.race, 'Skaven');
+    assert.equal(matchRace('Nain')?.race, 'Dwarf'); // "Nains" missing its final "s"
+    assert.equal(matchRace('Gobelin')?.race, 'Goblins'); // "Gobelins" missing its final "s"
+  });
+
+  test('a French label never resolves to the wrong race', () => {
+    assert.equal(matchRace('Orques')?.race, 'Orc');
+    assert.equal(matchRace('Orques Noir')?.race, 'Black Orc');
+    assert.notEqual(matchRace('Orques')?.race, matchRace('Orques Noir')?.race);
   });
 });

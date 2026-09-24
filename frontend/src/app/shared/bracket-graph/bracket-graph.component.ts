@@ -9,6 +9,8 @@ interface SlotView {
   team1Id: string;
   team2Id: string | null; // null for a bye
   winnerTeamId: string | null;
+  team1Td: number | null;
+  team2Td: number | null;
 }
 
 interface ConnectorView {
@@ -82,6 +84,8 @@ export class BracketGraphComponent {
         team1Id: entry.isBye ? entry.byeTeamId! : entry.match!.team1Id,
         team2Id: entry.isBye ? null : entry.match!.team2Id,
         winnerTeamId: entry.isBye ? entry.byeTeamId! : entry.match!.winnerTeamId,
+        team1Td: entry.isBye ? null : entry.match!.team1Td,
+        team2Td: entry.isBye ? null : entry.match!.team2Td,
       }));
 
       columns.push({ x: r * ROUND_GAP_X, slots });
@@ -177,5 +181,13 @@ export class BracketGraphComponent {
   rowState(slot: SlotView, teamId: string | null): 'winner' | 'loser' | 'pending' {
     if (!teamId || !slot.winnerTeamId) return 'pending';
     return slot.winnerTeamId === teamId ? 'winner' : 'loser';
+  }
+
+  /** TD score for a given team within a slot, null until the match is completed (or for a bye). */
+  teamTd(slot: SlotView, teamId: string | null): number | null {
+    if (!teamId) return null;
+    if (teamId === slot.team1Id) return slot.team1Td;
+    if (teamId === slot.team2Id) return slot.team2Td;
+    return null;
   }
 }

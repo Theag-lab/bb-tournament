@@ -215,6 +215,8 @@ export function buildBracketView(t: Tournament): BracketRoundView[] | null {
           c.status === 'completed' && c.result
             ? getKnockoutWinner(c.result, c.team1Id, c.team2Id, config.tiebreakers, t.challenges)
             : null,
+        team1Td: c.status === 'completed' && c.result ? c.result.team1Td : null,
+        team2Td: c.status === 'completed' && c.result ? c.result.team2Td : null,
       }));
     return { roundNumber: round.number, matches, byes };
   });

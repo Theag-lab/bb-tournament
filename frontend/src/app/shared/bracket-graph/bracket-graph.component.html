@@ -67,6 +67,17 @@
               >
                 {{ teamName(slot.team1Id) }}
               </text>
+              <text
+                *ngIf="teamTd(slot, slot.team1Id) !== null"
+                class="td-score"
+                [class.winner]="rowState(slot, slot.team1Id) === 'winner'"
+                [class.loser]="rowState(slot, slot.team1Id) === 'loser'"
+                text-anchor="end"
+                [attr.x]="cardWidth - 10"
+                [attr.y]="cardHeight / 2 - 18"
+              >
+                {{ teamTd(slot, slot.team1Id) }}
+              </text>
               <text class="race-label" x="10" [attr.y]="cardHeight / 2 - 5">{{ teamRace(slot.team1Id) }}</text>
               <line class="divider" x1="0" [attr.x2]="cardWidth" [attr.y1]="cardHeight / 2" [attr.y2]="cardHeight / 2"></line>
               <text
@@ -77,6 +88,17 @@
                 [attr.y]="cardHeight / 2 + 12"
               >
                 {{ slot.team2Id ? teamName(slot.team2Id) : '?' }}
+              </text>
+              <text
+                *ngIf="teamTd(slot, slot.team2Id) !== null"
+                class="td-score"
+                [class.winner]="rowState(slot, slot.team2Id) === 'winner'"
+                [class.loser]="rowState(slot, slot.team2Id) === 'loser'"
+                text-anchor="end"
+                [attr.x]="cardWidth - 10"
+                [attr.y]="cardHeight / 2 + 12"
+              >
+                {{ teamTd(slot, slot.team2Id) }}
               </text>
               <text class="race-label" x="10" [attr.y]="cardHeight / 2 + 25">{{ slot.team2Id ? teamRace(slot.team2Id) : '' }}</text>
             </ng-container>

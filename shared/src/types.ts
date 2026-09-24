@@ -338,6 +338,8 @@ export interface BracketMatchView {
   team1Id: string;
   team2Id: string;
   winnerTeamId: string | null; // null until the match is completed
+  team1Td: number | null; // TD score, null until the match is completed
+  team2Td: number | null;
 }
 
 /** A team that auto-advances without playing (bracket size padded to the next power of two). */

@@ -44,6 +44,24 @@ export const FRENCH_RACE_LABELS: Record<(typeof RACES)[number], string> = {
   'Wood Elf': 'Elfes Sylvain',
 };
 
+/**
+ * Community-standard NAF/roster abbreviations, checked as an exact (case/accent-insensitive)
+ * match before fuzzy matching kicks in — these are too short for Jaro-Winkler to reliably tell
+ * apart (e.g. "MV" shares almost no structure with "Shambling Undead") so they need their own
+ * lookup rather than just scoring higher against the right race name.
+ */
+export const RACE_ABBREVIATIONS: Record<string, (typeof RACES)[number]> = {
+  we: 'Wood Elf',
+  es: 'Wood Elf', // "Elfes Sylvain"
+  de: 'Dark Elf',
+  owa: 'Old World Alliance',
+  mv: 'Shambling Undead',
+  he: 'High Elf',
+  ue: 'Elven Union',
+  bo: 'Black Orc',
+  on: 'Black Orc', // "Orcs Noirs"
+};
+
 /** Lowercased, accent-stripped, trimmed — so "Élue"/"Elue", "Ecole"/"École"-style CSV encoding
  * quirks and case differences never affect matching, in either language. */
 function normalizeForMatching(value: string): string {
@@ -128,6 +146,9 @@ export interface RaceMatch {
 export function matchRace(input: string, threshold = RACE_MATCH_THRESHOLD): RaceMatch | null {
   const normalized = normalizeForMatching(input);
   if (!normalized) return null;
+
+  const abbreviated = RACE_ABBREVIATIONS[normalized];
+  if (abbreviated) return { race: abbreviated, score: 1 };
 
   let best: RaceMatch | null = null;
   for (const race of RACES) {

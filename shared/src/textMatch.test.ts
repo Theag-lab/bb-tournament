@@ -58,6 +58,32 @@ describe('matchRace', () => {
   });
 });
 
+describe('matchRace — community abbreviations', () => {
+  test('recognises WE, DE, OWA and MV', () => {
+    assert.equal(matchRace('WE')?.race, 'Wood Elf');
+    assert.equal(matchRace('DE')?.race, 'Dark Elf');
+    assert.equal(matchRace('OWA')?.race, 'Old World Alliance');
+    assert.equal(matchRace('MV')?.race, 'Shambling Undead');
+  });
+
+  test('recognises HE, UE, ES, BO and ON', () => {
+    assert.equal(matchRace('HE')?.race, 'High Elf');
+    assert.equal(matchRace('UE')?.race, 'Elven Union');
+    assert.equal(matchRace('ES')?.race, 'Wood Elf');
+    assert.equal(matchRace('BO')?.race, 'Black Orc');
+    assert.equal(matchRace('ON')?.race, 'Black Orc');
+  });
+
+  test('is case- and whitespace-insensitive', () => {
+    assert.equal(matchRace('we')?.race, 'Wood Elf');
+    assert.equal(matchRace(' owa ')?.race, 'Old World Alliance');
+  });
+
+  test('scores an abbreviation match as a perfect 1', () => {
+    assert.equal(matchRace('MV')?.score, 1);
+  });
+});
+
 describe('matchRace — French roster labels', () => {
   test('every RACES entry has a French label, and every French label resolves back to its race', () => {
     for (const race of RACES) {

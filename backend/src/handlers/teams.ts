@@ -392,8 +392,10 @@ export async function deleteTeam(c: Context) {
     requireAdminOrThrow(t, token);
     const team = t.teams.find((tm) => tm.id === teamId);
     if (!team) throw notFound('Team not found');
-    const hasChallenges = t.challenges.some((ch) => ch.team1Id === teamId || ch.team2Id === teamId);
-    if (hasChallenges) {
+    const hasNonDeclinedChallenges = t.challenges.some(
+      (ch) => (ch.team1Id === teamId || ch.team2Id === teamId) && ch.status !== 'declined'
+    );
+    if (hasNonDeclinedChallenges) {
       throw forbidden('Cannot delete a team that already has challenges; cancel/resolve them first');
     }
     t.teams = t.teams.filter((tm) => tm.id !== teamId);

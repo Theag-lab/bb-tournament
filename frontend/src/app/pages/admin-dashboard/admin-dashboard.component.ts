@@ -148,6 +148,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     const squadMemberCounts = new Map<string, number>();
     const poolMemberCounts = new Map<string, number>();
     for (const c of this.tournament?.challenges ?? []) {
+      if (c.status === 'declined') continue;
       teamsWithChallenges.add(c.team1Id);
       teamsWithChallenges.add(c.team2Id);
     }

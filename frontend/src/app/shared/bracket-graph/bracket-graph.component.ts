@@ -91,9 +91,23 @@ export class BracketGraphComponent {
     return columns;
   }
 
+  /**
+   * Total number of knockout rounds implied by the bracket size — fixed for the whole knockout
+   * phase, unlike `rounds.length` (which only counts rounds generated *so far* and would
+   * otherwise make every earlier round's label shift as later rounds get generated). Derived from
+   * the first knockout round (always `rounds[0]`, the only one with byes): byes advance one team
+   * each, matches two, so `byes + 2*matches` is the full bracket size, a power of two.
+   */
+  private get totalKnockoutRounds(): number {
+    const first = this.rounds[0];
+    if (!first) return 0;
+    const bracketSize = first.byes.length + first.matches.length * 2;
+    return Math.round(Math.log2(bracketSize));
+  }
+
   /** One label per column, named by distance from the final (last column = "Finale", etc). */
   get roundLabels(): string[] {
-    const total = this.rounds.length;
+    const total = this.totalKnockoutRounds;
     return this.rounds.map((round, i) => {
       const distanceFromFinal = total - 1 - i;
       return ROUND_NAMES_FROM_FINAL[distanceFromFinal] ?? `Ronde ${round.roundNumber}`;

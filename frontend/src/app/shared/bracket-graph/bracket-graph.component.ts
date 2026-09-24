@@ -12,10 +12,7 @@ interface SlotView {
 }
 
 interface ConnectorView {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
+  d: string;
 }
 
 interface ChampionView {
@@ -29,6 +26,17 @@ const CARD_H = 60;
 const ROUND_GAP_X = 260;
 const SLOT_UNIT_Y = 88;
 const MARGIN = 24;
+const HEADER_H = 34;
+
+// Indexed by "columns still to come after this one" (0 = this column is the final).
+const ROUND_NAMES_FROM_FINAL = [
+  'Finale',
+  'Demi-finale',
+  'Quart de finale',
+  'Huitième de finale',
+  'Seizième de finale',
+  'Trente-deuxième de finale',
+];
 
 /**
  * Read-only elimination-bracket graph: one column per knockout round already generated (rounds
@@ -51,6 +59,7 @@ export class BracketGraphComponent {
 
   readonly cardWidth = CARD_W;
   readonly cardHeight = CARD_H;
+  readonly headerHeight = HEADER_H;
 
   get columns(): { x: number; slots: SlotView[] }[] {
     const columns: { x: number; slots: SlotView[] }[] = [];
@@ -82,6 +91,15 @@ export class BracketGraphComponent {
     return columns;
   }
 
+  /** One label per column, named by distance from the final (last column = "Finale", etc). */
+  get roundLabels(): string[] {
+    const total = this.rounds.length;
+    return this.rounds.map((round, i) => {
+      const distanceFromFinal = total - 1 - i;
+      return ROUND_NAMES_FROM_FINAL[distanceFromFinal] ?? `Ronde ${round.roundNumber}`;
+    });
+  }
+
   get connectors(): ConnectorView[] {
     const columns = this.columns;
     const lines: ConnectorView[] = [];
@@ -91,11 +109,26 @@ export class BracketGraphComponent {
       child.slots.forEach((slot, i) => {
         const a = parent.slots[2 * i];
         const b = parent.slots[2 * i + 1];
-        if (a) lines.push({ x1: parent.x + this.cardWidth, y1: a.y, x2: slot.x, y2: slot.y });
-        if (b) lines.push({ x1: parent.x + this.cardWidth, y1: b.y, x2: slot.x, y2: slot.y });
+        if (a) lines.push({ d: this.elbowPath(parent.x + this.cardWidth, a.y, slot.x, slot.y) });
+        if (b) lines.push({ d: this.elbowPath(parent.x + this.cardWidth, b.y, slot.x, slot.y) });
       });
     }
     return lines;
+  }
+
+  private elbowPath(x1: number, y1: number, x2: number, y2: number): string {
+    const midX = x1 + (x2 - x1) / 2;
+    const r = 8;
+    if (y1 === y2) return `M ${x1} ${y1} H ${x2}`;
+    const dir = y2 > y1 ? 1 : -1;
+    return [
+      `M ${x1} ${y1}`,
+      `H ${midX - r}`,
+      `Q ${midX} ${y1} ${midX} ${y1 + r * dir}`,
+      `V ${y2 - r * dir}`,
+      `Q ${midX} ${y2} ${midX + r} ${y2}`,
+      `H ${x2}`,
+    ].join(' ');
   }
 
   get champion(): ChampionView | null {
@@ -113,7 +146,7 @@ export class BracketGraphComponent {
     const columns = this.columns;
     if (!champion || columns.length === 0) return null;
     const last = columns[columns.length - 1];
-    return { x1: last.x + this.cardWidth, y1: last.slots[0].y, x2: champion.x, y2: champion.y };
+    return { d: this.elbowPath(last.x + this.cardWidth, last.slots[0].y, champion.x, champion.y) };
   }
 
   get svgWidth(): number {
@@ -123,6 +156,12 @@ export class BracketGraphComponent {
 
   get svgHeight(): number {
     const firstColumnSlots = this.columns[0]?.slots.length ?? 1;
-    return Math.max(firstColumnSlots * SLOT_UNIT_Y, SLOT_UNIT_Y) + 2 * MARGIN;
+    return Math.max(firstColumnSlots * SLOT_UNIT_Y, SLOT_UNIT_Y) + 2 * MARGIN + this.headerHeight;
+  }
+
+  /** Row-level outcome, used to tint each half of a card the instant its match is decided. */
+  rowState(slot: SlotView, teamId: string | null): 'winner' | 'loser' | 'pending' {
+    if (!teamId || !slot.winnerTeamId) return 'pending';
+    return slot.winnerTeamId === teamId ? 'winner' : 'loser';
   }
 }

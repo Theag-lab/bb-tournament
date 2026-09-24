@@ -1,66 +1,101 @@
 <div class="bracket-scroll" *ngIf="rounds.length > 0; else empty">
   <svg [attr.width]="svgWidth" [attr.height]="svgHeight" [attr.viewBox]="'0 0 ' + svgWidth + ' ' + svgHeight">
+    <defs>
+      <clipPath id="bracket-card-clip">
+        <rect [attr.width]="cardWidth" [attr.height]="cardHeight" rx="10"></rect>
+      </clipPath>
+      <filter id="bracket-card-shadow" x="-20%" y="-40%" width="140%" height="220%">
+        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.35"></feDropShadow>
+      </filter>
+    </defs>
     <g transform="translate(24, 24)">
-      <line
-        *ngFor="let c of connectors"
-        class="connector"
-        [attr.x1]="c.x1"
-        [attr.y1]="c.y1"
-        [attr.x2]="c.x2"
-        [attr.y2]="c.y2"
-      ></line>
-      <line
-        *ngIf="championConnector as c"
-        class="connector connector-champion"
-        [attr.x1]="c.x1"
-        [attr.y1]="c.y1"
-        [attr.x2]="c.x2"
-        [attr.y2]="c.y2"
-      ></line>
+      <text
+        *ngFor="let column of columns; let i = index"
+        class="round-label"
+        [attr.x]="column.x + cardWidth / 2"
+        [attr.y]="headerHeight / 2 + 4"
+      >
+        {{ roundLabels[i] }}
+      </text>
+      <text *ngIf="champion" class="round-label round-label-champion" [attr.x]="champion.x + cardWidth / 2" [attr.y]="headerHeight / 2 + 4">
+        Vainqueur
+      </text>
 
-      <ng-container *ngFor="let column of columns">
-        <g
-          *ngFor="let slot of column.slots"
-          class="slot"
-          [class.slot-bye]="slot.isBye"
-          [attr.transform]="'translate(' + slot.x + ',' + (slot.y - cardHeight / 2) + ')'"
-        >
-          <rect class="card" [attr.width]="cardWidth" [attr.height]="cardHeight" rx="6"></rect>
-          <ng-container *ngIf="!slot.isBye; else byeLabel">
-            <text
-              class="team-label"
-              [class.winner]="slot.winnerTeamId === slot.team1Id"
-              [class.loser]="slot.winnerTeamId !== null && slot.winnerTeamId !== slot.team1Id"
-              x="10"
-              [attr.y]="cardHeight / 2 - 18"
-            >
-              {{ teamName(slot.team1Id) }}
-            </text>
-            <text class="race-label" x="10" [attr.y]="cardHeight / 2 - 5">{{ teamRace(slot.team1Id) }}</text>
-            <line class="divider" x1="0" [attr.x2]="cardWidth" [attr.y1]="cardHeight / 2" [attr.y2]="cardHeight / 2"></line>
-            <text
-              class="team-label"
-              [class.winner]="slot.winnerTeamId === slot.team2Id"
-              [class.loser]="slot.winnerTeamId !== null && slot.winnerTeamId !== slot.team2Id"
-              x="10"
-              [attr.y]="cardHeight / 2 + 12"
-            >
-              {{ slot.team2Id ? teamName(slot.team2Id) : '?' }}
-            </text>
-            <text class="race-label" x="10" [attr.y]="cardHeight / 2 + 25">{{ slot.team2Id ? teamRace(slot.team2Id) : '' }}</text>
-          </ng-container>
-          <ng-template #byeLabel>
-            <text class="team-label winner" x="10" [attr.y]="cardHeight / 2 - 14">{{ teamName(slot.team1Id) }}</text>
-            <text class="race-label" x="10" [attr.y]="cardHeight / 2 - 1">{{ teamRace(slot.team1Id) }}</text>
-            <text class="bye-tag" x="10" [attr.y]="cardHeight - 8">Exempt</text>
-          </ng-template>
+      <g [attr.transform]="'translate(0,' + headerHeight + ')'">
+        <path *ngFor="let c of connectors" class="connector" [attr.d]="c.d"></path>
+        <path *ngIf="championConnector as c" class="connector connector-champion" [attr.d]="c.d"></path>
+
+        <ng-container *ngFor="let column of columns">
+          <g
+            *ngFor="let slot of column.slots"
+            class="slot"
+            [class.slot-bye]="slot.isBye"
+            [attr.transform]="'translate(' + slot.x + ',' + (slot.y - cardHeight / 2) + ')'"
+          >
+            <g clip-path="url(#bracket-card-clip)">
+              <ng-container *ngIf="!slot.isBye; else byeRows">
+                <rect
+                  class="row"
+                  [class.row-winner]="rowState(slot, slot.team1Id) === 'winner'"
+                  [class.row-loser]="rowState(slot, slot.team1Id) === 'loser'"
+                  [attr.width]="cardWidth"
+                  [attr.height]="cardHeight / 2"
+                  y="0"
+                ></rect>
+                <rect
+                  class="row"
+                  [class.row-winner]="rowState(slot, slot.team2Id) === 'winner'"
+                  [class.row-loser]="rowState(slot, slot.team2Id) === 'loser'"
+                  [attr.width]="cardWidth"
+                  [attr.height]="cardHeight / 2"
+                  [attr.y]="cardHeight / 2"
+                ></rect>
+              </ng-container>
+              <ng-template #byeRows>
+                <rect class="row row-winner" [attr.width]="cardWidth" [attr.height]="cardHeight" y="0"></rect>
+              </ng-template>
+            </g>
+            <rect class="card-border" [attr.width]="cardWidth" [attr.height]="cardHeight" rx="10" filter="url(#bracket-card-shadow)"></rect>
+
+            <ng-container *ngIf="!slot.isBye; else byeLabel">
+              <text
+                class="team-label"
+                [class.winner]="rowState(slot, slot.team1Id) === 'winner'"
+                [class.loser]="rowState(slot, slot.team1Id) === 'loser'"
+                x="10"
+                [attr.y]="cardHeight / 2 - 18"
+              >
+                {{ teamName(slot.team1Id) }}
+              </text>
+              <text class="race-label" x="10" [attr.y]="cardHeight / 2 - 5">{{ teamRace(slot.team1Id) }}</text>
+              <line class="divider" x1="0" [attr.x2]="cardWidth" [attr.y1]="cardHeight / 2" [attr.y2]="cardHeight / 2"></line>
+              <text
+                class="team-label"
+                [class.winner]="rowState(slot, slot.team2Id) === 'winner'"
+                [class.loser]="rowState(slot, slot.team2Id) === 'loser'"
+                x="10"
+                [attr.y]="cardHeight / 2 + 12"
+              >
+                {{ slot.team2Id ? teamName(slot.team2Id) : '?' }}
+              </text>
+              <text class="race-label" x="10" [attr.y]="cardHeight / 2 + 25">{{ slot.team2Id ? teamRace(slot.team2Id) : '' }}</text>
+            </ng-container>
+            <ng-template #byeLabel>
+              <text class="team-label winner" x="10" [attr.y]="cardHeight / 2 - 14">{{ teamName(slot.team1Id) }}</text>
+              <text class="race-label" x="10" [attr.y]="cardHeight / 2 - 1">{{ teamRace(slot.team1Id) }}</text>
+              <text class="bye-tag" x="10" [attr.y]="cardHeight - 8">Exempt</text>
+            </ng-template>
+          </g>
+        </ng-container>
+
+        <g *ngIf="champion as ch" class="slot slot-champion" [attr.transform]="'translate(' + ch.x + ',' + (ch.y - cardHeight / 2) + ')'">
+          <g clip-path="url(#bracket-card-clip)">
+            <rect class="row row-champion" [attr.width]="cardWidth" [attr.height]="cardHeight" y="0"></rect>
+          </g>
+          <rect class="card-border champion-border" [attr.width]="cardWidth" [attr.height]="cardHeight" rx="10" filter="url(#bracket-card-shadow)"></rect>
+          <text class="team-label winner champion-label" x="10" [attr.y]="cardHeight / 2 - 6">🏆 {{ teamName(ch.teamId) }}</text>
+          <text class="race-label champion-race" x="10" [attr.y]="cardHeight / 2 + 12">{{ teamRace(ch.teamId) }}</text>
         </g>
-      </ng-container>
-
-      <g *ngIf="champion as ch" class="slot slot-champion" [attr.transform]="'translate(' + ch.x + ',' + (ch.y - cardHeight / 2) + ')'">
-        <rect class="card champion-card" [attr.width]="cardWidth" [attr.height]="cardHeight" rx="6"></rect>
-        <text class="team-label winner champion-label" x="10" [attr.y]="cardHeight / 2 - 6">🏆 {{ teamName(ch.teamId) }}</text>
-        <text class="race-label" x="10" [attr.y]="cardHeight / 2 + 12">{{ teamRace(ch.teamId) }}</text>
       </g>
     </g>
   </svg>

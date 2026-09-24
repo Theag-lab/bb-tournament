@@ -7,9 +7,24 @@ svg {
   display: block;
 }
 
+.round-label {
+  fill: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-anchor: middle;
+}
+
+.round-label-champion {
+  fill: var(--warning);
+}
+
 .connector {
+  fill: none;
   stroke: var(--border);
   stroke-width: 2;
+  stroke-linecap: round;
 }
 
 .connector-champion {
@@ -17,15 +32,33 @@ svg {
   stroke-width: 2;
 }
 
-.card {
-  fill: var(--surface-2);
+.card-border {
+  fill: none;
   stroke: var(--border);
   stroke-width: 1;
 }
 
-.champion-card {
+.champion-border {
   stroke: var(--warning);
   stroke-width: 2;
+}
+
+.row {
+  fill: var(--surface-2);
+  transition: fill 0.2s ease;
+}
+
+.row-winner {
+  fill: color-mix(in srgb, var(--success) 16%, var(--surface-2));
+}
+
+.row-loser {
+  fill: color-mix(in srgb, var(--surface) 60%, black 10%);
+  opacity: 0.7;
+}
+
+.row-champion {
+  fill: color-mix(in srgb, var(--warning) 20%, var(--surface-2));
 }
 
 .divider {
@@ -40,17 +73,19 @@ svg {
 }
 
 .team-label.winner {
-  fill: var(--text);
-  font-weight: 600;
+  fill: var(--success);
+  font-weight: 700;
 }
 
 .team-label.loser {
   fill: var(--text-muted);
   text-decoration: line-through;
+  opacity: 0.6;
 }
 
 .champion-label {
   fill: var(--warning);
+  font-size: 14px;
 }
 
 .race-label {
@@ -59,12 +94,20 @@ svg {
   font-family: inherit;
 }
 
+.champion-race {
+  fill: var(--text);
+}
+
 .bye-tag {
   fill: var(--text-muted);
   font-size: 11px;
   font-style: italic;
 }
 
-.slot-bye .card {
+.slot-bye .card-border {
   stroke-dasharray: 4 3;
+}
+
+.slot {
+  transition: transform 0.2s ease;
 }

@@ -166,37 +166,48 @@ function generateNextTeamRound(t: Tournament): void {
   t.rounds.push({ number: roundNumber, status: 'draft' });
 }
 
-/** Swaps the "away" team between two draft-round matches (reassigns their opponents). */
-export function swapRoundMatches(t: Tournament, roundNumber: number, matchId1: string, matchId2: string): void {
+/**
+ * Pits `teamId1` against `teamId2` in a draft round — picking any two coaches, regardless of
+ * which match or which side (home/away) they're currently on, not just the "away" slot of two
+ * whole matches. Their former opponents are freed up by the same move and end up paired with each
+ * other, so exactly two matches change and no team is left without an opponent.
+ */
+export function swapRoundMatches(t: Tournament, roundNumber: number, teamId1: string, teamId2: string): void {
   const round = t.rounds.find((r) => r.number === roundNumber);
   if (!round) throw notFound('Round not found');
   if (round.status !== 'draft') throw forbidden('Only a draft round can be edited', 'round_not_draft');
-  if (matchId1 === matchId2) throw badRequest('Cannot swap a match with itself');
+  if (teamId1 === teamId2) throw badRequest('Cannot pair a coach against themselves');
 
-  const m1 = t.challenges.find((c) => c.id === matchId1 && c.round === roundNumber);
-  const m2 = t.challenges.find((c) => c.id === matchId2 && c.round === roundNumber);
-  if (!m1 || !m2) throw notFound('Match not found in this round');
-  if (m1.team1Id === m2.team2Id || m2.team1Id === m1.team2Id) {
-    throw badRequest('This swap would pit a team against itself');
-  }
+  const findMatch = (teamId: string) =>
+    t.challenges.find((c) => c.round === roundNumber && (c.team1Id === teamId || c.team2Id === teamId));
+  const match1 = findMatch(teamId1);
+  const match2 = findMatch(teamId2);
+  if (!match1 || !match2) throw notFound('Coach not found in this round');
+  if (match1.id === match2.id) throw badRequest('These two coaches are already playing each other');
+
+  const opponentOf = (match: Challenge, teamId: string) => (match.team1Id === teamId ? match.team2Id : match.team1Id);
+  const opp1 = opponentOf(match1, teamId1); // freed up by teamId1 leaving to face teamId2
+  const opp2 = opponentOf(match2, teamId2); // freed up by teamId2 leaving to face teamId1, ends up facing opp1
 
   if (t.format === 'team') {
     const squadOf = (teamId: string) => t.teams.find((tm) => tm.id === teamId)?.squadId ?? null;
-    const pairKey = (c: Challenge) => [squadOf(c.team1Id), squadOf(c.team2Id)].sort().join('|');
-    if (pairKey(m1) !== pairKey(m2)) {
+    const sameSquad = (a: string, b: string) => squadOf(a) === squadOf(b);
+    if (sameSquad(teamId1, teamId2) || sameSquad(opp1, opp2)) {
       throw forbidden(
-        'In team format, matches can only be swapped within the same squad pairing',
-        'swap_crosses_squad_pairing'
+        'In team format, this swap would pit two players from the same squad against each other',
+        'swap_creates_same_squad_match'
       );
     }
   }
 
   const now = new Date().toISOString();
-  const tmp = m1.team2Id;
-  m1.team2Id = m2.team2Id;
-  m2.team2Id = tmp;
-  m1.updatedAt = now;
-  m2.updatedAt = now;
+  const replaceOpponent = (match: Challenge, oldOpponentId: string, newOpponentId: string) => {
+    if (match.team1Id === oldOpponentId) match.team1Id = newOpponentId;
+    else match.team2Id = newOpponentId;
+    match.updatedAt = now;
+  };
+  replaceOpponent(match1, opp1, teamId2);
+  replaceOpponent(match2, teamId2, opp1);
 }
 
 export function launchRound(t: Tournament, roundNumber: number): void {

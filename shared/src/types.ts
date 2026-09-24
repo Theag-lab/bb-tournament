@@ -475,8 +475,8 @@ export interface UpdateRosterStatusRequest {
 }
 
 export interface SwapRoundMatchesRequest {
-  matchId1: string;
-  matchId2: string;
+  teamId1: string;
+  teamId2: string;
 }
 
 export interface CreateTournamentResponse {

@@ -256,11 +256,11 @@ export class ApiService {
     );
   }
 
-  swapRoundMatches(tournamentId: string, token: string, roundNumber: number, matchId1: string, matchId2: string) {
+  swapRoundMatches(tournamentId: string, token: string, roundNumber: number, teamId1: string, teamId2: string) {
     return firstValueFrom(
       this.http.post<AdminTournamentView>(
         `${API_BASE}/tournaments/${tournamentId}/rounds/${roundNumber}/swap`,
-        { matchId1, matchId2 },
+        { teamId1, teamId2 },
         { params: { token } }
       )
     );

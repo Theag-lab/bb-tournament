@@ -32,11 +32,11 @@ export async function swapMatches(c: Context) {
   const roundNumber = parseRoundNumber(c);
   const token = c.req.query('token');
   const body = await c.req.json<SwapRoundMatchesRequest>().catch(() => null);
-  if (!body?.matchId1 || !body?.matchId2) throw badRequest('matchId1 and matchId2 are required');
+  if (!body?.teamId1 || !body?.teamId2) throw badRequest('teamId1 and teamId2 are required');
 
   await storage.updateTournament(tournamentId, (t) => {
     requireAdmin(t, token);
-    swapRoundMatches(t, roundNumber, body.matchId1, body.matchId2);
+    swapRoundMatches(t, roundNumber, body.teamId1, body.teamId2);
   });
 
   const tournament = await storage.getTournament(tournamentId);

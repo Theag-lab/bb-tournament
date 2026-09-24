@@ -449,8 +449,8 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
 
   roundBusy = false;
   roundError: string | null = null;
-  swapMatchId1 = '';
-  swapMatchId2 = '';
+  swapTeamId1 = '';
+  swapTeamId2 = '';
 
   /** null = "follow the latest round" (auto-advances as new rounds get generated); a number pins it. */
   private pinnedRoundNumber: number | null = null;
@@ -470,6 +470,16 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
 
   roundMatches(roundNumber: number): PublicTournament['challenges'] {
     return this.tournament?.challenges.filter((c) => c.round === roundNumber) ?? [];
+  }
+
+  /** Every coach in the round, each labeled with their current opponent, for the swap-opponent pickers. */
+  roundCoaches(roundNumber: number): { teamId: string; label: string }[] {
+    const rows: { teamId: string; label: string }[] = [];
+    for (const c of this.roundMatches(roundNumber)) {
+      rows.push({ teamId: c.team1Id, label: `${this.teamCoach(c.team1Id)} (vs ${this.teamCoach(c.team2Id)})` });
+      rows.push({ teamId: c.team2Id, label: `${this.teamCoach(c.team2Id)} (vs ${this.teamCoach(c.team1Id)})` });
+    }
+    return rows;
   }
 
   get isTeamFormat(): boolean {
@@ -627,7 +637,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   }
 
   async swapMatches(roundNumber: number): Promise<void> {
-    if (!this.swapMatchId1 || !this.swapMatchId2) return;
+    if (!this.swapTeamId1 || !this.swapTeamId2) return;
     this.roundBusy = true;
     this.roundError = null;
     try {
@@ -635,11 +645,11 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
         this.tournamentId,
         this.token,
         roundNumber,
-        this.swapMatchId1,
-        this.swapMatchId2
+        this.swapTeamId1,
+        this.swapTeamId2
       );
-      this.swapMatchId1 = '';
-      this.swapMatchId2 = '';
+      this.swapTeamId1 = '';
+      this.swapTeamId2 = '';
     } catch (err) {
       this.roundError = extractErrorMessage(err);
     } finally {

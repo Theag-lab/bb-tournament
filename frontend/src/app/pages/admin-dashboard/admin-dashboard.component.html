@@ -424,25 +424,26 @@
 
         <ng-container *ngIf="r.status === 'draft'">
           <div class="actions" style="margin-bottom: 0.75rem">
-            <select [(ngModel)]="swapMatchId1" [name]="'swap1-' + r.number">
-              <option value="" disabled selected>Match A</option>
-              <option *ngFor="let m of roundMatches(r.number); trackBy: trackById" [value]="m.id">
-                {{ teamName(m.team1Id) }} vs {{ teamName(m.team2Id) }}
+            <select [(ngModel)]="swapTeamId1" [name]="'swap1-' + r.number">
+              <option value="" disabled selected>Coach A</option>
+              <option *ngFor="let coach of roundCoaches(r.number)" [value]="coach.teamId">
+                {{ coach.label }}
               </option>
             </select>
-            <select [(ngModel)]="swapMatchId2" [name]="'swap2-' + r.number">
-              <option value="" disabled selected>Match B</option>
-              <option *ngFor="let m of roundMatches(r.number); trackBy: trackById" [value]="m.id">
-                {{ teamName(m.team1Id) }} vs {{ teamName(m.team2Id) }}
+            <span>contre</span>
+            <select [(ngModel)]="swapTeamId2" [name]="'swap2-' + r.number">
+              <option value="" disabled selected>Coach B</option>
+              <option *ngFor="let coach of roundCoaches(r.number)" [value]="coach.teamId">
+                {{ coach.label }}
               </option>
             </select>
             <button
               type="button"
               class="btn"
-              [disabled]="roundBusy || !swapMatchId1 || !swapMatchId2"
+              [disabled]="roundBusy || !swapTeamId1 || !swapTeamId2 || swapTeamId1 === swapTeamId2"
               (click)="swapMatches(r.number)"
             >
-              Échanger les adversaires
+              Faire s'affronter ces deux coachs
             </button>
             <button type="button" class="btn btn-primary" [disabled]="roundBusy" (click)="launchRound(r.number)">
               Lancer la ronde {{ r.number }}

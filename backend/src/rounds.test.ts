@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_INDIVIDUAL_SCORING,
   DEFAULT_ROUND_TIMER,
+  type Challenge,
   type Pool,
   type Team,
   type Tournament,
 } from '@bb-tournament/shared';
-import { generateNextRound } from './rounds';
+import { generateNextRound, swapRoundMatches } from './rounds';
 import { launchKnockoutPhase } from './bracket';
 
 function team(id: string, poolId: string | null): Team {
@@ -131,5 +132,116 @@ describe('generateNextRound — mode dispatch', () => {
     // The bracket is already down to its final match; generating "round 3" should refuse — nothing left to pair.
     completeRound(t, 2);
     assert.throws(() => generateNextRound(t), /knockout_complete|déjà terminé/i);
+  });
+});
+
+function challenge(id: string, team1Id: string, team2Id: string, round: number): Challenge {
+  return {
+    id,
+    team1Id,
+    team2Id,
+    status: 'accepted',
+    round,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    result: null,
+  };
+}
+
+describe('swapRoundMatches', () => {
+  // Pilaf vs Theag, Thot vs Harti — picking Theag and Harti should produce Theag vs Harti,
+  // with the two leftover coaches (Pilaf and Thot) automatically paired together.
+  function roundOfFour(): Tournament {
+    return baseTournament({
+      mode: 'swiss',
+      teams: [team('pilaf', null), team('theag', null), team('thot', null), team('harti', null)],
+      rounds: [{ number: 1, status: 'draft' }],
+      challenges: [challenge('m1', 'pilaf', 'theag', 1), challenge('m2', 'thot', 'harti', 1)],
+    });
+  }
+
+  test('pits the two chosen coaches against each other, pairing the leftovers together', () => {
+    const t = roundOfFour();
+    swapRoundMatches(t, 1, 'theag', 'harti');
+
+    const m1 = t.challenges.find((c) => c.id === 'm1')!;
+    const m2 = t.challenges.find((c) => c.id === 'm2')!;
+    assert.deepEqual(new Set([m1.team1Id, m1.team2Id]), new Set(['theag', 'harti']));
+    assert.deepEqual(new Set([m2.team1Id, m2.team2Id]), new Set(['pilaf', 'thot']));
+  });
+
+  test('works regardless of which side (team1/team2) each coach is currently on', () => {
+    const t = roundOfFour();
+    // 'pilaf' is a team1Id, 'harti' is a team2Id — opposite sides of their matches.
+    swapRoundMatches(t, 1, 'pilaf', 'harti');
+
+    const m1 = t.challenges.find((c) => c.id === 'm1')!;
+    const m2 = t.challenges.find((c) => c.id === 'm2')!;
+    assert.deepEqual(new Set([m1.team1Id, m1.team2Id]), new Set(['pilaf', 'harti']));
+    assert.deepEqual(new Set([m2.team1Id, m2.team2Id]), new Set(['thot', 'theag']));
+  });
+
+  test('rejects pairing a coach against themselves', () => {
+    const t = roundOfFour();
+    assert.throws(() => swapRoundMatches(t, 1, 'theag', 'theag'), /themselves/);
+  });
+
+  test('rejects two coaches already playing each other', () => {
+    const t = roundOfFour();
+    assert.throws(() => swapRoundMatches(t, 1, 'pilaf', 'theag'), /already playing/);
+  });
+
+  test('rejects editing a launched round', () => {
+    const t = roundOfFour();
+    t.rounds[0].status = 'launched';
+    assert.throws(() => swapRoundMatches(t, 1, 'theag', 'harti'), /round_not_draft|draft round/);
+  });
+
+  test('team format: rejects a swap that would pit two players from the same squad against each other', () => {
+    const t = baseTournament({
+      mode: 'swiss',
+      format: 'team',
+      squads: [
+        { id: 'sA', name: 'Squad A', createdAt: '2026-01-01T00:00:00.000Z' },
+        { id: 'sB', name: 'Squad B', createdAt: '2026-01-01T00:00:00.000Z' },
+      ],
+      teams: [
+        { ...team('a1', null), squadId: 'sA' },
+        { ...team('a2', null), squadId: 'sA' },
+        { ...team('b1', null), squadId: 'sB' },
+        { ...team('b2', null), squadId: 'sB' },
+      ],
+      rounds: [{ number: 1, status: 'draft' }],
+      challenges: [challenge('m1', 'a1', 'b1', 1), challenge('m2', 'a2', 'b2', 1)],
+    });
+
+    // Pairing a1 (squad A) against a2 (squad A) would leave b1 vs b2 — both same-squad matches.
+    assert.throws(() => swapRoundMatches(t, 1, 'a1', 'a2'), /same squad/);
+  });
+
+  test('team format: allows a swap that keeps both squads facing each other', () => {
+    const t = baseTournament({
+      mode: 'swiss',
+      format: 'team',
+      squads: [
+        { id: 'sA', name: 'Squad A', createdAt: '2026-01-01T00:00:00.000Z' },
+        { id: 'sB', name: 'Squad B', createdAt: '2026-01-01T00:00:00.000Z' },
+      ],
+      teams: [
+        { ...team('a1', null), squadId: 'sA' },
+        { ...team('a2', null), squadId: 'sA' },
+        { ...team('b1', null), squadId: 'sB' },
+        { ...team('b2', null), squadId: 'sB' },
+      ],
+      rounds: [{ number: 1, status: 'draft' }],
+      challenges: [challenge('m1', 'a1', 'b1', 1), challenge('m2', 'a2', 'b2', 1)],
+    });
+
+    // Pit a1 against b2 directly (both cross-squad) — leaves a2 vs b1, also cross-squad.
+    swapRoundMatches(t, 1, 'a1', 'b2');
+    const m1 = t.challenges.find((c) => c.id === 'm1')!;
+    const m2 = t.challenges.find((c) => c.id === 'm2')!;
+    assert.deepEqual(new Set([m1.team1Id, m1.team2Id]), new Set(['a1', 'b2']));
+    assert.deepEqual(new Set([m2.team1Id, m2.team2Id]), new Set(['a2', 'b1']));
   });
 });

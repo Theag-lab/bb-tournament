@@ -153,6 +153,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   busy = false;
   error: string | null = null;
   createdAdminLink: string | null = null;
+  createdAdminToken: string | null = null;
   createdTournamentId: string | null = null;
 
   joinTournamentId = '';
@@ -281,6 +282,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         qualifiersPerPool: this.isPoolsKnockout ? this.qualifiersPerPool : undefined,
       });
       this.createdTournamentId = res.tournamentId;
+      this.createdAdminToken = res.adminToken;
       this.createdAdminLink = adminUrl(res.tournamentId, res.adminToken);
     } catch (err) {
       this.error = extractErrorMessage(err);
@@ -305,6 +307,12 @@ export class HomeComponent implements OnInit, OnDestroy {
   goToScoreboard(): void {
     if (this.createdTournamentId) {
       this.router.navigate(['/tournaments', this.createdTournamentId]);
+    }
+  }
+
+  goToAdmin(): void {
+    if (this.createdTournamentId && this.createdAdminToken) {
+      this.router.navigate(['/tournaments', this.createdTournamentId, 'admin', this.createdAdminToken]);
     }
   }
 

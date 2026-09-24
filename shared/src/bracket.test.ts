@@ -79,6 +79,55 @@ describe('pairFirstKnockoutRound', () => {
       assert.notEqual(poolOfTeam.get(x), poolOfTeam.get(y));
     }
   });
+
+  test('reorders pairs to avoid a same-pool round-2 group, when enough other pairs exist to swap with', () => {
+    // 6 pools of 2 qualifiers (12 seeds, next power of two is 16 so the top 4 seeds get a bye):
+    // high-vs-low naturally leaves a same-pool round-2 group among the 4 round-1 pairs — a reorder
+    // among them should be able to fix this without touching any pair's own two teams.
+    const pools: [string, string][] = ['A', 'B', 'C', 'D', 'E', 'F'].flatMap((l) => [
+      [`${l}1`, l],
+      [`${l}2`, l],
+    ]);
+    const poolOfTeam = new Map(pools);
+    const seeds = ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'A2', 'B2', 'C2', 'D2', 'E2', 'F2'];
+    const { byes, pairs } = pairFirstKnockoutRound(seeds, poolOfTeam);
+    assert.equal(byes.length, 4);
+    assert.equal(pairs.length, 4);
+
+    for (let i = 0; i < pairs.length; i += 2) {
+      const group = [...pairs[i], ...pairs[i + 1]];
+      for (const x of group) {
+        for (const y of group) {
+          if (x === y) continue;
+          assert.notEqual(
+            poolOfTeam.get(x),
+            poolOfTeam.get(y),
+            `${x} and ${y} share a pool but could meet in round 2 (pairs ${i}/${i + 1})`
+          );
+        }
+      }
+    }
+  });
+
+  test('minimizes, but cannot always eliminate, a round-2 same-pool group when pools are too few', () => {
+    // 3 pools of 2 qualifiers, only 2 round-1 pairs among the 4 non-bye seeds: whichever pair
+    // arrangement is chosen, the pool that supplies 2 of those 4 seeds either meets itself in
+    // round 1 (which the round-1 pass avoids) or is guaranteed to meet again in round 2 — there's
+    // no third pair to swap with, so this is a real, unfixable case, not a bug.
+    const poolOfTeam = new Map([
+      ['A1', 'A'],
+      ['B1', 'B'],
+      ['C1', 'C'],
+      ['A2', 'A'],
+      ['B2', 'B'],
+      ['C2', 'C'],
+    ]);
+    const { byes, pairs } = pairFirstKnockoutRound(['A1', 'B1', 'C1', 'A2', 'B2', 'C2'], poolOfTeam);
+    assert.equal(byes.length, 2);
+    assert.equal(pairs.length, 2);
+    // Round 1 itself must still be clash-free.
+    for (const [x, y] of pairs) assert.notEqual(poolOfTeam.get(x), poolOfTeam.get(y));
+  });
 });
 
 function result(overrides: Partial<MatchResult> = {}): MatchResult {

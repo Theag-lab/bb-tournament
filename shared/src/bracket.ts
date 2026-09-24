@@ -42,7 +42,9 @@ export interface FirstRoundPairing {
  * Pairs the first knockout round from a seed list (best seed first): the top `computeByeCount`
  * seeds get a bye, the rest are paired strongest-vs-weakest among themselves (seed i vs seed
  * N-1-i). A best-effort local-swap pass then breaks up any pair that still shares a pool — not a
- * formal seeding guarantee, just a practical reduction of immediate pool rematches.
+ * formal seeding guarantee, just a practical reduction of immediate pool rematches. A second pass
+ * (`avoidRound2PoolClashes`) then does the same one round further out, since byes make it possible
+ * for two same-pool qualifiers to dodge each other in round 1 only to meet in round 2 instead.
  */
 export function pairFirstKnockoutRound(seeds: string[], poolOfTeam: Map<string, string>): FirstRoundPairing {
   const byeCount = computeByeCount(seeds.length);
@@ -68,7 +70,46 @@ export function pairFirstKnockoutRound(seeds: string[], poolOfTeam: Map<string, 
     }
   }
 
+  avoidRound2PoolClashes(byes, pairs, poolOfTeam);
+
   return { byes, pairs };
+}
+
+/**
+ * `generateKnockoutRound` advances byes (first) then round-1 winners (in `pairs` order) and pairs
+ * that advancing list two-by-two for round 2 — so e.g. `pairs[0]` and `pairs[1]` could meet in
+ * round 2 regardless of who wins each (with one bye slotting into the first group when there's an
+ * odd number of byes). This reorders `pairs` to break up any such round-2 group where both sides
+ * could still share a pool. Reordering whole pairs (rather than individual teams) can't reintroduce
+ * a round-1 clash, since each pair's own two teams always travel together, and byes' own relative
+ * order never matters (see `buildKnockoutSeeds`). Best-effort, like the round-1 pass above: with
+ * few enough pools feeding the bracket, some round-2 same-pool group can be mathematically
+ * unavoidable (e.g. a single pool supplying most of the remaining, non-bye seeds).
+ */
+function avoidRound2PoolClashes(byes: string[], pairs: [string, string][], poolOfTeam: Map<string, string>): void {
+  const segmentStart = byes.length;
+  const totalSlots = segmentStart + pairs.length;
+  const slotAt = (globalIndex: number): string[] =>
+    globalIndex < segmentStart ? [byes[globalIndex]] : pairs[globalIndex - segmentStart];
+  const poolsOf = (slot: string[]) => slot.map((id) => poolOfTeam.get(id));
+  const clash = (x: string[], y: string[]) => poolsOf(x).some((p) => poolsOf(y).includes(p));
+  const partnerOf = (globalIndex: number): number => (globalIndex % 2 === 0 ? globalIndex + 1 : globalIndex - 1);
+
+  for (let k = 0; k < pairs.length; k++) {
+    const globalIndex = segmentStart + k;
+    const partnerIndex = partnerOf(globalIndex);
+    if (partnerIndex >= totalSlots || !clash(pairs[k], slotAt(partnerIndex))) continue;
+
+    for (let m = 0; m < pairs.length; m++) {
+      if (m === k || segmentStart + m === partnerIndex) continue;
+      [pairs[k], pairs[m]] = [pairs[m], pairs[k]];
+      const mPartnerIndex = partnerOf(segmentStart + m);
+      const kFixed = !clash(pairs[k], slotAt(partnerIndex));
+      const mStillOk = mPartnerIndex >= totalSlots || !clash(pairs[m], slotAt(mPartnerIndex));
+      if (kFixed && mStillOk) break;
+      [pairs[k], pairs[m]] = [pairs[m], pairs[k]]; // revert
+    }
+  }
 }
 
 function stableRandomWinner(team1Id: string, team2Id: string): string {

@@ -68,7 +68,7 @@ export function generateNextRound(t: Tournament): void {
   let candidateIds = t.teams.map((tm) => tm.id).filter((id) => !lockedTeamIds.has(id));
   candidateIds =
     roundNumber > 1
-      ? computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING)
+      ? computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? [])
           .map((s) => s.teamId)
           .filter((id) => !lockedTeamIds.has(id))
       : shuffle(candidateIds);
@@ -139,9 +139,12 @@ function generateNextTeamRound(t: Tournament): void {
   const squadOrder = computeSquadStandings(t.squads, t.teams, t.challenges, scoring).map((s) => s.squadId);
   const squadPairs = pairInOrder(squadOrder, priorSquadOpponents);
 
-  const individualOrder = computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING).map(
-    (s) => s.teamId
-  );
+  const individualOrder = computeStandings(
+    t.teams,
+    t.challenges,
+    t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
+    t.customStatCategories ?? []
+  ).map((s) => s.teamId);
 
   const newChallenges: Challenge[] = [];
   for (const [squadA, squadB] of squadPairs) {

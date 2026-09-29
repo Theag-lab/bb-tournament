@@ -93,7 +93,7 @@ export function launchKnockoutPhase(t: Tournament): void {
         'pool_too_small'
       );
     }
-    const ranked = computeStandings(poolTeams, t.challenges, config).map((s) => s.teamId);
+    const ranked = computeStandings(poolTeams, t.challenges, config, t.customStatCategories ?? []).map((s) => s.teamId);
     poolQualifiers.push({ poolId: pool.id, teamIds: ranked.slice(0, t.qualifiersPerPool!) });
     for (const team of poolTeams) poolOfTeam.set(team.id, pool.id);
   }

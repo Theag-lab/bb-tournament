@@ -139,6 +139,7 @@ function result(overrides: Partial<MatchResult> = {}): MatchResult {
     team2Cas: 0,
     team1Agg: 0,
     team2Agg: 0,
+    customStats: {},
     concededByTeamId: null,
     team1Points: 0,
     team2Points: 0,

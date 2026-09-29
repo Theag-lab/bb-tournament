@@ -4,11 +4,21 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   ALL_TIEBREAKER_CRITERIA,
+  CUSTOM_STAT_NAME_MAX_LENGTH,
+  CUSTOM_STAT_PRECISION_MAX_LENGTH,
+  MAX_CUSTOM_STAT_CATEGORIES,
+  MAX_SCORING_MULTIPLIER,
+  MIN_SCORING_MULTIPLIER,
   ORGANIZER_COACH_NAME_MAX_LENGTH,
   TOURNAMENT_DESCRIPTION_MAX_LENGTH,
+  customTiebreakerCategoryId,
+  customTiebreakerCriterion,
   type AdminTeamView,
   type AdminTournamentView,
+  type CustomStatCategoryConfig,
+  type CustomStatCategoryInput,
   type IndividualScoringConfig,
+  type MatchSheetConfig,
   type Pool,
   type PublicTournament,
   type RoundInfo,
@@ -29,7 +39,7 @@ import { TeamImportComponent } from './team-import/team-import.component';
 
 const POLL_INTERVAL_MS = 60000;
 
-type AdminTab = 'overview' | 'rounds' | 'teams' | 'squads' | 'pools' | 'bracket' | 'challenges';
+type AdminTab = 'overview' | 'rounds' | 'teams' | 'squads' | 'pools' | 'bracket' | 'challenges' | 'matchSheet';
 
 function cloneIndividualScoring(config: IndividualScoringConfig): IndividualScoringConfig {
   return {
@@ -41,7 +51,7 @@ function cloneIndividualScoring(config: IndividualScoringConfig): IndividualScor
   };
 }
 
-export const TIEBREAKER_LABELS: Record<TiebreakerCriterion, string> = {
+export const TIEBREAKER_LABELS: Record<Exclude<TiebreakerCriterion, `custom:${string}`>, string> = {
   head_to_head: 'Confrontation directe',
   fewest_td_conceded: 'TD encaissés (moins = mieux)',
   most_td_scored: 'TD marqués (plus = mieux)',
@@ -51,6 +61,14 @@ export const TIEBREAKER_LABELS: Record<TiebreakerCriterion, string> = {
   net_agg: "Différentiel d'agressions",
   random: 'Au pif (stable)',
 };
+
+function cloneMatchSheetConfig(config: MatchSheetConfig): MatchSheetConfig {
+  return { td: { ...config.td }, cas: { ...config.cas }, agg: { ...config.agg } };
+}
+
+function cloneCustomStatCategories(categories: CustomStatCategoryConfig[]): CustomStatCategoryConfig[] {
+  return categories.map((c) => ({ ...c, rawPoints: { ...c.rawPoints } }));
+}
 
 interface DerivedLookups {
   tournament: AdminTournamentView | null;
@@ -204,6 +222,8 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
         this.organizerCoachNameDraft = this.tournament.organizerCoachName;
         if (this.tournament.squadScoring) this.squadScoringDraft = { ...this.tournament.squadScoring };
         this.individualScoringDraft = cloneIndividualScoring(this.tournament.individualScoring);
+        this.matchSheetDraft = cloneMatchSheetConfig(this.tournament.matchSheetConfig);
+        this.customStatCategoriesDraft = cloneCustomStatCategories(this.tournament.customStatCategories);
         this.roundTimerDurationMinutesDraft = Math.round(this.tournament.roundTimer.durationSeconds / 60);
       }
       this.loadError = null;
@@ -856,21 +876,42 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   readonly bracketTeamName = (teamId: string) => this.teamName(teamId);
   readonly bracketTeamRace = (teamId: string) => this.teamRace(teamId);
 
-  readonly tiebreakerLabels = TIEBREAKER_LABELS;
   readonly allTiebreakerCriteria = ALL_TIEBREAKER_CRITERIA;
 
   individualScoringDraft: IndividualScoringConfig | null = null;
   savingIndividualScoring = false;
   individualScoringError: string | null = null;
 
+  /** Enabled custom stat categories only — a disabled one has no meaningful net-diff to break ties with. */
+  private get enabledCustomStatCategories(): CustomStatCategoryConfig[] {
+    return this.tournament?.customStatCategories.filter((c) => c.enabled) ?? [];
+  }
+
+  tiebreakerLabel(criterion: TiebreakerCriterion): string {
+    const categoryId = customTiebreakerCategoryId(criterion);
+    if (categoryId !== null) {
+      const category = this.tournament?.customStatCategories.find((c) => c.id === categoryId);
+      return category ? `${category.name} (différentiel)` : 'Statistique personnalisée supprimée';
+    }
+    return TIEBREAKER_LABELS[criterion as Exclude<TiebreakerCriterion, `custom:${string}`>] ?? criterion;
+  }
+
   availableTiebreakers(): TiebreakerCriterion[] {
     const used = new Set(this.individualScoringDraft?.tiebreakers ?? []);
-    return this.allTiebreakerCriteria.filter((c) => !used.has(c));
+    const builtins = this.allTiebreakerCriteria.filter((c) => !used.has(c));
+    const customs = this.enabledCustomStatCategories
+      .map((c) => customTiebreakerCriterion(c.id))
+      .filter((c) => !used.has(c));
+    return [...builtins, ...customs];
   }
 
   addTiebreaker(criterion: string): void {
     if (!criterion || !this.individualScoringDraft) return;
-    if (!this.allTiebreakerCriteria.includes(criterion as TiebreakerCriterion)) return;
+    const categoryId = customTiebreakerCategoryId(criterion as TiebreakerCriterion);
+    const valid =
+      this.allTiebreakerCriteria.includes(criterion as TiebreakerCriterion) ||
+      (categoryId !== null && this.enabledCustomStatCategories.some((c) => c.id === categoryId));
+    if (!valid) return;
     this.individualScoringDraft.tiebreakers.push(criterion as TiebreakerCriterion);
   }
 
@@ -899,4 +940,77 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       this.savingIndividualScoring = false;
     }
   }
+
+  // ---- Match sheet config (built-in cas/agg/td display) ----
+
+  matchSheetDraft: MatchSheetConfig | null = null;
+  savingMatchSheet = false;
+  matchSheetError: string | null = null;
+  readonly customStatPrecisionMaxLength = CUSTOM_STAT_PRECISION_MAX_LENGTH;
+
+  async saveMatchSheetConfig(): Promise<void> {
+    if (!this.matchSheetDraft) return;
+    this.savingMatchSheet = true;
+    this.matchSheetError = null;
+    try {
+      this.tournament = await this.api.updateMatchSheetConfig(this.tournamentId, this.token, this.matchSheetDraft);
+      this.matchSheetDraft = cloneMatchSheetConfig(this.tournament.matchSheetConfig);
+    } catch (err) {
+      this.matchSheetError = extractErrorMessage(err);
+    } finally {
+      this.savingMatchSheet = false;
+    }
+  }
+
+  // ---- Custom stat categories ----
+
+  customStatCategoriesDraft: CustomStatCategoryConfig[] = [];
+  savingCustomStatCategories = false;
+  customStatCategoriesError: string | null = null;
+  readonly maxCustomStatCategories = MAX_CUSTOM_STAT_CATEGORIES;
+  readonly customStatNameMaxLength = CUSTOM_STAT_NAME_MAX_LENGTH;
+  readonly minScoringMultiplier = MIN_SCORING_MULTIPLIER;
+  readonly maxScoringMultiplier = MAX_SCORING_MULTIPLIER;
+
+  addCustomStatCategory(): void {
+    if (this.customStatCategoriesDraft.length >= this.maxCustomStatCategories) return;
+    this.customStatCategoriesDraft.push({
+      id: `new-${Date.now()}-${this.customStatCategoriesDraft.length}`,
+      name: '',
+      precision: '',
+      enabled: true,
+      rawPoints: { basis: 'total', multiplier: 0 },
+    });
+  }
+
+  removeCustomStatCategory(index: number): void {
+    this.customStatCategoriesDraft.splice(index, 1);
+  }
+
+  async saveCustomStatCategories(): Promise<void> {
+    this.savingCustomStatCategories = true;
+    this.customStatCategoriesError = null;
+    try {
+      const existingIds = new Set((this.tournament?.customStatCategories ?? []).map((c) => c.id));
+      const categories: CustomStatCategoryInput[] = this.customStatCategoriesDraft.map((c) => ({
+        id: existingIds.has(c.id) ? c.id : undefined,
+        name: c.name,
+        precision: c.precision,
+        enabled: c.enabled,
+        rawPoints: c.rawPoints,
+      }));
+      this.tournament = await this.api.updateCustomStatCategories(this.tournamentId, this.token, { categories });
+      this.customStatCategoriesDraft = cloneCustomStatCategories(this.tournament.customStatCategories);
+      this.individualScoringDraft = cloneIndividualScoring(this.tournament.individualScoring);
+    } catch (err) {
+      this.customStatCategoriesError = extractErrorMessage(err);
+    } finally {
+      this.savingCustomStatCategories = false;
+    }
+  }
+
+  // ---- Match sheet preview (fed with fake teams so the admin can see the resulting sheet) ----
+
+  readonly previewTeam1Id = 'preview-team-1';
+  readonly previewTeam2Id = 'preview-team-2';
 }

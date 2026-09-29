@@ -1,6 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  computeCustomStatLeaderboards,
   computeMatchScore,
   computeSquadStandings,
   computeStandings,
@@ -9,14 +10,27 @@ import {
   DEFAULT_INDIVIDUAL_SCORING,
 } from './scoring';
 import {
+  customTiebreakerCriterion,
   DEFAULT_SQUAD_SCORING,
   type Challenge,
+  type CustomStatCategoryConfig,
   type IndividualScoringConfig,
   type MatchResult,
   type Squad,
   type SubmitResultRequest,
   type Team,
 } from './types';
+
+function customCategory(overrides: Partial<CustomStatCategoryConfig> = {}): CustomStatCategoryConfig {
+  return {
+    id: 'interceptions',
+    name: 'Interceptions',
+    precision: '',
+    enabled: true,
+    rawPoints: { basis: 'total', multiplier: 0 },
+    ...overrides,
+  };
+}
 
 function config(overrides: Partial<IndividualScoringConfig> = {}): IndividualScoringConfig {
   return {
@@ -54,6 +68,7 @@ function matchResult(overrides: Partial<MatchResult> & Pick<MatchResult, 'team1T
     team2Cas: 0,
     team1Agg: 0,
     team2Agg: 0,
+    customStats: {},
     team1Points: 0,
     team2Points: 0,
     concededByTeamId: null,
@@ -570,5 +585,123 @@ describe('recomputeMatchPoints', () => {
     const { team1Points, team2Points } = recomputeMatchPoints(result, 't1', 't2', newCfg);
     assert.equal(team1Points, -99);
     assert.equal(team2Points, 10);
+  });
+});
+
+describe('custom stat categories', () => {
+  test('computeMatchScore records only enabled categories, defaulting missing values to 0', () => {
+    const categories = [customCategory({ id: 'int', enabled: true }), customCategory({ id: 'off', enabled: false })];
+    const score = computeMatchScore(
+      resultInput({ team1Td: 1, team2Td: 0, customStats: { int: { team1: 2, team2: 1 } } }),
+      't1',
+      't2',
+      config(),
+      categories
+    );
+    assert.deepEqual(score.customStats, { int: { team1: 2, team2: 1 } });
+    assert.equal((score.customStats as Record<string, unknown>)['off'], undefined);
+  });
+
+  test('a missing submitted value defaults to 0 for an enabled category', () => {
+    const categories = [customCategory({ id: 'int', enabled: true })];
+    const score = computeMatchScore(resultInput({ team1Td: 1, team2Td: 0 }), 't1', 't2', config(), categories);
+    assert.deepEqual(score.customStats, { int: { team1: 0, team2: 0 } });
+  });
+
+  test('a concession zeroes every enabled category regardless of what was submitted', () => {
+    const categories = [customCategory({ id: 'int', enabled: true })];
+    const score = computeMatchScore(
+      resultInput({ concededByTeamId: 't2', customStats: { int: { team1: 5, team2: 5 } } }),
+      't1',
+      't2',
+      config(),
+      categories
+    );
+    assert.deepEqual(score.customStats, { int: { team1: 0, team2: 0 } });
+  });
+
+  test('clamps negative/fractional custom stat inputs', () => {
+    const categories = [customCategory({ id: 'int', enabled: true })];
+    const score = computeMatchScore(
+      resultInput({ team1Td: 1, team2Td: 0, customStats: { int: { team1: -2, team2: 1.9 } } }),
+      't1',
+      't2',
+      config(),
+      categories
+    );
+    assert.deepEqual(score.customStats, { int: { team1: 0, team2: 1 } });
+  });
+
+  test('raw_points mode: a custom stat contributes points like td/cas/agg', () => {
+    const categories = [customCategory({ id: 'int', rawPoints: { basis: 'total', multiplier: 10 } })];
+    const cfg = config({ mode: 'raw_points', pointsWin: 0, pointsDraw: 0, pointsLoss: 0 });
+    const score = computeMatchScore(
+      resultInput({ team1Td: 1, team2Td: 0, customStats: { int: { team1: 2, team2: 0 } } }),
+      't1',
+      't2',
+      cfg,
+      categories
+    );
+    assert.equal(score.team1Points, 2 * 10);
+  });
+
+  test('points_tiebreaker mode: a custom stat never affects points directly, only via tiebreaker', () => {
+    const categories = [customCategory({ id: 'int', rawPoints: { basis: 'total', multiplier: 999 } })];
+    const cfg = config(); // points_tiebreaker
+    const score = computeMatchScore(
+      resultInput({ team1Td: 1, team2Td: 0, customStats: { int: { team1: 2, team2: 0 } } }),
+      't1',
+      't2',
+      cfg,
+      categories
+    );
+    assert.equal(score.team1Points, cfg.pointsWin);
+  });
+
+  test('computeStandings accumulates for/against per category and breaks ties via custom: criterion', () => {
+    const categories = [customCategory({ id: 'int' })];
+    const teams: Team[] = [{ id: 't1' } as Team, { id: 't2' } as Team];
+    const challenges: Challenge[] = [
+      completedChallenge(
+        't1',
+        't2',
+        1,
+        matchResult({ team1Td: 1, team2Td: 1, customStats: { int: { team1: 3, team2: 1 } } })
+      ),
+    ];
+    const cfg = config({ tiebreakers: [customTiebreakerCriterion('int')] });
+    const standings = computeStandings(teams, challenges, cfg, categories);
+    const s1 = standings.find((s) => s.teamId === 't1')!;
+    const s2 = standings.find((s) => s.teamId === 't2')!;
+    assert.deepEqual(s1.customStats['int'], { for: 3, against: 1 });
+    assert.deepEqual(s2.customStats['int'], { for: 1, against: 3 });
+    // Points are tied (both drew), so the 'int' net-diff tiebreaker must decide: t1 ranks first.
+    assert.equal(standings[0].teamId, 't1');
+  });
+
+  test('computeCustomStatLeaderboards ranks by total "for" value, most first', () => {
+    const categories = [customCategory({ id: 'int' })];
+    const teams: Team[] = [{ id: 't1' } as Team, { id: 't2' } as Team, { id: 't3' } as Team];
+    const challenges: Challenge[] = [
+      completedChallenge('t1', 't2', 1, matchResult({ team1Td: 1, team2Td: 0, customStats: { int: { team1: 5, team2: 1 } } })),
+      completedChallenge('t2', 't3', 2, matchResult({ team1Td: 1, team2Td: 0, customStats: { int: { team1: 2, team2: 0 } } })),
+    ];
+    const [leaderboard] = computeCustomStatLeaderboards(teams, challenges, categories);
+    assert.equal(leaderboard.categoryId, 'int');
+    assert.equal(leaderboard.name, 'Interceptions');
+    assert.deepEqual(
+      leaderboard.standings.map((s) => [s.teamId, s.total]),
+      [
+        ['t1', 5],
+        ['t2', 3], // 1 (against t1) + 2 (against t3)
+        ['t3', 0],
+      ]
+    );
+  });
+
+  test('computeCustomStatLeaderboards omits a disabled category entirely', () => {
+    const categories = [customCategory({ id: 'int', enabled: false })];
+    const teams: Team[] = [{ id: 't1' } as Team];
+    assert.deepEqual(computeCustomStatLeaderboards(teams, [], categories), []);
   });
 });

@@ -1,12 +1,15 @@
 import {
   AdminTournamentView,
+  CustomStatLeaderboard,
   DEFAULT_INDIVIDUAL_SCORING,
+  DEFAULT_MATCH_SHEET_CONFIG,
   DEFAULT_ROUND_TIMER,
   DEFAULT_SQUAD_SCORING,
   PoolStandingEntry,
   PublicTournament,
   SquadStandingEntry,
   Tournament,
+  computeCustomStatLeaderboards,
   computeSquadStandings,
   computeStandings,
 } from '@bb-tournament/shared';
@@ -17,16 +20,22 @@ function squadStandingsOf(t: Tournament): SquadStandingEntry[] {
   return computeSquadStandings(t.squads, t.teams, t.challenges, t.squadScoring ?? DEFAULT_SQUAD_SCORING);
 }
 
+function customStatLeaderboardsOf(t: Tournament): CustomStatLeaderboard[] {
+  return computeCustomStatLeaderboards(t.teams, t.challenges, t.customStatCategories ?? []);
+}
+
 /** Pool-scoped standings, only populated for 'pools_knockout' mode tournaments. */
 function poolStandingsOf(t: Tournament): PoolStandingEntry[] {
   if (t.mode !== 'pools_knockout') return [];
   const config = t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING;
+  const customStatCategories = t.customStatCategories ?? [];
   return t.pools.map((pool) => ({
     poolId: pool.id,
     standings: computeStandings(
       t.teams.filter((tm) => tm.poolId === pool.id),
       t.challenges,
-      config
+      config,
+      customStatCategories
     ),
   }));
 }
@@ -72,6 +81,8 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
     qualifiersPerPool: t.qualifiersPerPool,
     pools: t.pools,
     individualScoring: t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
+    matchSheetConfig: t.matchSheetConfig ?? DEFAULT_MATCH_SHEET_CONFIG,
+    customStatCategories: t.customStatCategories ?? [],
     roundTimer: t.roundTimer ?? DEFAULT_ROUND_TIMER,
     createdAt: t.createdAt,
     teams: t.teams.map((team) => {
@@ -101,9 +112,10 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
         updatedAt: c.updatedAt,
         result: c.result,
       })),
-    standings: computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING),
+    standings: computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? []),
     squadStandings: squadStandingsOf(t),
     poolStandings: poolStandingsOf(t),
+    customStatLeaderboards: customStatLeaderboardsOf(t),
     bracket,
     knockoutChampionTeamId: getKnockoutChampion(bracket),
   };
@@ -131,6 +143,8 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
     qualifiersPerPool: t.qualifiersPerPool,
     pools: t.pools,
     individualScoring: t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
+    matchSheetConfig: t.matchSheetConfig ?? DEFAULT_MATCH_SHEET_CONFIG,
+    customStatCategories: t.customStatCategories ?? [],
     roundTimer: t.roundTimer ?? DEFAULT_ROUND_TIMER,
     createdAt: t.createdAt,
     teams: t.teams.map((team) => ({
@@ -156,9 +170,10 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
       updatedAt: c.updatedAt,
       result: c.result,
     })),
-    standings: computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING),
+    standings: computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? []),
     squadStandings: squadStandingsOf(t),
     poolStandings: poolStandingsOf(t),
+    customStatLeaderboards: customStatLeaderboardsOf(t),
     bracket,
     knockoutChampionTeamId: getKnockoutChampion(bracket),
   };

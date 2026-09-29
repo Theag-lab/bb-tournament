@@ -4,46 +4,73 @@
     <input type="date" name="playedAt" [(ngModel)]="playedAt" required />
   </div>
 
-  <div class="field">
-    <label>Concession</label>
-    <select name="concededBy" [(ngModel)]="concededBy">
-      <option value="">Aucune, match joué jusqu'au bout</option>
-      <option value="team1">{{ team1Name }} concède (3-0 pour {{ team2Name }})</option>
-      <option value="team2">{{ team2Name }} concède (3-0 pour {{ team1Name }})</option>
-    </select>
-  </div>
-
-  <div class="score-grid" *ngIf="!isConcession">
+  <div class="score-grid">
     <div class="field">
-      <label>Touchdowns {{ team1Name }}</label>
+      <label>
+        Touchdowns {{ team1Name }}
+        <span class="precision" *ngIf="matchSheetConfig.td.precision">— {{ matchSheetConfig.td.precision }}</span>
+      </label>
       <input type="number" min="0" name="team1Td" [(ngModel)]="team1Td" />
     </div>
     <div class="field">
-      <label>Touchdowns {{ team2Name }}</label>
+      <label>
+        Touchdowns {{ team2Name }}
+        <span class="precision" *ngIf="matchSheetConfig.td.precision">— {{ matchSheetConfig.td.precision }}</span>
+      </label>
       <input type="number" min="0" name="team2Td" [(ngModel)]="team2Td" />
     </div>
-    <div class="field">
-      <label>Casualties infligées par {{ team1Name }}</label>
-      <input type="number" min="0" name="team1Cas" [(ngModel)]="team1Cas" />
-    </div>
-    <div class="field">
-      <label>Casualties infligées par {{ team2Name }}</label>
-      <input type="number" min="0" name="team2Cas" [(ngModel)]="team2Cas" />
-    </div>
-    <div class="field">
-      <label>Agressions infligées par {{ team1Name }}</label>
-      <input type="number" min="0" name="team1Agg" [(ngModel)]="team1Agg" />
-    </div>
-    <div class="field">
-      <label>Agressions infligées par {{ team2Name }}</label>
-      <input type="number" min="0" name="team2Agg" [(ngModel)]="team2Agg" />
-    </div>
-  </div>
 
-  <p class="muted" *ngIf="isConcession">
-    Score forcé à 3-0 (touchdowns, casualties et agressions) en faveur de l'équipe non-concédante, conformément au
-    règlement.
-  </p>
+    <ng-container *ngIf="matchSheetConfig.cas.enabled">
+      <div class="field">
+        <label>
+          Casualties infligées par {{ team1Name }}
+          <span class="precision" *ngIf="matchSheetConfig.cas.precision">— {{ matchSheetConfig.cas.precision }}</span>
+        </label>
+        <input type="number" min="0" name="team1Cas" [(ngModel)]="team1Cas" />
+      </div>
+      <div class="field">
+        <label>
+          Casualties infligées par {{ team2Name }}
+          <span class="precision" *ngIf="matchSheetConfig.cas.precision">— {{ matchSheetConfig.cas.precision }}</span>
+        </label>
+        <input type="number" min="0" name="team2Cas" [(ngModel)]="team2Cas" />
+      </div>
+    </ng-container>
+
+    <ng-container *ngIf="matchSheetConfig.agg.enabled">
+      <div class="field">
+        <label>
+          Agressions infligées par {{ team1Name }}
+          <span class="precision" *ngIf="matchSheetConfig.agg.precision">— {{ matchSheetConfig.agg.precision }}</span>
+        </label>
+        <input type="number" min="0" name="team1Agg" [(ngModel)]="team1Agg" />
+      </div>
+      <div class="field">
+        <label>
+          Agressions infligées par {{ team2Name }}
+          <span class="precision" *ngIf="matchSheetConfig.agg.precision">— {{ matchSheetConfig.agg.precision }}</span>
+        </label>
+        <input type="number" min="0" name="team2Agg" [(ngModel)]="team2Agg" />
+      </div>
+    </ng-container>
+
+    <ng-container *ngFor="let category of enabledCustomStatCategories">
+      <div class="field" *ngIf="customStats[category.id] as value">
+        <label>
+          {{ category.name }} — {{ team1Name }}
+          <span class="precision" *ngIf="category.precision">— {{ category.precision }}</span>
+        </label>
+        <input type="number" min="0" [name]="'custom1-' + category.id" [(ngModel)]="value.team1" />
+      </div>
+      <div class="field" *ngIf="customStats[category.id] as value">
+        <label>
+          {{ category.name }} — {{ team2Name }}
+          <span class="precision" *ngIf="category.precision">— {{ category.precision }}</span>
+        </label>
+        <input type="number" min="0" [name]="'custom2-' + category.id" [(ngModel)]="value.team2" />
+      </div>
+    </ng-container>
+  </div>
 
   <button type="submit" class="btn btn-primary" [disabled]="busy">{{ submitLabel }}</button>
 </form>

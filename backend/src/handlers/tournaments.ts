@@ -2,9 +2,13 @@ import type { Context } from 'hono';
 import { v4 as uuidv4 } from 'uuid';
 import {
   ALL_TIEBREAKER_CRITERIA,
+  CUSTOM_STAT_NAME_MAX_LENGTH,
+  CUSTOM_STAT_PRECISION_MAX_LENGTH,
   DEFAULT_INDIVIDUAL_SCORING,
+  DEFAULT_MATCH_SHEET_CONFIG,
   DEFAULT_ROUND_TIMER,
   DEFAULT_SQUAD_SCORING,
+  MAX_CUSTOM_STAT_CATEGORIES,
   MAX_POOL_SIZE,
   MAX_QUALIFIERS_PER_POOL,
   MAX_ROUND_COUNT,
@@ -24,11 +28,17 @@ import {
   TOURNAMENT_ID_MAX_LENGTH,
   TOURNAMENT_ID_MIN_LENGTH,
   TOURNAMENT_ID_PATTERN,
+  customTiebreakerCategoryId,
+  customTiebreakerCriterion,
   recomputeMatchPoints,
   type CreateTournamentRequest,
   type CreateTournamentResponse,
+  type CustomStatCategoryConfig,
+  type CustomStatCategoryInput,
   type IndividualScoringConfig,
   type IndividualScoringMode,
+  type MatchSheetConfig,
+  type MatchSheetFieldConfig,
   type RawPointsComponent,
   type RawPointsStatBasis,
   type RoundTimerState,
@@ -36,7 +46,9 @@ import {
   type Tournament,
   type TournamentFormat,
   type TournamentMode,
+  type UpdateCustomStatCategoriesRequest,
   type UpdateIndividualScoringRequest,
+  type UpdateMatchSheetConfigRequest,
   type UpdateRoundTimerRequest,
   type UpdateTournamentDescriptionRequest,
   type UpdateDisplaySettingsRequest,
@@ -84,22 +96,35 @@ function validateRawPointsComponent(value: unknown, field: string): RawPointsCom
   return { basis, multiplier };
 }
 
-function validateTiebreakers(value: unknown): TiebreakerCriterion[] {
+/**
+ * `customStatCategoryIds` is the tournament's *current* custom stat category ids — a `custom:${id}`
+ * criterion is only valid while that category still exists, so deleting a category also
+ * invalidates any tiebreaker entry referencing it (the admin would need to remove it from the list
+ * before saving, same as any other now-invalid input).
+ */
+function validateTiebreakers(value: unknown, customStatCategoryIds: string[]): TiebreakerCriterion[] {
   if (!Array.isArray(value)) {
     throw badRequest('tiebreakers must be an array', 'invalid_individual_scoring');
   }
+  const validCustomCriteria = new Set(customStatCategoryIds.map((id) => customTiebreakerCriterion(id)));
   for (const item of value) {
-    if (!ALL_TIEBREAKER_CRITERIA.includes(item)) {
+    if (!ALL_TIEBREAKER_CRITERIA.includes(item) && !validCustomCriteria.has(item)) {
       throw badRequest(`Invalid tiebreaker criterion: ${item}`, 'invalid_individual_scoring');
     }
   }
   return value as TiebreakerCriterion[];
 }
 
-/** Merges a partial scoring override onto a base config, validating every field it touches. */
+/**
+ * Merges a partial scoring override onto a base config, validating every field it touches.
+ * `customStatCategoryIds` (the tournament's current custom stat categories) is only needed to
+ * validate any `custom:${id}` tiebreaker entries in `partial.tiebreakers` — omit it (defaults to
+ * none) wherever the tournament has no custom stat categories, e.g. in tests.
+ */
 export function mergeIndividualScoring(
   base: IndividualScoringConfig,
-  partial: Partial<IndividualScoringConfig> | null | undefined
+  partial: Partial<IndividualScoringConfig> | null | undefined,
+  customStatCategoryIds: string[] = []
 ): IndividualScoringConfig {
   const merged: IndividualScoringConfig = { ...base, ...(partial ?? {}) };
 
@@ -110,7 +135,7 @@ export function mergeIndividualScoring(
   validateScoringPoints(merged.pointsDraw, 'pointsDraw');
   validateScoringPoints(merged.pointsLoss, 'pointsLoss');
   validateScoringPoints(merged.pointsConcessionPenalty, 'pointsConcessionPenalty');
-  merged.tiebreakers = validateTiebreakers(merged.tiebreakers);
+  merged.tiebreakers = validateTiebreakers(merged.tiebreakers, customStatCategoryIds);
   merged.td = validateRawPointsComponent(merged.td, 'td');
   merged.cas = validateRawPointsComponent(merged.cas, 'cas');
   merged.agg = validateRawPointsComponent(merged.agg, 'agg');
@@ -131,7 +156,8 @@ function recomputeAllMatchPoints(t: Tournament): void {
       challenge.result,
       challenge.team1Id,
       challenge.team2Id,
-      t.individualScoring
+      t.individualScoring,
+      t.customStatCategories ?? []
     );
     challenge.result.team1Points = team1Points;
     challenge.result.team2Points = team2Points;
@@ -269,6 +295,8 @@ export async function createTournament(c: Context) {
     pools: [],
     knockoutSeeds: null,
     individualScoring: mergeIndividualScoring(DEFAULT_INDIVIDUAL_SCORING, body?.individualScoring),
+    matchSheetConfig: DEFAULT_MATCH_SHEET_CONFIG,
+    customStatCategories: [],
     roundTimer: DEFAULT_ROUND_TIMER,
     adminToken: uuidv4(),
     createdAt: now,
@@ -433,7 +461,148 @@ export async function updateIndividualScoring(c: Context) {
 
   await storage.updateTournament(id, (t) => {
     requireAdmin(t, token);
-    t.individualScoring = mergeIndividualScoring(t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, body);
+    const customStatCategoryIds = (t.customStatCategories ?? []).map((c) => c.id);
+    t.individualScoring = mergeIndividualScoring(t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, body, customStatCategoryIds);
+    recomputeAllMatchPoints(t);
+  });
+
+  const tournament = await storage.getTournament(id);
+  return c.json(toAdminTournamentView(tournament));
+}
+
+/** Validates one built-in match-sheet field's partial update (precision length, enabled type). */
+function mergeMatchSheetFieldConfig(
+  base: MatchSheetFieldConfig,
+  partial: Partial<MatchSheetFieldConfig> | undefined,
+  field: string
+): MatchSheetFieldConfig {
+  const merged = { ...base, ...(partial ?? {}) };
+  if (typeof merged.enabled !== 'boolean') {
+    throw badRequest(`${field}.enabled must be a boolean`, 'invalid_match_sheet_config');
+  }
+  if (typeof merged.precision !== 'string' || merged.precision.length > CUSTOM_STAT_PRECISION_MAX_LENGTH) {
+    throw badRequest(
+      `${field}.precision must be a string of at most ${CUSTOM_STAT_PRECISION_MAX_LENGTH} characters`,
+      'invalid_match_sheet_config'
+    );
+  }
+  return merged;
+}
+
+export function mergeMatchSheetConfig(
+  base: MatchSheetConfig,
+  partial: UpdateMatchSheetConfigRequest | null | undefined
+): MatchSheetConfig {
+  const tdPrecision = partial?.td?.precision ?? base.td.precision;
+  if (typeof tdPrecision !== 'string' || tdPrecision.length > CUSTOM_STAT_PRECISION_MAX_LENGTH) {
+    throw badRequest(`td.precision must be a string of at most ${CUSTOM_STAT_PRECISION_MAX_LENGTH} characters`, 'invalid_match_sheet_config');
+  }
+  return {
+    td: { precision: tdPrecision },
+    cas: mergeMatchSheetFieldConfig(base.cas, partial?.cas, 'cas'),
+    agg: mergeMatchSheetFieldConfig(base.agg, partial?.agg, 'agg'),
+  };
+}
+
+export async function updateMatchSheetConfig(c: Context) {
+  const id = c.req.param('tournamentId')!;
+  const token = c.req.query('token');
+  const body = await c.req.json<UpdateMatchSheetConfigRequest>().catch(() => null);
+
+  await storage.updateTournament(id, (t) => {
+    requireAdmin(t, token);
+    t.matchSheetConfig = mergeMatchSheetConfig(t.matchSheetConfig ?? DEFAULT_MATCH_SHEET_CONFIG, body);
+  });
+
+  const tournament = await storage.getTournament(id);
+  return c.json(toAdminTournamentView(tournament));
+}
+
+function validateCustomStatCategoryInput(input: unknown, existingIds: Set<string>): CustomStatCategoryConfig {
+  if (!input || typeof input !== 'object') {
+    throw badRequest('Each custom stat category must be an object', 'invalid_custom_stat_categories');
+  }
+  const { id, name, precision, enabled, rawPoints } = input as Partial<CustomStatCategoryInput>;
+
+  if (id !== undefined && (typeof id !== 'string' || !existingIds.has(id))) {
+    throw badRequest(`Unknown custom stat category id: ${id}`, 'invalid_custom_stat_categories');
+  }
+  const trimmedName = typeof name === 'string' ? name.trim() : '';
+  if (!trimmedName || trimmedName.length > CUSTOM_STAT_NAME_MAX_LENGTH) {
+    throw badRequest(
+      `Each custom stat category needs a name of 1-${CUSTOM_STAT_NAME_MAX_LENGTH} characters`,
+      'invalid_custom_stat_categories'
+    );
+  }
+  if (typeof precision !== 'string' || precision.length > CUSTOM_STAT_PRECISION_MAX_LENGTH) {
+    throw badRequest(
+      `Each custom stat category's precision must be a string of at most ${CUSTOM_STAT_PRECISION_MAX_LENGTH} characters`,
+      'invalid_custom_stat_categories'
+    );
+  }
+  if (typeof enabled !== 'boolean') {
+    throw badRequest('Each custom stat category needs an enabled boolean', 'invalid_custom_stat_categories');
+  }
+
+  return {
+    id: id ?? uuidv4(),
+    name: trimmedName,
+    precision,
+    enabled,
+    rawPoints: validateRawPointsComponent(rawPoints, 'rawPoints'),
+  };
+}
+
+/**
+ * Whole-list replace: validates and returns the full new category list. Existing ids referenced in
+ * `body.categories` must belong to `existing` (an admin can't just make up an id to overwrite
+ * someone else's category); ids omitted from the new list are simply dropped (their historical
+ * match data stays in old MatchResult.customStats entries, just no longer surfaced anywhere).
+ */
+export function mergeCustomStatCategories(
+  existing: CustomStatCategoryConfig[],
+  body: UpdateCustomStatCategoriesRequest | null | undefined
+): CustomStatCategoryConfig[] {
+  const categories = body?.categories;
+  if (!Array.isArray(categories)) {
+    throw badRequest('categories must be an array', 'invalid_custom_stat_categories');
+  }
+  if (categories.length > MAX_CUSTOM_STAT_CATEGORIES) {
+    throw badRequest(`At most ${MAX_CUSTOM_STAT_CATEGORIES} custom stat categories are allowed`, 'invalid_custom_stat_categories');
+  }
+  const existingIds = new Set(existing.map((c) => c.id));
+  const resolved = categories.map((input) => validateCustomStatCategoryInput(input, existingIds));
+
+  const names = new Set<string>();
+  for (const category of resolved) {
+    const key = category.name.toLowerCase();
+    if (names.has(key)) {
+      throw badRequest(`Duplicate custom stat category name: ${category.name}`, 'invalid_custom_stat_categories');
+    }
+    names.add(key);
+  }
+
+  return resolved;
+}
+
+export async function updateCustomStatCategories(c: Context) {
+  const id = c.req.param('tournamentId')!;
+  const token = c.req.query('token');
+  const body = await c.req.json<UpdateCustomStatCategoriesRequest>().catch(() => null);
+
+  await storage.updateTournament(id, (t) => {
+    requireAdmin(t, token);
+    t.customStatCategories = mergeCustomStatCategories(t.customStatCategories ?? [], body);
+
+    // A category that just got disabled (or removed) can't stay referenced by a tiebreaker, or it
+    // would silently compare as "always tied" — drop those entries the same way a deleted category
+    // already invalidates its tiebreaker (see validateTiebreakers).
+    const stillUsable = new Set(t.customStatCategories.filter((c) => c.enabled).map((c) => c.id));
+    t.individualScoring.tiebreakers = t.individualScoring.tiebreakers.filter((criterion) => {
+      const categoryId = customTiebreakerCategoryId(criterion);
+      return categoryId === null || stillUsable.has(categoryId);
+    });
+
     recomputeAllMatchPoints(t);
   });
 

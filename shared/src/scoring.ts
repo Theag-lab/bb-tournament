@@ -1,5 +1,9 @@
 import {
   Challenge,
+  CustomStatCategoryConfig,
+  CustomStatLeaderboard,
+  CustomStatLeaderboardEntry,
+  CustomStatValue,
   IndividualScoringConfig,
   MatchResult,
   RawPointsComponent,
@@ -10,6 +14,8 @@ import {
   SubmitResultRequest,
   Team,
   TiebreakerCriterion,
+  customTiebreakerCategoryId,
+  isCustomTiebreakerCriterion,
 } from './types';
 
 export const CONCESSION_SCORE = 3;
@@ -39,6 +45,7 @@ export interface ComputedScore {
   team2Cas: number;
   team1Agg: number;
   team2Agg: number;
+  customStats: Record<string, CustomStatValue>;
   team1Points: number;
   team2Points: number;
 }
@@ -73,6 +80,8 @@ function computePointsFromStats(
   team2Cas: number,
   team1Agg: number,
   team2Agg: number,
+  customStats: Record<string, CustomStatValue>,
+  customStatCategories: CustomStatCategoryConfig[],
   team1Conceded: boolean,
   team2Conceded: boolean
 ): { team1Points: number; team2Points: number } {
@@ -91,6 +100,13 @@ function computePointsFromStats(
       rawPointsComponentValue(config.td, team2Td, team1Td) +
       rawPointsComponentValue(config.cas, team2Cas, team1Cas) +
       rawPointsComponentValue(config.agg, team2Agg, team1Agg);
+
+    for (const category of customStatCategories) {
+      const value = customStats[category.id];
+      if (!value) continue;
+      team1Points += rawPointsComponentValue(category.rawPoints, value.team1, value.team2);
+      team2Points += rawPointsComponentValue(category.rawPoints, value.team2, value.team1);
+    }
   }
 
   return { team1Points, team2Points };
@@ -99,16 +115,23 @@ function computePointsFromStats(
 /**
  * Applies NAF-style concession handling (forced 3-0 in the winner's favor)
  * and computes tournament points from the final score, per the tournament's IndividualScoringConfig.
+ * `customStatCategories` is the tournament's *current* category list — only categories still
+ * `enabled` there get their submitted value recorded (an id absent from the current list, e.g. one
+ * deleted since, is simply dropped); a concession records no custom stats at all (0-0 for every
+ * category), same spirit as forcing a fixed 3-0 for TD/Cas/Agg but with no made-up NAF number to
+ * force for a category we know nothing about.
  */
 export function computeMatchScore(
   input: SubmitResultRequest,
   team1Id: string,
   team2Id: string,
-  config: IndividualScoringConfig
+  config: IndividualScoringConfig,
+  customStatCategories: CustomStatCategoryConfig[] = []
 ): ComputedScore {
   let team1Td: number, team2Td: number, team1Cas: number, team2Cas: number, team1Agg: number, team2Agg: number;
   let team1Conceded = false;
   let team2Conceded = false;
+  const customStats: Record<string, CustomStatValue> = {};
 
   if (input.concededByTeamId) {
     if (input.concededByTeamId !== team1Id && input.concededByTeamId !== team2Id) {
@@ -122,6 +145,9 @@ export function computeMatchScore(
     team2Cas = team1Conceded ? CONCESSION_SCORE : 0;
     team1Agg = team1Conceded ? 0 : CONCESSION_SCORE;
     team2Agg = team1Conceded ? CONCESSION_SCORE : 0;
+    for (const category of customStatCategories) {
+      if (category.enabled) customStats[category.id] = { team1: 0, team2: 0 };
+    }
   } else {
     team1Td = Math.max(0, Math.trunc(input.team1Td));
     team2Td = Math.max(0, Math.trunc(input.team2Td));
@@ -129,6 +155,14 @@ export function computeMatchScore(
     team2Cas = Math.max(0, Math.trunc(input.team2Cas));
     team1Agg = Math.max(0, Math.trunc(input.team1Agg));
     team2Agg = Math.max(0, Math.trunc(input.team2Agg));
+    for (const category of customStatCategories) {
+      if (!category.enabled) continue;
+      const raw = input.customStats?.[category.id];
+      customStats[category.id] = {
+        team1: Math.max(0, Math.trunc(raw?.team1 ?? 0)),
+        team2: Math.max(0, Math.trunc(raw?.team2 ?? 0)),
+      };
+    }
   }
 
   const { team1Points, team2Points } = computePointsFromStats(
@@ -139,24 +173,28 @@ export function computeMatchScore(
     team2Cas,
     team1Agg,
     team2Agg,
+    customStats,
+    customStatCategories,
     team1Conceded,
     team2Conceded
   );
 
-  return { team1Td, team2Td, team1Cas, team2Cas, team1Agg, team2Agg, team1Points, team2Points };
+  return { team1Td, team2Td, team1Cas, team2Cas, team1Agg, team2Agg, customStats, team1Points, team2Points };
 }
 
 /**
  * Recomputes a completed match's team1Points/team2Points from its already-recorded raw stats,
- * per a (possibly newly-changed) IndividualScoringConfig — used when the admin edits the
- * tournament's scoring config, so already-played matches immediately reflect the new rules instead
- * of staying frozen at whatever config was active when they were submitted.
+ * per a (possibly newly-changed) IndividualScoringConfig and/or CustomStatCategoryConfig list —
+ * used when the admin edits the tournament's scoring config, so already-played matches immediately
+ * reflect the new rules instead of staying frozen at whatever config was active when they were
+ * submitted.
  */
 export function recomputeMatchPoints(
   result: MatchResult,
   team1Id: string,
   team2Id: string,
-  config: IndividualScoringConfig
+  config: IndividualScoringConfig,
+  customStatCategories: CustomStatCategoryConfig[] = []
 ): { team1Points: number; team2Points: number } {
   const team1Conceded = result.concededByTeamId === team1Id;
   const team2Conceded = result.concededByTeamId === team2Id;
@@ -168,6 +206,8 @@ export function recomputeMatchPoints(
     result.team2Cas,
     result.team1Agg,
     result.team2Agg,
+    result.customStats ?? {},
+    customStatCategories,
     team1Conceded,
     team2Conceded
   );
@@ -186,10 +226,14 @@ export function stableRandomKey(teamId: string): number {
   return hash;
 }
 
-/** One comparator per selectable TiebreakerCriterion except 'head_to_head', which needs the
- * match list rather than just the two aggregate StandingEntry — handled separately below.
+/** One comparator per selectable built-in TiebreakerCriterion except 'head_to_head' (needs the
+ * match list rather than just the two aggregate StandingEntry) and `custom:${id}` (needs the
+ * category id, handled separately below) — both handled separately in computeStandings.
  * More info wins (returns < 0 means `a` ranks first). */
-const TIEBREAKER_COMPARATORS: Record<Exclude<TiebreakerCriterion, 'head_to_head'>, (a: StandingEntry, b: StandingEntry) => number> = {
+const TIEBREAKER_COMPARATORS: Record<
+  Exclude<TiebreakerCriterion, 'head_to_head' | `custom:${string}`>,
+  (a: StandingEntry, b: StandingEntry) => number
+> = {
   fewest_td_conceded: (a, b) => a.tdAgainst - b.tdAgainst,
   most_td_scored: (a, b) => b.tdFor - a.tdFor,
   opponent_score: (a, b) => b.opponentScore - a.opponentScore,
@@ -198,6 +242,15 @@ const TIEBREAKER_COMPARATORS: Record<Exclude<TiebreakerCriterion, 'head_to_head'
   net_agg: (a, b) => b.aggFor - b.aggAgainst - (a.aggFor - a.aggAgainst),
   random: (a, b) => stableRandomKey(a.teamId) - stableRandomKey(b.teamId),
 };
+
+/** Net-diff comparator for a `custom:${categoryId}` tiebreaker — same convention as net_td/net_cas/net_agg. */
+function compareCustomStat(categoryId: string, a: StandingEntry, b: StandingEntry): number {
+  const statA = a.customStats[categoryId];
+  const statB = b.customStats[categoryId];
+  const netA = (statA?.for ?? 0) - (statA?.against ?? 0);
+  const netB = (statB?.for ?? 0) - (statB?.against ?? 0);
+  return netB - netA;
+}
 
 /**
  * Resolves head-to-head dominance between exactly two teams from their completed meetings only:
@@ -237,7 +290,12 @@ function compareHeadToHead(challenges: Challenge[], a: StandingEntry, b: Standin
  * tiebreakers (the score itself already encodes TD/CAS/Agg), so this only falls through to the
  * final stable-random tiebreak added for full determinism.
  */
-export function computeStandings(teams: Team[], challenges: Challenge[], config: IndividualScoringConfig): StandingEntry[] {
+export function computeStandings(
+  teams: Team[],
+  challenges: Challenge[],
+  config: IndividualScoringConfig,
+  customStatCategories: CustomStatCategoryConfig[] = []
+): StandingEntry[] {
   const byTeam = new Map<string, StandingEntry>();
   for (const team of teams) {
     byTeam.set(team.id, {
@@ -254,6 +312,7 @@ export function computeStandings(teams: Team[], challenges: Challenge[], config:
       aggAgainst: 0,
       gamesPlayed: 0,
       opponentScore: 0,
+      customStats: {},
     });
   }
 
@@ -280,6 +339,17 @@ export function computeStandings(teams: Team[], challenges: Challenge[], config:
     s2.aggAgainst += r.team1Agg;
     s1.gamesPlayed += 1;
     s2.gamesPlayed += 1;
+
+    for (const category of customStatCategories) {
+      const value = r.customStats?.[category.id];
+      if (!value) continue;
+      const e1 = (s1.customStats[category.id] ??= { for: 0, against: 0 });
+      const e2 = (s2.customStats[category.id] ??= { for: 0, against: 0 });
+      e1.for += value.team1;
+      e1.against += value.team2;
+      e2.for += value.team2;
+      e2.against += value.team1;
+    }
 
     // W/D/L is always the classic TD-based outcome, independent of the scoring mode/config — a
     // team's record shouldn't change just because the admin tweaks how many points a win is worth.
@@ -310,12 +380,57 @@ export function computeStandings(teams: Team[], challenges: Challenge[], config:
   return Array.from(byTeam.values()).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     for (const criterion of criteria) {
-      const cmp = criterion === 'head_to_head' ? compareHeadToHead(challenges, a, b) : TIEBREAKER_COMPARATORS[criterion](a, b);
+      const cmp = isCustomTiebreakerCriterion(criterion)
+        ? compareCustomStat(customTiebreakerCategoryId(criterion)!, a, b)
+        : criterion === 'head_to_head'
+          ? compareHeadToHead(challenges, a, b)
+          : TIEBREAKER_COMPARATORS[criterion](a, b);
       if (cmp !== 0) return cmp;
     }
     // Final deterministic fallback so equal totals never leave the order ambiguous, even if
     // 'random' wasn't explicitly configured (or raw_points mode, which has no tiebreaker list).
     return TIEBREAKER_COMPARATORS.random(a, b);
+  });
+}
+
+/**
+ * One standalone leaderboard per enabled custom stat category, ranked by each team's total "for"
+ * value (most first, not net diff — this is a plain "who racked up the most X" table, same spirit
+ * as a NAF major's "Most casualties" award, independent of the main points standings). Teams with
+ * no completed matches (or no recorded value for that category) are omitted rather than shown as a
+ * 0-way tie for last.
+ */
+export function computeCustomStatLeaderboards(
+  teams: Team[],
+  challenges: Challenge[],
+  customStatCategories: CustomStatCategoryConfig[]
+): CustomStatLeaderboard[] {
+  const enabled = customStatCategories.filter((c) => c.enabled);
+  if (enabled.length === 0) return [];
+
+  const totals = new Map<string, Map<string, number>>(); // categoryId -> teamId -> total
+  for (const category of enabled) totals.set(category.id, new Map());
+
+  for (const challenge of challenges) {
+    if (challenge.status !== 'completed' || !challenge.result) continue;
+    const r = challenge.result;
+    for (const category of enabled) {
+      const value = r.customStats?.[category.id];
+      if (!value) continue;
+      const byTeam = totals.get(category.id)!;
+      byTeam.set(challenge.team1Id, (byTeam.get(challenge.team1Id) ?? 0) + value.team1);
+      byTeam.set(challenge.team2Id, (byTeam.get(challenge.team2Id) ?? 0) + value.team2);
+    }
+  }
+
+  const teamIds = new Set(teams.map((t) => t.id));
+  return enabled.map((category) => {
+    const byTeam = totals.get(category.id)!;
+    const standings: CustomStatLeaderboardEntry[] = Array.from(byTeam.entries())
+      .filter(([teamId]) => teamIds.has(teamId))
+      .map(([teamId, total]) => ({ teamId, total }))
+      .sort((a, b) => b.total - a.total || stableRandomKey(a.teamId) - stableRandomKey(b.teamId));
+    return { categoryId: category.id, name: category.name, standings };
   });
 }
 

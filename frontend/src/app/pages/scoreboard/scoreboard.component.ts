@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   RACES,
+  type CustomStatLeaderboard,
   type Pool,
   type PublicTeam,
   type PublicTournament,
@@ -207,6 +208,15 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
 
   get showTeamNames(): boolean {
     return this.tournament?.showTeamNames ?? true;
+  }
+
+  /** Casualties/Aggressions rankings only make sense to show if the admin actually collects them. */
+  get casCollected(): boolean {
+    return this.tournament?.matchSheetConfig.cas.enabled ?? true;
+  }
+
+  get aggCollected(): boolean {
+    return this.tournament?.matchSheetConfig.agg.enabled ?? true;
   }
 
   /**
@@ -601,6 +611,10 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
 
   rankMedal(index: number): string {
     return index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+  }
+
+  customStatLeaderboards(): CustomStatLeaderboard[] {
+    return this.tournament?.customStatLeaderboards ?? [];
   }
 
   selectedPool: Pool | null = null;

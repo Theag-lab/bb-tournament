@@ -72,6 +72,14 @@
     >
       Défis libres ({{ freeChallenges().length }})
     </button>
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="activeAdminTab === 'matchSheet'"
+      (click)="activeAdminTab = 'matchSheet'"
+    >
+      Feuille de match
+    </button>
   </div>
 
   <ng-container *ngIf="activeAdminTab === 'overview'">
@@ -222,118 +230,6 @@
       </div>
 
       <p class="muted" *ngIf="t.teams.length === 0">Aucune équipe inscrite pour le moment.</p>
-    </section>
-
-    <section class="card" *ngIf="individualScoringDraft as scoring">
-      <h2>Barème de score individuel</h2>
-      <p class="muted">
-        Points individuels de chaque coach (indépendant du barème d'équipe le cas échéant). Le mode "points +
-        départage" attribue des points fixes par victoire/nul puis départage les égalités dans l'ordre choisi ; le
-        mode "points bruts" calcule directement un score total (ex. 400 pts pour une victoire + 3 pts par TD) et
-        ignore le départage.
-      </p>
-      <div class="alert alert-error" *ngIf="individualScoringError">{{ individualScoringError }}</div>
-
-      <div class="field">
-        <label for="scoring-mode">Mode de calcul</label>
-        <select id="scoring-mode" name="scoringMode" [(ngModel)]="scoring.mode">
-          <option value="points_tiebreaker">Points + départage</option>
-          <option value="raw_points">Points bruts</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="scoring-points-win">Points — victoire</label>
-        <input id="scoring-points-win" type="number" name="indivPointsWin" [(ngModel)]="scoring.pointsWin" />
-      </div>
-      <div class="field">
-        <label for="scoring-points-draw">Points — nul</label>
-        <input id="scoring-points-draw" type="number" name="indivPointsDraw" [(ngModel)]="scoring.pointsDraw" />
-      </div>
-      <div class="field" *ngIf="scoring.mode === 'points_tiebreaker'">
-        <label for="scoring-points-loss">Points — défaite</label>
-        <input id="scoring-points-loss" type="number" name="indivPointsLoss" [(ngModel)]="scoring.pointsLoss" />
-      </div>
-      <div class="field">
-        <label for="scoring-points-concession">Points — concession</label>
-        <input
-          id="scoring-points-concession"
-          type="number"
-          name="indivPointsConcession"
-          [(ngModel)]="scoring.pointsConcessionPenalty"
-        />
-      </div>
-
-      <ng-container *ngIf="scoring.mode === 'points_tiebreaker'">
-        <h3>Ordre de départage</h3>
-        <p class="muted">Appliqué dans cet ordre quand deux coachs sont à égalité de points.</p>
-        <ol class="tiebreaker-list">
-          <li *ngFor="let criterion of scoring.tiebreakers; let i = index; let last = last">
-            <span>{{ tiebreakerLabels[criterion] }}</span>
-            <span class="actions">
-              <button type="button" class="btn" [disabled]="i === 0" (click)="moveTiebreaker(i, -1)" title="Monter">↑</button>
-              <button type="button" class="btn" [disabled]="last" (click)="moveTiebreaker(i, 1)" title="Descendre">↓</button>
-              <button type="button" class="btn btn-danger" (click)="removeTiebreaker(i)" title="Retirer">Retirer</button>
-            </span>
-          </li>
-          <li *ngIf="scoring.tiebreakers.length === 0" class="muted">Aucun critère de départage configuré.</li>
-        </ol>
-        <div class="field" *ngIf="availableTiebreakers().length > 0">
-          <label for="scoring-add-tiebreaker">Ajouter un critère</label>
-          <select
-            id="scoring-add-tiebreaker"
-            #newTiebreaker
-            (change)="addTiebreaker(newTiebreaker.value); newTiebreaker.value = ''"
-          >
-            <option value="">— choisir —</option>
-            <option *ngFor="let c of availableTiebreakers()" [value]="c">{{ tiebreakerLabels[c] }}</option>
-          </select>
-        </div>
-      </ng-container>
-
-      <ng-container *ngIf="scoring.mode === 'raw_points'">
-        <h3>Composantes du score</h3>
-        <p class="muted">Multiplicateur à 0 = composante désactivée.</p>
-
-        <div class="field">
-          <label for="scoring-td-basis">TD — base</label>
-          <select id="scoring-td-basis" name="tdBasis" [(ngModel)]="scoring.td.basis">
-            <option value="total">Total marqué</option>
-            <option value="diff">Différentiel</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="scoring-td-mult">TD — points par unité</label>
-          <input id="scoring-td-mult" type="number" name="tdMultiplier" [(ngModel)]="scoring.td.multiplier" />
-        </div>
-
-        <div class="field">
-          <label for="scoring-cas-basis">Casses — base</label>
-          <select id="scoring-cas-basis" name="casBasis" [(ngModel)]="scoring.cas.basis">
-            <option value="total">Total infligé</option>
-            <option value="diff">Différentiel</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="scoring-cas-mult">Casses — points par unité</label>
-          <input id="scoring-cas-mult" type="number" name="casMultiplier" [(ngModel)]="scoring.cas.multiplier" />
-        </div>
-
-        <div class="field">
-          <label for="scoring-agg-basis">Agressions — base</label>
-          <select id="scoring-agg-basis" name="aggBasis" [(ngModel)]="scoring.agg.basis">
-            <option value="total">Total</option>
-            <option value="diff">Différentiel</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="scoring-agg-mult">Agressions — points par unité</label>
-          <input id="scoring-agg-mult" type="number" name="aggMultiplier" [(ngModel)]="scoring.agg.multiplier" />
-        </div>
-      </ng-container>
-
-      <button type="button" class="btn btn-primary" [disabled]="savingIndividualScoring" (click)="saveIndividualScoring()">
-        {{ savingIndividualScoring ? 'Enregistrement…' : 'Enregistrer le barème' }}
-      </button>
     </section>
   </ng-container>
 
@@ -489,6 +385,8 @@
             [team2Name]="teamName(row.challenge.team2Id)"
             [initial]="row.challenge.result"
             submitLabel="Forcer ce résultat"
+            [matchSheetConfig]="t.matchSheetConfig"
+            [customStatCategories]="t.customStatCategories"
             [busy]="actionBusy"
             (submitResult)="forceResult(row.challenge.id, $event)"
           ></app-match-result-form>
@@ -908,12 +806,271 @@
           [team2Name]="teamName(c.team2Id)"
           [initial]="c.result"
           submitLabel="Forcer ce résultat"
+          [matchSheetConfig]="t.matchSheetConfig"
+          [customStatCategories]="t.customStatCategories"
           [busy]="actionBusy"
           (submitResult)="forceResult(c.id, $event)"
         ></app-match-result-form>
       </div>
 
       <p class="muted" *ngIf="freeChallenges().length === 0">Aucun défi pour le moment.</p>
+    </section>
+  </ng-container>
+
+  <ng-container *ngIf="activeAdminTab === 'matchSheet'">
+    <section class="card" *ngIf="matchSheetDraft as sheet">
+      <h2>Champs de la feuille de match</h2>
+      <p class="muted">
+        Choisissez ce qui est affiché et collecté sur la feuille de match. Les touchdowns sont toujours obligatoires
+        (ils décident du résultat du match) ; casualties et agressions peuvent être désactivées. La "précision" est
+        une note affichée à côté du champ pour expliquer exactement ce qui doit être compté (ex. "uniquement les
+        blocages").
+      </p>
+      <div class="alert alert-error" *ngIf="matchSheetError">{{ matchSheetError }}</div>
+
+      <div class="field">
+        <label for="sheet-td-precision">Touchdowns — précision (optionnel)</label>
+        <input
+          id="sheet-td-precision"
+          type="text"
+          name="sheetTdPrecision"
+          [(ngModel)]="sheet.td.precision"
+          [maxlength]="customStatPrecisionMaxLength"
+        />
+      </div>
+
+      <label class="checkbox-field">
+        <input type="checkbox" name="sheetCasEnabled" [(ngModel)]="sheet.cas.enabled" />
+        <span>Afficher / collecter les casualties</span>
+      </label>
+      <div class="field" *ngIf="sheet.cas.enabled">
+        <label for="sheet-cas-precision">Casualties — précision (optionnel)</label>
+        <input
+          id="sheet-cas-precision"
+          type="text"
+          name="sheetCasPrecision"
+          placeholder="ex. uniquement les blocages"
+          [(ngModel)]="sheet.cas.precision"
+          [maxlength]="customStatPrecisionMaxLength"
+        />
+      </div>
+
+      <label class="checkbox-field">
+        <input type="checkbox" name="sheetAggEnabled" [(ngModel)]="sheet.agg.enabled" />
+        <span>Afficher / collecter les agressions</span>
+      </label>
+      <div class="field" *ngIf="sheet.agg.enabled">
+        <label for="sheet-agg-precision">Agressions — précision (optionnel)</label>
+        <input
+          id="sheet-agg-precision"
+          type="text"
+          name="sheetAggPrecision"
+          [(ngModel)]="sheet.agg.precision"
+          [maxlength]="customStatPrecisionMaxLength"
+        />
+      </div>
+
+      <button type="button" class="btn btn-primary" [disabled]="savingMatchSheet" (click)="saveMatchSheetConfig()">
+        {{ savingMatchSheet ? 'Enregistrement…' : 'Enregistrer les champs' }}
+      </button>
+    </section>
+
+    <section class="card">
+      <h2>Compteurs personnalisés ({{ customStatCategoriesDraft.length }} / {{ maxCustomStatCategories }})</h2>
+      <p class="muted">
+        Ajoutez vos propres statistiques (ex. "Interceptions", "Passes décisives"). Chacune peut être nommée,
+        précisée, contribuer aux points (mode "points bruts" du barème ci-dessous), servir de critère de départage, et
+        dispose automatiquement de son propre classement.
+      </p>
+      <div class="alert alert-error" *ngIf="customStatCategoriesError">{{ customStatCategoriesError }}</div>
+
+      <div class="custom-stat-row" *ngFor="let category of customStatCategoriesDraft; let i = index">
+        <div class="field">
+          <label [for]="'custom-name-' + i">Nom</label>
+          <input
+            [id]="'custom-name-' + i"
+            type="text"
+            [name]="'customName' + i"
+            [(ngModel)]="category.name"
+            [maxlength]="customStatNameMaxLength"
+            placeholder="ex. Interceptions"
+          />
+        </div>
+        <div class="field">
+          <label [for]="'custom-precision-' + i">Précision (optionnel)</label>
+          <input
+            [id]="'custom-precision-' + i"
+            type="text"
+            [name]="'customPrecision' + i"
+            [(ngModel)]="category.precision"
+            [maxlength]="customStatPrecisionMaxLength"
+            placeholder="ex. uniquement les passes décisives"
+          />
+        </div>
+        <label class="checkbox-field">
+          <input type="checkbox" [name]="'customEnabled' + i" [(ngModel)]="category.enabled" />
+          <span>Actif sur la feuille de match</span>
+        </label>
+        <div class="field">
+          <label [for]="'custom-basis-' + i">Contribution aux points — base</label>
+          <select [id]="'custom-basis-' + i" [name]="'customBasis' + i" [(ngModel)]="category.rawPoints.basis">
+            <option value="total">Total</option>
+            <option value="diff">Différentiel</option>
+          </select>
+        </div>
+        <div class="field">
+          <label [for]="'custom-mult-' + i">Points par unité (mode "points bruts" uniquement, 0 = désactivé)</label>
+          <input
+            [id]="'custom-mult-' + i"
+            type="number"
+            [min]="minScoringMultiplier"
+            [max]="maxScoringMultiplier"
+            [name]="'customMult' + i"
+            [(ngModel)]="category.rawPoints.multiplier"
+          />
+        </div>
+        <button type="button" class="btn btn-danger" (click)="removeCustomStatCategory(i)">Supprimer ce compteur</button>
+      </div>
+
+      <p class="muted" *ngIf="customStatCategoriesDraft.length === 0">Aucun compteur personnalisé pour le moment.</p>
+
+      <div class="actions" style="margin-top: 0.75rem">
+        <button
+          type="button"
+          class="btn"
+          [disabled]="customStatCategoriesDraft.length >= maxCustomStatCategories"
+          (click)="addCustomStatCategory()"
+        >
+          Ajouter un compteur
+        </button>
+        <button type="button" class="btn btn-primary" [disabled]="savingCustomStatCategories" (click)="saveCustomStatCategories()">
+          {{ savingCustomStatCategories ? 'Enregistrement…' : 'Enregistrer les compteurs' }}
+        </button>
+      </div>
+      <p class="muted" style="margin-top: 0.5rem">
+        Pour utiliser un compteur comme critère de départage, ajoutez-le dans "Ordre de départage" ci-dessous une fois
+        enregistré.
+      </p>
+    </section>
+
+    <section class="card" *ngIf="individualScoringDraft as scoring">
+      <h2>Barème de score individuel</h2>
+      <p class="muted">
+        Points individuels de chaque coach (indépendant du barème d'équipe le cas échéant). Le mode "points +
+        départage" attribue des points fixes par victoire/nul puis départage les égalités dans l'ordre choisi ; le
+        mode "points bruts" calcule directement un score total (ex. 400 pts pour une victoire + 3 pts par TD) et
+        ignore le départage.
+      </p>
+      <div class="alert alert-error" *ngIf="individualScoringError">{{ individualScoringError }}</div>
+
+      <div class="field">
+        <label for="scoring-mode">Mode de calcul</label>
+        <select id="scoring-mode" name="scoringMode" [(ngModel)]="scoring.mode">
+          <option value="points_tiebreaker">Points + départage</option>
+          <option value="raw_points">Points bruts</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="scoring-points-win">Points — victoire</label>
+        <input id="scoring-points-win" type="number" name="indivPointsWin" [(ngModel)]="scoring.pointsWin" />
+      </div>
+      <div class="field">
+        <label for="scoring-points-draw">Points — nul</label>
+        <input id="scoring-points-draw" type="number" name="indivPointsDraw" [(ngModel)]="scoring.pointsDraw" />
+      </div>
+      <div class="field" *ngIf="scoring.mode === 'points_tiebreaker'">
+        <label for="scoring-points-loss">Points — défaite</label>
+        <input id="scoring-points-loss" type="number" name="indivPointsLoss" [(ngModel)]="scoring.pointsLoss" />
+      </div>
+
+      <ng-container *ngIf="scoring.mode === 'points_tiebreaker'">
+        <h3>Ordre de départage</h3>
+        <p class="muted">Appliqué dans cet ordre quand deux coachs sont à égalité de points.</p>
+        <ol class="tiebreaker-list">
+          <li *ngFor="let criterion of scoring.tiebreakers; let i = index; let last = last">
+            <span>{{ tiebreakerLabel(criterion) }}</span>
+            <span class="actions">
+              <button type="button" class="btn" [disabled]="i === 0" (click)="moveTiebreaker(i, -1)" title="Monter">↑</button>
+              <button type="button" class="btn" [disabled]="last" (click)="moveTiebreaker(i, 1)" title="Descendre">↓</button>
+              <button type="button" class="btn btn-danger" (click)="removeTiebreaker(i)" title="Retirer">Retirer</button>
+            </span>
+          </li>
+          <li *ngIf="scoring.tiebreakers.length === 0" class="muted">Aucun critère de départage configuré.</li>
+        </ol>
+        <div class="field" *ngIf="availableTiebreakers().length > 0">
+          <label for="scoring-add-tiebreaker">Ajouter un critère</label>
+          <select
+            id="scoring-add-tiebreaker"
+            #newTiebreaker
+            (change)="addTiebreaker(newTiebreaker.value); newTiebreaker.value = ''"
+          >
+            <option value="">— choisir —</option>
+            <option *ngFor="let c of availableTiebreakers()" [value]="c">{{ tiebreakerLabel(c) }}</option>
+          </select>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="scoring.mode === 'raw_points'">
+        <h3>Composantes du score</h3>
+        <p class="muted">Multiplicateur à 0 = composante désactivée. Les compteurs personnalisés contribuent aussi (voir ci-dessus).</p>
+
+        <div class="field">
+          <label for="scoring-td-basis">TD — base</label>
+          <select id="scoring-td-basis" name="tdBasis" [(ngModel)]="scoring.td.basis">
+            <option value="total">Total marqué</option>
+            <option value="diff">Différentiel</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="scoring-td-mult">TD — points par unité</label>
+          <input id="scoring-td-mult" type="number" name="tdMultiplier" [(ngModel)]="scoring.td.multiplier" />
+        </div>
+
+        <div class="field">
+          <label for="scoring-cas-basis">Casses — base</label>
+          <select id="scoring-cas-basis" name="casBasis" [(ngModel)]="scoring.cas.basis">
+            <option value="total">Total infligé</option>
+            <option value="diff">Différentiel</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="scoring-cas-mult">Casses — points par unité</label>
+          <input id="scoring-cas-mult" type="number" name="casMultiplier" [(ngModel)]="scoring.cas.multiplier" />
+        </div>
+
+        <div class="field">
+          <label for="scoring-agg-basis">Agressions — base</label>
+          <select id="scoring-agg-basis" name="aggBasis" [(ngModel)]="scoring.agg.basis">
+            <option value="total">Total</option>
+            <option value="diff">Différentiel</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="scoring-agg-mult">Agressions — points par unité</label>
+          <input id="scoring-agg-mult" type="number" name="aggMultiplier" [(ngModel)]="scoring.agg.multiplier" />
+        </div>
+      </ng-container>
+
+      <button type="button" class="btn btn-primary" [disabled]="savingIndividualScoring" (click)="saveIndividualScoring()">
+        {{ savingIndividualScoring ? 'Enregistrement…' : 'Enregistrer le barème' }}
+      </button>
+    </section>
+
+    <section class="card" *ngIf="matchSheetDraft as previewSheet">
+      <h2>Exemple de feuille de match</h2>
+      <p class="muted">
+        Aperçu en direct de ce que verront les coachs, avec la configuration ci-dessus (avant même d'enregistrer).
+      </p>
+      <app-match-result-form
+        [team1Id]="previewTeam1Id"
+        [team2Id]="previewTeam2Id"
+        team1Name="Équipe A"
+        team2Name="Équipe B"
+        submitLabel="(Aperçu — non fonctionnel)"
+        [busy]="true"
+        [matchSheetConfig]="previewSheet"
+        [customStatCategories]="customStatCategoriesDraft"
+      ></app-match-result-form>
     </section>
   </ng-container>
 

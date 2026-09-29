@@ -34,6 +34,8 @@ app.patch('/tournaments/:tournamentId/display-settings', tournaments.updateDispl
 app.patch('/tournaments/:tournamentId/result-validation-settings', tournaments.updateResultValidationSettings);
 app.patch('/tournaments/:tournamentId/round-timer', tournaments.updateRoundTimer);
 app.patch('/tournaments/:tournamentId/individual-scoring', tournaments.updateIndividualScoring);
+app.patch('/tournaments/:tournamentId/match-sheet-config', tournaments.updateMatchSheetConfig);
+app.put('/tournaments/:tournamentId/custom-stat-categories', tournaments.updateCustomStatCategories);
 app.get('/tournaments/:tournamentId/naf-export', naf.exportNaf);
 
 app.post('/tournaments/:tournamentId/teams', teams.createTeam);

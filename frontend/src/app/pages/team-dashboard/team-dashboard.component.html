@@ -218,6 +218,8 @@
             [team2Id]="c.team2Id"
             [team1Name]="teamName(c.team1Id)"
             [team2Name]="teamName(c.team2Id)"
+            [matchSheetConfig]="tournament.matchSheetConfig"
+            [customStatCategories]="tournament.customStatCategories"
             [busy]="actionBusy"
             (submitResult)="submitResult(c.id, $event)"
           ></app-match-result-form>
@@ -250,6 +252,8 @@
             [team2Name]="teamName(c.team2Id)"
             [initial]="c.result"
             submitLabel="Envoyer la correction"
+            [matchSheetConfig]="tournament.matchSheetConfig"
+            [customStatCategories]="tournament.customStatCategories"
             [busy]="actionBusy"
             (submitResult)="submitResult(c.id, $event)"
           ></app-match-result-form>

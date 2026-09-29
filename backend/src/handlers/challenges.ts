@@ -4,6 +4,7 @@ import {
   Challenge,
   ChallengeActionRequest,
   CreateChallengeRequest,
+  CustomStatValue,
   DEFAULT_INDIVIDUAL_SCORING,
   SubmitResultRequest,
   Tournament,
@@ -133,9 +134,38 @@ export async function actionChallenge(c: Context) {
   return c.json(toPublicTournament(tournament, admin ? null : teamId ?? null));
 }
 
+/**
+ * Shape-only validation of the dynamic customStats bag — which category ids are actually
+ * meaningful (and enabled) depends on the tournament, so that filtering happens later inside the
+ * transaction (computeMatchScore only ever records categories from the tournament's *current*
+ * enabled list, silently ignoring any others sent here).
+ */
+function validateCustomStats(value: unknown): Record<string, CustomStatValue> | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null) throw badRequest('customStats must be an object');
+  const result: Record<string, CustomStatValue> = {};
+  for (const [categoryId, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!raw || typeof raw !== 'object') {
+      throw badRequest(`customStats.${categoryId} must be an object with team1 and team2`);
+    }
+    const { team1, team2 } = raw as Partial<CustomStatValue>;
+    for (const [side, v] of [
+      ['team1', team1],
+      ['team2', team2],
+    ] as const) {
+      if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) {
+        throw badRequest(`customStats.${categoryId}.${side} must be a non-negative number`);
+      }
+    }
+    result[categoryId] = { team1: team1 as number, team2: team2 as number };
+  }
+  return result;
+}
+
 function validateResultInput(body: Partial<SubmitResultRequest> | null): SubmitResultRequest {
   if (!body) throw badRequest('Result payload is required');
   const { team1Td, team2Td, team1Cas, team2Cas, team1Agg, team2Agg, concededByTeamId = null, playedAt } = body;
+  const customStats = validateCustomStats(body.customStats);
   if (concededByTeamId === null) {
     for (const [field, value] of [
       ['team1Td', team1Td],
@@ -169,8 +199,20 @@ function validateResultInput(body: Partial<SubmitResultRequest> | null): SubmitR
     team2Cas: team2Cas ?? 0,
     team1Agg: team1Agg ?? 0,
     team2Agg: team2Agg ?? 0,
+    customStats,
     concededByTeamId,
   };
+}
+
+function sameCustomStats(a: Record<string, CustomStatValue> | undefined, b: Record<string, CustomStatValue> | undefined): boolean {
+  const aKeys = Object.keys(a ?? {});
+  const bKeys = Object.keys(b ?? {});
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((key) => {
+    const av = a![key];
+    const bv = b?.[key];
+    return bv !== undefined && av.team1 === bv.team1 && av.team2 === bv.team2;
+  });
 }
 
 function sameResultValues(a: SubmitResultRequest, b: SubmitResultRequest): boolean {
@@ -182,7 +224,8 @@ function sameResultValues(a: SubmitResultRequest, b: SubmitResultRequest): boole
     a.team2Cas === b.team2Cas &&
     a.team1Agg === b.team1Agg &&
     a.team2Agg === b.team2Agg &&
-    a.concededByTeamId === b.concededByTeamId
+    a.concededByTeamId === b.concededByTeamId &&
+    sameCustomStats(a.customStats, b.customStats)
   );
 }
 
@@ -214,7 +257,8 @@ export async function submitResult(c: Context) {
       input,
       challenge.team1Id,
       challenge.team2Id,
-      t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING
+      t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
+      t.customStatCategories ?? []
     );
     const now = new Date().toISOString();
 
@@ -243,6 +287,7 @@ export async function submitResult(c: Context) {
         team2Cas: challenge.result.team2Cas,
         team1Agg: challenge.result.team1Agg,
         team2Agg: challenge.result.team2Agg,
+        customStats: challenge.result.customStats,
         concededByTeamId: challenge.result.concededByTeamId,
       };
       if (sameResultValues(previousInput, input)) {
@@ -342,7 +387,8 @@ export async function adminSetResult(c: Context) {
       input,
       challenge.team1Id,
       challenge.team2Id,
-      t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING
+      t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
+      t.customStatCategories ?? []
     );
     const now = new Date().toISOString();
     challenge.result = {

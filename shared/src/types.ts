@@ -6,6 +6,12 @@ export type ChallengeStatus =
   | 'awaiting_confirmation' // one side submitted a result, waiting for the other to confirm
   | 'completed';
 
+/** One side's tally for a single custom stat category (see CustomStatCategoryConfig), keyed by category id. */
+export interface CustomStatValue {
+  team1: number;
+  team2: number;
+}
+
 export interface MatchResult {
   playedAt: string; // date the match was actually played, YYYY-MM-DD, entered by whoever fills the sheet
   team1Td: number;
@@ -14,6 +20,11 @@ export interface MatchResult {
   team2Cas: number;
   team1Agg: number; // aggressions (blocks that could have caused a casualty) committed by team 1
   team2Agg: number;
+  // Admin-defined counters (see CustomStatCategoryConfig), keyed by category id. Only categories
+  // enabled at submission time are populated; a category removed later just leaves its old entries
+  // unread (computeStandings/leaderboards only ever iterate the tournament's CURRENT category
+  // list), so nothing needs backfilling or migrating when categories change.
+  customStats: Record<string, CustomStatValue>;
   concededByTeamId: string | null;
   team1Points: number;
   team2Points: number;
@@ -140,6 +151,12 @@ export const DEFAULT_SQUAD_SCORING: SquadScoringConfig = {
  * 'points_tiebreaker'`. Applied in the order given by `IndividualScoringConfig.tiebreakers`,
  * each one breaking ties left by the criteria before it.
  */
+/**
+ * `custom:${categoryId}` refers to one of the tournament's CustomStatCategoryConfig entries
+ * (net-diff based, more = ranks first — same convention as net_td/net_cas/net_agg) — not part of
+ * `ALL_TIEBREAKER_CRITERIA` since the set of valid ids is per-tournament and dynamic; validated
+ * separately (see mergeIndividualScoring) against the tournament's current category list.
+ */
 export type TiebreakerCriterion =
   | 'head_to_head'
   | 'fewest_td_conceded'
@@ -148,7 +165,8 @@ export type TiebreakerCriterion =
   | 'net_td'
   | 'net_cas'
   | 'net_agg'
-  | 'random';
+  | 'random'
+  | `custom:${string}`;
 
 export const ALL_TIEBREAKER_CRITERIA: TiebreakerCriterion[] = [
   'head_to_head',
@@ -160,6 +178,21 @@ export const ALL_TIEBREAKER_CRITERIA: TiebreakerCriterion[] = [
   'net_agg',
   'random',
 ];
+
+export const CUSTOM_TIEBREAKER_PREFIX = 'custom:';
+
+export function customTiebreakerCriterion(categoryId: string): TiebreakerCriterion {
+  return `${CUSTOM_TIEBREAKER_PREFIX}${categoryId}`;
+}
+
+export function isCustomTiebreakerCriterion(criterion: TiebreakerCriterion): criterion is `custom:${string}` {
+  return criterion.startsWith(CUSTOM_TIEBREAKER_PREFIX);
+}
+
+/** Extracts the category id from a `custom:${id}` tiebreaker criterion, or null for a built-in one. */
+export function customTiebreakerCategoryId(criterion: TiebreakerCriterion): string | null {
+  return isCustomTiebreakerCriterion(criterion) ? criterion.slice(CUSTOM_TIEBREAKER_PREFIX.length) : null;
+}
 
 export type IndividualScoringMode = 'points_tiebreaker' | 'raw_points';
 
@@ -198,6 +231,55 @@ export const MIN_SCORING_POINTS = -1000;
 export const MAX_SCORING_POINTS = 1000;
 export const MIN_SCORING_MULTIPLIER = -100;
 export const MAX_SCORING_MULTIPLIER = 100;
+
+/**
+ * Display/collection config for one built-in match-sheet field. `precision` is a short
+ * admin-written clarification shown next to the field's label on the sheet (e.g. "uniquement les
+ * blocages" for Casualties), purely informational — it never affects scoring. `enabled` controls
+ * whether the field is shown on the sheet and collected at all; disabling it doesn't erase
+ * already-recorded values on past matches, it just stops asking for new ones (they default to 0).
+ */
+export interface MatchSheetFieldConfig {
+  enabled: boolean;
+  precision: string;
+}
+
+/**
+ * Which built-in match-sheet fields are shown/collected, and how they're annotated. TD has no
+ * `enabled` toggle — it always decides the match outcome (win/draw/loss, and standings W/D/L),
+ * so it can never be turned off, only annotated.
+ */
+export interface MatchSheetConfig {
+  td: { precision: string };
+  cas: MatchSheetFieldConfig;
+  agg: MatchSheetFieldConfig;
+}
+
+export const DEFAULT_MATCH_SHEET_CONFIG: MatchSheetConfig = {
+  td: { precision: '' },
+  cas: { enabled: true, precision: '' },
+  agg: { enabled: true, precision: '' },
+};
+
+export const MAX_CUSTOM_STAT_CATEGORIES = 6;
+export const CUSTOM_STAT_NAME_MAX_LENGTH = 40;
+export const CUSTOM_STAT_PRECISION_MAX_LENGTH = 200;
+
+/**
+ * An admin-defined counter added to the match sheet on top of the built-in TD/Cas/Agg — e.g.
+ * "Interceptions" with a precision of "seulement les passes décisives". Referenced by id from
+ * three places: `MatchResult.customStats` (recorded per-match values), `RawPointsComponent`-style
+ * `rawPoints` here (its own contribution to individual points, same mechanism as td/cas/agg, only
+ * applied in 'raw_points' scoring mode), and `custom:${id}` tiebreaker criteria — plus it always
+ * gets its own standings table (see computeCustomStatLeaderboards) whenever `enabled`.
+ */
+export interface CustomStatCategoryConfig {
+  id: string;
+  name: string;
+  precision: string;
+  enabled: boolean;
+  rawPoints: RawPointsComponent;
+}
 
 export interface Team {
   id: string;
@@ -250,6 +332,8 @@ export interface Tournament {
   // phase; null while still in the pool phase. Its mere presence is the "phase transitioned" flag.
   knockoutSeeds: string[] | null;
   individualScoring: IndividualScoringConfig;
+  matchSheetConfig: MatchSheetConfig;
+  customStatCategories: CustomStatCategoryConfig[];
   roundTimer: RoundTimerState;
   adminToken: string;
   createdAt: string;
@@ -301,6 +385,20 @@ export interface StandingEntry {
   gamesPlayed: number;
   /** Sum of opponents' final tournament points (Buchholz-style strength-of-schedule tiebreaker). */
   opponentScore: number;
+  /** Per custom-stat-category totals (see CustomStatCategoryConfig), keyed by category id. */
+  customStats: Record<string, { for: number; against: number }>;
+}
+
+export interface CustomStatLeaderboardEntry {
+  teamId: string;
+  total: number; // sum of this team's own "for" value across all completed matches
+}
+
+/** One custom stat category's standalone leaderboard — ranked by total scored, most first. */
+export interface CustomStatLeaderboard {
+  categoryId: string;
+  name: string;
+  standings: CustomStatLeaderboardEntry[];
 }
 
 /** Squad-level equivalent of StandingEntry, only populated for 'team' format tournaments. */
@@ -374,6 +472,8 @@ export interface PublicTournament {
   qualifiersPerPool: number | null;
   pools: Pool[];
   individualScoring: IndividualScoringConfig;
+  matchSheetConfig: MatchSheetConfig;
+  customStatCategories: CustomStatCategoryConfig[];
   roundTimer: RoundTimerState;
   createdAt: string;
   teams: PublicTeam[];
@@ -381,6 +481,7 @@ export interface PublicTournament {
   standings: StandingEntry[];
   squadStandings: SquadStandingEntry[];
   poolStandings: PoolStandingEntry[];
+  customStatLeaderboards: CustomStatLeaderboard[];
   bracket: BracketRoundView[] | null;
   knockoutChampionTeamId: string | null;
 }
@@ -409,6 +510,8 @@ export interface AdminTournamentView {
   qualifiersPerPool: number | null;
   pools: Pool[];
   individualScoring: IndividualScoringConfig;
+  matchSheetConfig: MatchSheetConfig;
+  customStatCategories: CustomStatCategoryConfig[];
   roundTimer: RoundTimerState;
   createdAt: string;
   teams: AdminTeamView[];
@@ -416,6 +519,7 @@ export interface AdminTournamentView {
   standings: StandingEntry[];
   squadStandings: SquadStandingEntry[];
   poolStandings: PoolStandingEntry[];
+  customStatLeaderboards: CustomStatLeaderboard[];
   bracket: BracketRoundView[] | null;
   knockoutChampionTeamId: string | null;
 }
@@ -460,6 +564,31 @@ export interface CreateTournamentRequest {
 }
 
 export type UpdateIndividualScoringRequest = Partial<IndividualScoringConfig>;
+
+export interface UpdateMatchSheetConfigRequest {
+  td?: Partial<MatchSheetConfig['td']>;
+  cas?: Partial<MatchSheetFieldConfig>;
+  agg?: Partial<MatchSheetFieldConfig>;
+}
+
+/** `id` omitted = create a new category; `id` present = edit that existing one. */
+export interface CustomStatCategoryInput {
+  id?: string;
+  name: string;
+  precision: string;
+  enabled: boolean;
+  rawPoints: RawPointsComponent;
+}
+
+/**
+ * Whole-list replace rather than per-category CRUD endpoints — there are at most
+ * MAX_CUSTOM_STAT_CATEGORIES of them, so the admin UI always submits the full edited list
+ * (additions, edits, removals and reordering all in one call) rather than juggling separate
+ * create/update/delete/reorder requests for a handful of rows.
+ */
+export interface UpdateCustomStatCategoriesRequest {
+  categories: CustomStatCategoryInput[];
+}
 
 /**
  * Deliberately narrow charset (lowercase letters, digits, single hyphens between segments) so the
@@ -588,6 +717,9 @@ export interface SubmitResultRequest {
   team2Cas: number;
   team1Agg: number;
   team2Agg: number;
+  // Keyed by CustomStatCategoryConfig id; missing/omitted categories default to 0-0. Optional
+  // since older clients (and the concession path) never send it.
+  customStats?: Record<string, CustomStatValue>;
   concededByTeamId: string | null;
 }
 

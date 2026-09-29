@@ -2,6 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_INDIVIDUAL_SCORING,
+  DEFAULT_MATCH_SHEET_CONFIG,
   DEFAULT_ROUND_TIMER,
   type Challenge,
   type Pool,
@@ -53,6 +54,8 @@ function baseTournament(overrides: Partial<Tournament> = {}): Tournament {
     pools: [],
     knockoutSeeds: null,
     individualScoring: DEFAULT_INDIVIDUAL_SCORING,
+    matchSheetConfig: DEFAULT_MATCH_SHEET_CONFIG,
+    customStatCategories: [],
     roundTimer: DEFAULT_ROUND_TIMER,
     adminToken: 'admin-token',
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -87,6 +90,7 @@ function completeRound(t: Tournament, roundNumber: number): void {
       team2Cas: 0,
       team1Agg: 0,
       team2Agg: 0,
+      customStats: {},
       concededByTeamId: null,
       team1Points: 5,
       team2Points: 0,

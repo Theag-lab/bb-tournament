@@ -2,13 +2,24 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_INDIVIDUAL_SCORING,
+  DEFAULT_MATCH_SHEET_CONFIG,
   DEFAULT_ROUND_TIMER,
+  MAX_CUSTOM_STAT_CATEGORIES,
   MAX_ROUND_TIMER_SECONDS,
   MIN_ROUND_TIMER_SECONDS,
   ORGANIZER_COACH_NAME_MAX_LENGTH,
+  customTiebreakerCriterion,
+  type CustomStatCategoryConfig,
   type IndividualScoringConfig,
 } from '@bb-tournament/shared';
-import { computeNextRoundTimer, mergeIndividualScoring, resolvePoolsKnockoutConfig, validateOrganizerCoachName } from './tournaments';
+import {
+  computeNextRoundTimer,
+  mergeCustomStatCategories,
+  mergeIndividualScoring,
+  mergeMatchSheetConfig,
+  resolvePoolsKnockoutConfig,
+  validateOrganizerCoachName,
+} from './tournaments';
 import { AppError } from '../errors';
 
 describe('resolvePoolsKnockoutConfig', () => {
@@ -142,6 +153,138 @@ describe('mergeIndividualScoring', () => {
     assert.equal(merged.mode, 'raw_points');
     assert.equal(merged.pointsWin, 400);
     assert.equal(merged.td.multiplier, 3);
+  });
+
+  test('accepts a custom:${id} tiebreaker when the id is a known custom stat category', () => {
+    const merged = mergeIndividualScoring(
+      DEFAULT_INDIVIDUAL_SCORING,
+      { tiebreakers: [customTiebreakerCriterion('int')] },
+      ['int']
+    );
+    assert.deepEqual(merged.tiebreakers, [customTiebreakerCriterion('int')]);
+  });
+
+  test('rejects a custom:${id} tiebreaker for an id that is not a known custom stat category', () => {
+    assert.throws(
+      () => mergeIndividualScoring(DEFAULT_INDIVIDUAL_SCORING, { tiebreakers: [customTiebreakerCriterion('ghost')] }, ['int']),
+      AppError
+    );
+  });
+});
+
+function customCategory(overrides: Partial<CustomStatCategoryConfig> = {}): CustomStatCategoryConfig {
+  return {
+    id: 'int',
+    name: 'Interceptions',
+    precision: '',
+    enabled: true,
+    rawPoints: { basis: 'total', multiplier: 0 },
+    ...overrides,
+  };
+}
+
+describe('mergeMatchSheetConfig', () => {
+  test('returns the base config unchanged when given no override', () => {
+    assert.deepEqual(mergeMatchSheetConfig(DEFAULT_MATCH_SHEET_CONFIG, null), DEFAULT_MATCH_SHEET_CONFIG);
+  });
+
+  test('merges a partial cas/agg override without touching the other field', () => {
+    const merged = mergeMatchSheetConfig(DEFAULT_MATCH_SHEET_CONFIG, { cas: { enabled: false, precision: 'blocages only' } });
+    assert.equal(merged.cas.enabled, false);
+    assert.equal(merged.cas.precision, 'blocages only');
+    assert.deepEqual(merged.agg, DEFAULT_MATCH_SHEET_CONFIG.agg);
+  });
+
+  test('merges a partial field update (only precision) while keeping enabled', () => {
+    const merged = mergeMatchSheetConfig(DEFAULT_MATCH_SHEET_CONFIG, { agg: { precision: 'note' } as any });
+    assert.equal(merged.agg.enabled, DEFAULT_MATCH_SHEET_CONFIG.agg.enabled);
+    assert.equal(merged.agg.precision, 'note');
+  });
+
+  test('updates the TD precision note', () => {
+    const merged = mergeMatchSheetConfig(DEFAULT_MATCH_SHEET_CONFIG, { td: { precision: 'TD marqués uniquement' } });
+    assert.equal(merged.td.precision, 'TD marqués uniquement');
+  });
+
+  test('rejects a non-boolean enabled', () => {
+    assert.throws(() => mergeMatchSheetConfig(DEFAULT_MATCH_SHEET_CONFIG, { cas: { enabled: 'yes' as any, precision: '' } }), AppError);
+  });
+
+  test('rejects an over-length precision', () => {
+    assert.throws(
+      () => mergeMatchSheetConfig(DEFAULT_MATCH_SHEET_CONFIG, { cas: { enabled: true, precision: 'x'.repeat(1000) } }),
+      AppError
+    );
+  });
+});
+
+describe('mergeCustomStatCategories', () => {
+  test('creates new categories, assigning each a fresh id', () => {
+    const result = mergeCustomStatCategories([], { categories: [{ name: 'Interceptions', precision: '', enabled: true, rawPoints: { basis: 'total', multiplier: 1 } }] });
+    assert.equal(result.length, 1);
+    assert.ok(result[0].id);
+    assert.equal(result[0].name, 'Interceptions');
+  });
+
+  test('edits an existing category by id, preserving it across the update', () => {
+    const existing = [customCategory({ id: 'int', name: 'Interceptions' })];
+    const result = mergeCustomStatCategories(existing, {
+      categories: [{ id: 'int', name: 'Interceptions décisives', precision: 'passes décisives uniquement', enabled: true, rawPoints: { basis: 'total', multiplier: 2 } }],
+    });
+    assert.equal(result.length, 1);
+    assert.equal(result[0].id, 'int');
+    assert.equal(result[0].name, 'Interceptions décisives');
+  });
+
+  test('dropping a category from the list removes it', () => {
+    const existing = [customCategory({ id: 'int' }), customCategory({ id: 'sack', name: 'Sacks' })];
+    const result = mergeCustomStatCategories(existing, { categories: [{ id: 'int', name: 'Interceptions', precision: '', enabled: true, rawPoints: { basis: 'total', multiplier: 0 } }] });
+    assert.equal(result.length, 1);
+    assert.equal(result[0].id, 'int');
+  });
+
+  test('rejects an id that does not belong to an existing category', () => {
+    assert.throws(
+      () =>
+        mergeCustomStatCategories([], {
+          categories: [{ id: 'made-up', name: 'X', precision: '', enabled: true, rawPoints: { basis: 'total', multiplier: 0 } }],
+        }),
+      AppError
+    );
+  });
+
+  test('rejects a missing or empty name', () => {
+    assert.throws(
+      () => mergeCustomStatCategories([], { categories: [{ name: '  ', precision: '', enabled: true, rawPoints: { basis: 'total', multiplier: 0 } }] }),
+      AppError
+    );
+  });
+
+  test('rejects duplicate names (case-insensitive)', () => {
+    assert.throws(
+      () =>
+        mergeCustomStatCategories([], {
+          categories: [
+            { name: 'Interceptions', precision: '', enabled: true, rawPoints: { basis: 'total', multiplier: 0 } },
+            { name: 'INTERCEPTIONS', precision: '', enabled: true, rawPoints: { basis: 'total', multiplier: 0 } },
+          ],
+        }),
+      AppError
+    );
+  });
+
+  test('rejects more than MAX_CUSTOM_STAT_CATEGORIES entries', () => {
+    const categories = Array.from({ length: MAX_CUSTOM_STAT_CATEGORIES + 1 }, (_, i) => ({
+      name: `Stat ${i}`,
+      precision: '',
+      enabled: true,
+      rawPoints: { basis: 'total' as const, multiplier: 0 },
+    }));
+    assert.throws(() => mergeCustomStatCategories([], { categories }), AppError);
+  });
+
+  test('rejects a non-array categories field', () => {
+    assert.throws(() => mergeCustomStatCategories([], { categories: 'nope' as any }), AppError);
   });
 });
 

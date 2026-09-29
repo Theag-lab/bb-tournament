@@ -128,7 +128,7 @@
 
   <ng-container *ngIf="activeTab === 'awards'">
     <ng-container *ngIf="isTeamFormat">
-      <section class="card">
+      <section class="card" *ngIf="casCollected">
         <h2>🩸 Bashlord — par équipe</h2>
         <p class="muted">L'équipe qui a infligé le plus de casualties au total.</p>
         <div class="table-wrap" *ngIf="squadBashlordRanking().length > 0; else noSquadBashlord">
@@ -154,7 +154,7 @@
         </ng-template>
       </section>
 
-      <section class="card">
+      <section class="card" *ngIf="aggCollected">
         <h2>💥 AggroLord — par équipe</h2>
         <p class="muted">L'équipe qui a infligé le plus d'agressions au total.</p>
         <div class="table-wrap" *ngIf="squadAggroLordRanking().length > 0; else noSquadAggro">
@@ -207,7 +207,7 @@
       </section>
     </ng-container>
 
-    <section class="card">
+    <section class="card" *ngIf="casCollected">
       <h2>🩸 Bashlord{{ isTeamFormat ? ' — individuel' : '' }}</h2>
       <p class="muted">Le plus de casualties infligées.</p>
       <div class="table-wrap" *ngIf="bashlordRanking().length > 0; else noBashlord">
@@ -240,7 +240,7 @@
       </ng-template>
     </section>
 
-    <section class="card">
+    <section class="card" *ngIf="aggCollected">
       <h2>💥 AggroLord{{ isTeamFormat ? ' — individuel' : '' }}</h2>
       <p class="muted">Le plus d'agressions infligées.</p>
       <div class="table-wrap" *ngIf="aggroLordRanking().length > 0; else noAggro">
@@ -302,6 +302,38 @@
         </table>
       </div>
       <ng-template #noScorer>
+        <p class="muted">Aucun match joué pour le moment.</p>
+      </ng-template>
+    </section>
+
+    <section class="card" *ngFor="let board of customStatLeaderboards()">
+      <h2>🏆 {{ board.name }}</h2>
+      <div class="table-wrap" *ngIf="board.standings.length > 0; else noCustomStat">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Coach</th>
+              <th *ngIf="showTeamNames">Équipe</th>
+              <th>{{ board.name }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of board.standings; let i = index; trackBy: trackByTeamId">
+              <td>{{ rankMedal(i) }}</td>
+              <td [class.muted]="showTeamNames">
+                <ng-container *ngIf="showTeamNames">{{ teamCoach(s.teamId) }}</ng-container>
+                <button *ngIf="!showTeamNames" type="button" class="link-btn" (click)="openTeamById(s.teamId)">{{ teamCoach(s.teamId) }}</button>
+              </td>
+              <td *ngIf="showTeamNames">
+                <button type="button" class="link-btn" (click)="openTeamById(s.teamId)">{{ teamName(s.teamId) }}</button>
+              </td>
+              <td>{{ s.total }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noCustomStat>
         <p class="muted">Aucun match joué pour le moment.</p>
       </ng-template>
     </section>

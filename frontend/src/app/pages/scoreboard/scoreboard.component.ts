@@ -539,6 +539,35 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     return (this.tournament?.teams ?? []).filter((t) => t.squadId === this.selectedSquad!.id);
   }
 
+  /**
+   * Every round-based match played by any member of the selected squad, one row per match (i.e.
+   * per "board") — `teamId` is always the squad's own member, `opponentTeamId` the other side,
+   * regardless of which one is team1/team2 on the underlying challenge. Free (non-round) challenges
+   * don't apply here (squads only play round-based squad-vs-squad matchups).
+   */
+  selectedSquadMatches(): { roundNumber: number; challenge: PublicTournament['challenges'][number]; teamId: string; opponentTeamId: string }[] {
+    if (!this.selectedSquad) return [];
+    const squadId = this.selectedSquad.id;
+    const rows: { roundNumber: number; challenge: PublicTournament['challenges'][number]; teamId: string; opponentTeamId: string }[] = [];
+    for (const c of this.tournament?.challenges ?? []) {
+      if (c.round === null) continue;
+      const isTeam1 = this.teamSquadId(c.team1Id) === squadId;
+      const isTeam2 = this.teamSquadId(c.team2Id) === squadId;
+      if (!isTeam1 && !isTeam2) continue;
+      rows.push({
+        roundNumber: c.round,
+        challenge: c,
+        teamId: isTeam1 ? c.team1Id : c.team2Id,
+        opponentTeamId: isTeam1 ? c.team2Id : c.team1Id,
+      });
+    }
+    return rows.sort((a, b) => a.roundNumber - b.roundNumber || a.teamId.localeCompare(b.teamId));
+  }
+
+  trackBySquadMatchRow(_index: number, row: { challenge: { id: string } }): string {
+    return row.challenge.id;
+  }
+
   memberStanding(teamId: string): StandingEntry | null {
     return this.tournament?.standings.find((s) => s.teamId === teamId) ?? null;
   }

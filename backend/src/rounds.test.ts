@@ -9,7 +9,7 @@ import {
   type Team,
   type Tournament,
 } from '@bb-tournament/shared';
-import { generateNextRound, swapRoundMatches } from './rounds';
+import { cancelRoundLaunch, generateNextRound, swapRoundMatches } from './rounds';
 import { launchKnockoutPhase } from './bracket';
 
 function team(id: string, poolId: string | null): Team {
@@ -247,5 +247,72 @@ describe('swapRoundMatches', () => {
     const m2 = t.challenges.find((c) => c.id === 'm2')!;
     assert.deepEqual(new Set([m1.team1Id, m1.team2Id]), new Set(['a1', 'b2']));
     assert.deepEqual(new Set([m2.team1Id, m2.team2Id]), new Set(['a2', 'b1']));
+  });
+});
+
+describe('cancelRoundLaunch', () => {
+  function launchedRoundOfFour(): Tournament {
+    return baseTournament({
+      mode: 'swiss',
+      teams: [team('pilaf', null), team('theag', null), team('thot', null), team('harti', null)],
+      rounds: [{ number: 1, status: 'launched' }],
+      challenges: [challenge('m1', 'pilaf', 'theag', 1), challenge('m2', 'thot', 'harti', 1)],
+    });
+  }
+
+  test('reverts the last launched round back to draft', () => {
+    const t = launchedRoundOfFour();
+    cancelRoundLaunch(t, 1);
+    assert.equal(t.rounds[0].status, 'draft');
+  });
+
+  test('a cancelled round can be swapped again', () => {
+    const t = launchedRoundOfFour();
+    cancelRoundLaunch(t, 1);
+    swapRoundMatches(t, 1, 'theag', 'harti');
+    const m1 = t.challenges.find((c) => c.id === 'm1')!;
+    assert.deepEqual(new Set([m1.team1Id, m1.team2Id]), new Set(['theag', 'harti']));
+  });
+
+  test('rejects a round that is not launched (already draft)', () => {
+    const t = launchedRoundOfFour();
+    t.rounds[0].status = 'draft';
+    assert.throws(() => cancelRoundLaunch(t, 1), /not launched/);
+  });
+
+  test('rejects an earlier round once a later round already exists', () => {
+    const t = launchedRoundOfFour();
+    t.rounds.push({ number: 2, status: 'draft' });
+    t.challenges.push(challenge('m3', 'pilaf', 'thot', 2));
+    assert.throws(() => cancelRoundLaunch(t, 1), /last round/);
+  });
+
+  test('rejects once any match in the round has a result', () => {
+    const t = launchedRoundOfFour();
+    const m1 = t.challenges.find((c) => c.id === 'm1')!;
+    m1.status = 'awaiting_confirmation';
+    m1.result = {
+      playedAt: '2026-01-01',
+      team1Td: 2,
+      team2Td: 0,
+      team1Cas: 0,
+      team2Cas: 0,
+      team1Agg: 0,
+      team2Agg: 0,
+      customStats: {},
+      concededByTeamId: null,
+      team1Points: 5,
+      team2Points: 0,
+      submittedByTeamId: 'pilaf',
+      submittedAt: '2026-01-01T00:00:00.000Z',
+      confirmedByTeamId: null,
+      completedAt: null,
+    };
+    assert.throws(() => cancelRoundLaunch(t, 1), /has been played/);
+  });
+
+  test('rejects a nonexistent round number', () => {
+    const t = launchedRoundOfFour();
+    assert.throws(() => cancelRoundLaunch(t, 99), /last round/);
   });
 });

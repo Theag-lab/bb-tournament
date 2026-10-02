@@ -689,6 +689,31 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Cancelling a launch is only offered for the LAST round, and only while nothing in it has been
+   * played yet — see cancelRoundLaunch in the backend for why (an earlier round's pairing is
+   * already baked into any later round that exists, and un-launching doesn't undo a played match).
+   */
+  canCancelRoundLaunch(round: RoundInfo): boolean {
+    if (round.status !== 'launched') return false;
+    const rounds = this.tournament?.rounds ?? [];
+    const isLastRound = rounds.length > 0 && rounds[rounds.length - 1].number === round.number;
+    if (!isLastRound) return false;
+    return !this.roundMatches(round.number).some((c) => c.result !== null);
+  }
+
+  async cancelRoundLaunch(roundNumber: number): Promise<void> {
+    this.roundBusy = true;
+    this.roundError = null;
+    try {
+      this.tournament = await this.api.cancelRoundLaunch(this.tournamentId, this.token, roundNumber);
+    } catch (err) {
+      this.roundError = extractErrorMessage(err);
+    } finally {
+      this.roundBusy = false;
+    }
+  }
+
   squadBusy = false;
   squadError: string | null = null;
   newSquadName = '';

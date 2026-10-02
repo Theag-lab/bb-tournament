@@ -67,6 +67,7 @@ app.put('/tournaments/:tournamentId/challenges/:challengeId/result/admin', chall
 app.post('/tournaments/:tournamentId/rounds', rounds.generateRound);
 app.post('/tournaments/:tournamentId/rounds/:roundNumber/swap', rounds.swapMatches);
 app.post('/tournaments/:tournamentId/rounds/:roundNumber/launch', rounds.launch);
+app.post('/tournaments/:tournamentId/rounds/:roundNumber/cancel-launch', rounds.cancelLaunch);
 app.post('/tournaments/:tournamentId/knockout/launch', rounds.launchKnockout);
 
 export const handler = handle(app);

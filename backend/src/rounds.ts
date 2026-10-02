@@ -219,3 +219,27 @@ export function launchRound(t: Tournament, roundNumber: number): void {
   if (round.status === 'launched') throw forbidden('Round already launched', 'round_already_launched');
   round.status = 'launched';
 }
+
+/**
+ * Reverts the tournament's LAST launched round back to 'draft' so its pairings can be edited again
+ * (see swapRoundMatches, draft-only) — e.g. the admin launched it, then realised two coaches
+ * should be swapped. Only ever the last round: an earlier round has later rounds generated from
+ * its outcome, so un-launching it would leave those downstream rounds referencing a pairing that's
+ * no longer settled. Refuses once any of its matches has a result — the pairing is the only thing
+ * this undoes, not played results, and once that round's already being played it's too late to
+ * reshuffle it.
+ */
+export function cancelRoundLaunch(t: Tournament, roundNumber: number): void {
+  const lastRound = t.rounds[t.rounds.length - 1];
+  if (!lastRound || lastRound.number !== roundNumber) {
+    throw forbidden('Only the last round can be cancelled', 'not_last_round');
+  }
+  if (lastRound.status !== 'launched') {
+    throw forbidden('This round is not launched', 'round_not_launched');
+  }
+  const anyPlayed = t.challenges.some((c) => c.round === roundNumber && c.result !== null);
+  if (anyPlayed) {
+    throw forbidden('Cannot cancel a round once a match has been played', 'round_already_played');
+  }
+  lastRound.status = 'draft';
+}

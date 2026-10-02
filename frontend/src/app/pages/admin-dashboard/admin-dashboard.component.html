@@ -318,6 +318,16 @@
           </span>
         </div>
 
+        <div class="actions" style="margin-bottom: 0.75rem" *ngIf="canCancelRoundLaunch(r)">
+          <button type="button" class="btn btn-danger" [disabled]="roundBusy" (click)="cancelRoundLaunch(r.number)">
+            Annuler le lancement de la ronde {{ r.number }}
+          </button>
+          <p class="muted" style="margin: 0.3rem 0 0">
+            Repasse la ronde en brouillon (aucun match n'a encore été joué) — permet par exemple d'inverser deux
+            adversaires avant de relancer.
+          </p>
+        </div>
+
         <ng-container *ngIf="r.status === 'draft'">
           <div class="actions" style="margin-bottom: 0.75rem">
             <select [(ngModel)]="swapTeamId1" [name]="'swap1-' + r.number">

@@ -283,6 +283,16 @@ export class ApiService {
     );
   }
 
+  cancelRoundLaunch(tournamentId: string, token: string, roundNumber: number) {
+    return firstValueFrom(
+      this.http.post<AdminTournamentView>(
+        `${API_BASE}/tournaments/${tournamentId}/rounds/${roundNumber}/cancel-launch`,
+        {},
+        { params: { token } }
+      )
+    );
+  }
+
   createSquad(tournamentId: string, token: string, name: string) {
     const body: CreateSquadRequest = { name };
     return firstValueFrom(

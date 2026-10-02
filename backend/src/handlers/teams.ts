@@ -15,6 +15,7 @@ import {
   type Squad,
   type Team,
   type Tournament,
+  type TournamentFormat,
   type UpdateRosterStatusRequest,
 } from '@bb-tournament/shared';
 import * as storage from '../storage';
@@ -167,27 +168,74 @@ export async function createTeam(c: Context) {
   return c.json(response, 201);
 }
 
+export interface PrepareImportedTeamsOptions {
+  format?: TournamentFormat;
+  existingSquads?: Squad[];
+  squadSize?: number | null;
+}
+
 /**
  * Validates and prepares every row of a bulk import against the tournament's CURRENT team list,
  * pure and exported for direct unit testing. Fixed row shape: coachName, race, optional
- * nafNumber — team name is always the coach name (no separate team-name column). Returns every
- * validation error found (not just the first) so the caller can reject the whole batch with a
- * complete picture, and the ready-to-push `Team` objects for when there are none.
+ * nafNumber, plus a required squadName when `options.format === 'team'` (ignored entirely for
+ * 'individual', the default) — team name is always the coach name (no separate team-name column).
+ * A squadName is matched case-insensitively against `existingSquads` (joining it if found) or
+ * creates a new one otherwise, deduplicated across the batch so multiple rows naming the same new
+ * squad all land in it together; `squadSize` (if set) caps each squad's existing-plus-batch member
+ * count the same way single-team registration does. Returns every validation error found (not just
+ * the first) so the caller can reject the whole batch with a complete picture, the ready-to-push
+ * `Team` objects and any brand-new `Squad`s for when there are none.
  */
 export function prepareImportedTeams(
   existingTeams: Team[],
-  rows: { coachName?: string; race?: string; nafNumber?: string }[]
-): { errors: string[]; teams: Team[] } {
+  rows: { squadName?: string; coachName?: string; race?: string; nafNumber?: string }[],
+  options: PrepareImportedTeamsOptions = {}
+): { errors: string[]; teams: Team[]; newSquads: Squad[] } {
+  const format = options.format ?? 'individual';
+  const existingSquads = options.existingSquads ?? [];
+  const squadSize = options.squadSize ?? null;
+
   const now = new Date().toISOString();
   const errors: string[] = [];
   const prepared: Team[] = [];
+  const newSquads: Squad[] = [];
   const seenCoachNamesInBatch = new Set<string>();
   const seenTeamNamesInBatch = new Set<string>();
+  const squadIdByLowerName = new Map(existingSquads.map((s) => [s.name.toLowerCase(), s.id]));
+  const squadMemberCounts = new Map<string, number>(); // squadId -> existing + batch-so-far count
 
   rows.forEach((row, i) => {
     const lineNo = i + 1;
     const coachName = row?.coachName?.trim();
     const rawRace = row?.race?.trim();
+
+    let squadId: string | null = null;
+    if (format === 'team') {
+      const rawSquadName = row?.squadName?.trim();
+      if (!rawSquadName) {
+        errors.push(`Ligne ${lineNo} : nom d'escouade manquant`);
+        return;
+      }
+      if (rawSquadName.length > MAX_FIELD_LENGTH) {
+        errors.push(`Ligne ${lineNo} : nom d'escouade trop long (max ${MAX_FIELD_LENGTH} caractères)`);
+        return;
+      }
+      const lowerSquad = rawSquadName.toLowerCase();
+      squadId = squadIdByLowerName.get(lowerSquad) ?? null;
+      if (!squadId) {
+        const newSquad: Squad = { id: uuidv4(), name: rawSquadName, createdAt: now };
+        newSquads.push(newSquad);
+        squadIdByLowerName.set(lowerSquad, newSquad.id);
+        squadId = newSquad.id;
+      }
+      const currentCount =
+        squadMemberCounts.get(squadId) ?? existingTeams.filter((tm) => tm.squadId === squadId).length;
+      if (squadSize !== null && currentCount >= squadSize) {
+        errors.push(`Ligne ${lineNo} : escouade "${rawSquadName}" complète (max ${squadSize})`);
+        return;
+      }
+      squadMemberCounts.set(squadId, currentCount + 1);
+    }
 
     if (!coachName) {
       errors.push(`Ligne ${lineNo} : nom de coach manquant`);
@@ -244,7 +292,7 @@ export function prepareImportedTeams(
       coachName,
       race: matched.race,
       nafNumber,
-      squadId: null,
+      squadId,
       poolId: null,
       createdAt: now,
       rosterImage: null,
@@ -252,7 +300,7 @@ export function prepareImportedTeams(
     });
   });
 
-  return { errors, teams: prepared };
+  return { errors, teams: prepared, newSquads };
 }
 
 /**
@@ -279,9 +327,14 @@ export async function importTeams(c: Context) {
       throw forbidden('Registration is closed once the tournament rounds have started', 'registration_closed');
     }
 
-    const { errors, teams: prepared } = prepareImportedTeams(t.teams, rows);
+    const { errors, teams: prepared, newSquads } = prepareImportedTeams(t.teams, rows, {
+      format: t.format,
+      existingSquads: t.squads,
+      squadSize: t.squadSize,
+    });
     if (errors.length > 0) throw badRequest(errors.join('\n'), 'import_validation_failed');
 
+    t.squads.push(...newSquads);
     t.teams.push(...prepared);
     teamIds = prepared.map((tm) => tm.id);
   });

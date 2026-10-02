@@ -1,16 +1,28 @@
-<p class="muted">
+<p class="muted" *ngIf="!isTeamFormat">
   Collez le contenu d'un tableur (CSV, virgule, point-virgule, tabulation ou barre verticale — détecté
   automatiquement), sans ligne d'en-tête : une équipe par ligne, colonnes dans l'ordre
   <strong>nom du coach, race, numéro NAF (optionnel)</strong>. Le nom d'équipe sera le nom du coach, et le mot de
   passe temporaire de chaque équipe sera aussi son nom de coach — à communiquer aux coachs, qui pourront le
   changer depuis leur page d'équipe.
 </p>
+<p class="muted" *ngIf="isTeamFormat">
+  Collez le contenu d'un tableur (CSV, virgule, point-virgule, tabulation ou barre verticale — détecté
+  automatiquement), sans ligne d'en-tête : une équipe par ligne, colonnes dans l'ordre
+  <strong>nom de l'escouade, nom du coach, race, numéro NAF (optionnel)</strong>. Une escouade dont le nom
+  correspond (insensible à la casse) à une escouade existante la rejoint ; sinon elle est créée. Le nom d'équipe
+  sera le nom du coach, et le mot de passe temporaire de chaque équipe sera aussi son nom de coach — à communiquer
+  aux coachs, qui pourront le changer depuis leur page d'équipe.
+</p>
 
 <textarea
   name="importCsvText"
   rows="8"
   [(ngModel)]="csvText"
-  placeholder="Jean Dupont, Human&#10;Marie Martin, Orc, 12345"
+  [placeholder]="
+    isTeamFormat
+      ? 'Titans, Jean Dupont, Human&#10;Titans, Marie Martin, Orc, 12345'
+      : 'Jean Dupont, Human&#10;Marie Martin, Orc, 12345'
+  "
 ></textarea>
 
 <div class="actions" style="margin: 0.5rem 0">
@@ -27,6 +39,7 @@
       <thead>
         <tr>
           <th>#</th>
+          <th *ngIf="isTeamFormat">Escouade</th>
           <th>Coach (= nom d'équipe)</th>
           <th>Race (saisie)</th>
           <th>Race retenue</th>
@@ -38,6 +51,7 @@
       <tbody>
         <tr *ngFor="let row of rows; let i = index" [class.import-row-error]="rowErrors(row, i).length > 0">
           <td>{{ row.lineNo }}</td>
+          <td *ngIf="isTeamFormat">{{ row.squadName || '—' }}</td>
           <td>{{ row.coachName || '—' }}</td>
           <td class="muted">{{ row.rawRace || '—' }}</td>
           <td>

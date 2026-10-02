@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { derivePasswordFromCoachName, type Team } from '@bb-tournament/shared';
+import { derivePasswordFromCoachName, type Squad, type Team } from '@bb-tournament/shared';
 import { prepareImportedTeams } from './teams';
 
 function existingTeam(overrides: Partial<Team> = {}): Team {
@@ -115,5 +115,103 @@ describe('prepareImportedTeams', () => {
       ]
     );
     assert.equal(errors.length, 2);
+  });
+
+  test('individual format ignores any squadName entirely', () => {
+    const { errors, teams } = prepareImportedTeams(
+      [],
+      [{ squadName: 'Titans', coachName: 'Jean', race: 'Human' }],
+      { format: 'individual' }
+    );
+    assert.deepEqual(errors, []);
+    assert.equal(teams[0].squadId, null);
+  });
+});
+
+describe('prepareImportedTeams — team format squad assignment', () => {
+  test('requires a squadName', () => {
+    const { errors } = prepareImportedTeams([], [{ coachName: 'Jean', race: 'Human' }], { format: 'team' });
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /escouade/);
+  });
+
+  test('creates a new squad for an unrecognised squad name', () => {
+    const { errors, teams, newSquads } = prepareImportedTeams(
+      [],
+      [{ squadName: 'Titans', coachName: 'Jean', race: 'Human' }],
+      { format: 'team' }
+    );
+    assert.deepEqual(errors, []);
+    assert.equal(newSquads.length, 1);
+    assert.equal(newSquads[0].name, 'Titans');
+    assert.equal(teams[0].squadId, newSquads[0].id);
+  });
+
+  test('groups multiple rows naming the same new squad together, case-insensitively', () => {
+    const { errors, teams, newSquads } = prepareImportedTeams(
+      [],
+      [
+        { squadName: 'Titans', coachName: 'Jean', race: 'Human' },
+        { squadName: 'titans', coachName: 'Marie', race: 'Orc' },
+      ],
+      { format: 'team' }
+    );
+    assert.deepEqual(errors, []);
+    assert.equal(newSquads.length, 1);
+    assert.equal(teams[0].squadId, teams[1].squadId);
+  });
+
+  test('joins an existing squad by name, case-insensitively, instead of creating a duplicate', () => {
+    const existingSquad: Squad = { id: 'sq1', name: 'Titans', createdAt: '2026-01-01T00:00:00.000Z' };
+    const { errors, teams, newSquads } = prepareImportedTeams(
+      [],
+      [{ squadName: 'TITANS', coachName: 'Jean', race: 'Human' }],
+      { format: 'team', existingSquads: [existingSquad] }
+    );
+    assert.deepEqual(errors, []);
+    assert.deepEqual(newSquads, []);
+    assert.equal(teams[0].squadId, 'sq1');
+  });
+
+  test('rejects a row once its squad is full, counting existing members plus the batch', () => {
+    const existingSquad: Squad = { id: 'sq1', name: 'Titans', createdAt: '2026-01-01T00:00:00.000Z' };
+    const existing = [existingTeam({ id: 'e1', squadId: 'sq1', coachName: 'Already Here' })];
+    const { errors, teams } = prepareImportedTeams(
+      existing,
+      [
+        { squadName: 'Titans', coachName: 'Jean', race: 'Human' },
+        { squadName: 'Titans', coachName: 'Marie', race: 'Orc' },
+      ],
+      { format: 'team', existingSquads: [existingSquad], squadSize: 2 }
+    );
+    // Squad already has 1 member; only 1 more slot — the second row should be rejected.
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /complète/);
+    assert.equal(teams.length, 1);
+    assert.equal(teams[0].coachName, 'Jean');
+  });
+
+  test('an unlimited squadSize (null) never rejects for capacity', () => {
+    const { errors, teams } = prepareImportedTeams(
+      [],
+      [
+        { squadName: 'Titans', coachName: 'Jean', race: 'Human' },
+        { squadName: 'Titans', coachName: 'Marie', race: 'Orc' },
+        { squadName: 'Titans', coachName: 'Marc', race: 'Dwarf' },
+      ],
+      { format: 'team', squadSize: null }
+    );
+    assert.deepEqual(errors, []);
+    assert.equal(teams.length, 3);
+  });
+
+  test('rejects an over-length squad name', () => {
+    const { errors } = prepareImportedTeams(
+      [],
+      [{ squadName: 'x'.repeat(41), coachName: 'Jean', race: 'Human' }],
+      { format: 'team' }
+    );
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /escouade/);
   });
 });

@@ -659,12 +659,17 @@ export interface CreateTeamResponse {
 }
 
 /**
- * One parsed CSV row for the admin bulk-import feature (fixed column order: coach name, race,
- * NAF number — no header row). `race` is free text as pasted; the server re-resolves it against
- * `RACES` via `matchRace` (see textMatch.ts) rather than trusting it verbatim, even though the
- * admin UI already resolves/lets the admin fix it client-side before submitting.
+ * One parsed CSV row for the admin bulk-import feature (fixed column order, no header row):
+ * coach name, race, NAF number for an 'individual' tournament; squad name, coach name, race, NAF
+ * number for a 'team' tournament (the squad column only exists there — see team-import.component).
+ * `race` is free text as pasted; the server re-resolves it against `RACES` via `matchRace` (see
+ * textMatch.ts) rather than trusting it verbatim, even though the admin UI already resolves/lets
+ * the admin fix it client-side before submitting. `squadName` is matched case-insensitively against
+ * existing squads (joining one if it matches) or creates a new squad otherwise; ignored entirely
+ * for 'individual' tournaments.
  */
 export interface ImportTeamRow {
+  squadName?: string;
   coachName: string;
   race: string;
   nafNumber?: string;

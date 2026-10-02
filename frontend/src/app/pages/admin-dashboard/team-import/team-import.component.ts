@@ -15,10 +15,13 @@ import { parseCsv } from '../../../core/csv';
 import { extractErrorMessage } from '../../../core/http-error';
 
 const MAX_COACH_NAME_LENGTH = 40;
+const MAX_SQUAD_NAME_LENGTH = 40;
 const HEADER_ROW_KEYWORDS = ['coach', 'nom', 'coachname', 'coach name', 'nom du coach', 'nom coach', 'coach name'];
+const SQUAD_HEADER_ROW_KEYWORDS = ['squad', 'escouade', "nom de l'escouade", 'nom escouade'];
 
 interface PreviewRow {
   lineNo: number;
+  squadName: string;
   coachName: string;
   rawRace: string;
   matchedRace: string | null;
@@ -52,6 +55,10 @@ export class TeamImportComponent {
   submitError: string | null = null;
   importedCount: number | null = null;
 
+  get isTeamFormat(): boolean {
+    return this.tournament.format === 'team';
+  }
+
   analyze(): void {
     this.submitError = null;
     this.importedCount = null;
@@ -73,15 +80,19 @@ export class TeamImportComponent {
 
   private looksLikeHeaderRow(cells: string[]): boolean {
     const first = (cells[0] ?? '').trim().toLowerCase();
+    if (this.isTeamFormat) return SQUAD_HEADER_ROW_KEYWORDS.includes(first);
     return HEADER_ROW_KEYWORDS.includes(first);
   }
 
+  /** Team-format tournaments have an extra leading squad-name column; individual ones stay as-is. */
   private buildRow(lineNo: number, cells: string[]): PreviewRow {
-    const coachName = (cells[0] ?? '').trim();
-    const rawRace = (cells[1] ?? '').trim();
-    const nafNumber = (cells[2] ?? '').trim();
+    const offset = this.isTeamFormat ? 1 : 0;
+    const squadName = this.isTeamFormat ? (cells[0] ?? '').trim() : '';
+    const coachName = (cells[offset] ?? '').trim();
+    const rawRace = (cells[offset + 1] ?? '').trim();
+    const nafNumber = (cells[offset + 2] ?? '').trim();
     const matched = rawRace ? matchRace(rawRace) : null;
-    return { lineNo, coachName, rawRace, matchedRace: matched?.race ?? null, raceOverride: null, nafNumber };
+    return { lineNo, squadName, coachName, rawRace, matchedRace: matched?.race ?? null, raceOverride: null, nafNumber };
   }
 
   resolvedRace(row: PreviewRow): string | null {
@@ -92,8 +103,32 @@ export class TeamImportComponent {
     this.rows.splice(index, 1);
   }
 
+  /** Counts an existing squad's current members plus every earlier batch row naming the same squad. */
+  private squadCapacityError(row: PreviewRow, index: number): string | null {
+    const squadSize = this.tournament.squadSize;
+    if (squadSize == null) return null;
+    const lowerSquad = row.squadName.toLowerCase();
+    const existingSquad = this.tournament.squads.find((s) => s.name.toLowerCase() === lowerSquad);
+    const existingCount = existingSquad
+      ? this.tournament.teams.filter((tm) => tm.squadId === existingSquad.id).length
+      : 0;
+    const priorInBatch = this.rows.slice(0, index).filter((r) => r.squadName.toLowerCase() === lowerSquad).length;
+    if (existingCount + priorInBatch >= squadSize) {
+      return `Escouade "${row.squadName}" complète (max ${squadSize})`;
+    }
+    return null;
+  }
+
   rowErrors(row: PreviewRow, index: number): string[] {
     const errors: string[] = [];
+    if (this.isTeamFormat) {
+      if (!row.squadName) errors.push("Nom d'escouade manquant");
+      else if (row.squadName.length > MAX_SQUAD_NAME_LENGTH) errors.push("Nom d'escouade trop long");
+      else {
+        const capacityError = this.squadCapacityError(row, index);
+        if (capacityError) errors.push(capacityError);
+      }
+    }
     if (!row.coachName) errors.push('Nom de coach manquant');
     else if (row.coachName.length > MAX_COACH_NAME_LENGTH) errors.push('Nom de coach trop long');
     if (!row.rawRace) errors.push('Race manquante');
@@ -127,6 +162,7 @@ export class TeamImportComponent {
     this.importedCount = null;
     try {
       const payload: ImportTeamRow[] = this.rows.map((row) => ({
+        squadName: this.isTeamFormat ? row.squadName : undefined,
         coachName: row.coachName,
         race: this.resolvedRace(row)!,
         nafNumber: row.nafNumber || undefined,

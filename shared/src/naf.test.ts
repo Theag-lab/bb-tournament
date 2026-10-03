@@ -143,7 +143,7 @@ describe('buildNafExport — non-NAF opponents (generic coach #9)', () => {
     assert.match(xml, /<coach><name>non-NAF<\/name><number>9<\/number><team>Dwarf<\/team><\/coach>/);
     // The game itself is exported (not dropped), with real stats but the generic identity for Bob.
     assert.match(xml, /<game>/);
-    assert.match(xml, /<name>non-NAF<\/name><number>9<\/number><teamRating>0<\/teamRating><touchDowns>1<\/touchDowns>/);
+    assert.match(xml, /<name>non-NAF<\/name><number>9<\/number><teamRating>100<\/teamRating><touchDowns>1<\/touchDowns>/);
     assert.doesNotMatch(xml, /<name>Bob<\/name>/);
   });
 

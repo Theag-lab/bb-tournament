@@ -103,7 +103,7 @@ export function buildNafExport(tournament: Tournament): string {
       const playerRecord = (team: Team, eligible: boolean, td: number, cas: number) =>
         `<playerRecord><name>${escapeXml(eligible ? team.coachName : NON_NAF_COACH_NAME)}</name><number>${escapeXml(
           eligible ? team.nafNumber! : NON_NAF_COACH_NUMBER
-        )}</number><teamRating>0</teamRating><touchDowns>${td}</touchDowns><badlyHurt>${cas}</badlyHurt></playerRecord>`;
+        )}</number><teamRating>100</teamRating><touchDowns>${td}</touchDowns><badlyHurt>${cas}</badlyHurt></playerRecord>`;
 
       return (
         `<game><timeStamp>${escapeXml(timeStamp)}</timeStamp>` +

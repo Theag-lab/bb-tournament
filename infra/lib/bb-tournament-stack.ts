@@ -83,11 +83,17 @@ export class BbTournamentStack extends cdk.Stack {
     assetsBucket.grantDelete(apiFunction, 'roster-images/*');
     // Lambdas can write their own logs by default, but not read them back — needed for the
     // admin's "download this tournament's match-sheet logs" export (handlers/logs.ts), which
-    // filters this same function's own log group.
+    // filters this same function's own log group. The resource pattern deliberately wildcards the
+    // function-name segment instead of referencing `apiFunction.functionName`/`apiFunction.logGroup`:
+    // either one would put a reference to the function inside its OWN role's policy, and since the
+    // function already has an explicit CloudFormation DependsOn on that policy (standard CDK
+    // behaviour, for IAM propagation), that reference closes a circular dependency
+    // (Function -> its role's policy -> Function). There's only one Lambda in this stack, so the
+    // wildcard is no broader in practice than naming it directly.
     apiFunction.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['logs:FilterLogEvents'],
-        resources: [apiFunction.logGroup.logGroupArn],
+        resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/*:*`],
       })
     );
 

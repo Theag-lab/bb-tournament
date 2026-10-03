@@ -540,28 +540,44 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Every round-based match played by any member of the selected squad, one row per match (i.e.
-   * per "board") — `teamId` is always the squad's own member, `opponentTeamId` the other side,
-   * regardless of which one is team1/team2 on the underlying challenge. Free (non-round) challenges
-   * don't apply here (squads only play round-based squad-vs-squad matchups).
+   * One group per round the selected squad played, last round first — each group's `matches` is
+   * every board (one per member who played that round), `teamId` always the squad's own member and
+   * `opponentTeamId` the other side, regardless of which one is team1/team2 on the underlying
+   * challenge. `opponentSquadId` is the same for every board in a round (a squad plays exactly one
+   * opposing squad per round), so it's resolved once per group for the round's title. Free
+   * (non-round) challenges don't apply here (squads only play round-based squad-vs-squad matchups).
    */
-  selectedSquadMatches(): { roundNumber: number; challenge: PublicTournament['challenges'][number]; teamId: string; opponentTeamId: string }[] {
+  selectedSquadRoundGroups(): {
+    roundNumber: number;
+    opponentSquadId: string | null;
+    matches: { challenge: PublicTournament['challenges'][number]; teamId: string; opponentTeamId: string }[];
+  }[] {
     if (!this.selectedSquad) return [];
     const squadId = this.selectedSquad.id;
-    const rows: { roundNumber: number; challenge: PublicTournament['challenges'][number]; teamId: string; opponentTeamId: string }[] = [];
+    const groups = new Map<
+      number,
+      { roundNumber: number; opponentSquadId: string | null; matches: { challenge: PublicTournament['challenges'][number]; teamId: string; opponentTeamId: string }[] }
+    >();
     for (const c of this.tournament?.challenges ?? []) {
       if (c.round === null) continue;
       const isTeam1 = this.teamSquadId(c.team1Id) === squadId;
       const isTeam2 = this.teamSquadId(c.team2Id) === squadId;
       if (!isTeam1 && !isTeam2) continue;
-      rows.push({
-        roundNumber: c.round,
-        challenge: c,
-        teamId: isTeam1 ? c.team1Id : c.team2Id,
-        opponentTeamId: isTeam1 ? c.team2Id : c.team1Id,
-      });
+      const teamId = isTeam1 ? c.team1Id : c.team2Id;
+      const opponentTeamId = isTeam1 ? c.team2Id : c.team1Id;
+      let group = groups.get(c.round);
+      if (!group) {
+        group = { roundNumber: c.round, opponentSquadId: this.teamSquadId(opponentTeamId), matches: [] };
+        groups.set(c.round, group);
+      }
+      group.matches.push({ challenge: c, teamId, opponentTeamId });
     }
-    return rows.sort((a, b) => a.roundNumber - b.roundNumber || a.teamId.localeCompare(b.teamId));
+    for (const group of groups.values()) group.matches.sort((a, b) => a.teamId.localeCompare(b.teamId));
+    return Array.from(groups.values()).sort((a, b) => b.roundNumber - a.roundNumber);
+  }
+
+  trackByRoundGroup(_index: number, group: { roundNumber: number }): number {
+    return group.roundNumber;
   }
 
   trackBySquadMatchRow(_index: number, row: { challenge: { id: string } }): string {

@@ -787,42 +787,45 @@
       </ng-template>
 
       <h3>Détail des matchs par ronde</h3>
-      <div class="table-wrap" *ngIf="selectedSquadMatches().length > 0; else noSquadMatches">
-        <table>
-          <thead>
-            <tr>
-              <th>Ronde</th>
-              <th>Coach</th>
-              <th *ngIf="showTeamNames">Adversaire</th>
-              <th>Coach adverse</th>
-              <th>Race adverse</th>
-              <th>Statut</th>
-              <th>Score</th>
-              <th>Résultat</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let row of selectedSquadMatches(); trackBy: trackBySquadMatchRow">
-              <td>{{ row.roundNumber }}</td>
-              <td>
-                <button type="button" class="link-btn" (click)="openTeamFromSquad(row.teamId)">{{ teamCoach(row.teamId) }}</button>
-              </td>
-              <td *ngIf="showTeamNames">{{ teamName(row.opponentTeamId) }}</td>
-              <td class="muted">{{ teamCoach(row.opponentTeamId) }}</td>
-              <td class="muted">{{ teamRace(row.opponentTeamId) }}</td>
-              <td><span class="badge" [ngClass]="'badge-' + row.challenge.status">{{ row.challenge.status }}</span></td>
-              <td>{{ matchScoreLabel(row.challenge, row.teamId) }}</td>
-              <td>
-                <span
-                  class="badge"
-                  *ngIf="matchOutcome(row.challenge, row.teamId) as outcome"
-                  [ngClass]="'badge-outcome-' + outcome"
-                >{{ matchOutcomeLabel(row.challenge, row.teamId) }}</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <ng-container *ngIf="selectedSquadRoundGroups().length > 0; else noSquadMatches">
+        <div class="table-wrap squad-round-block" *ngFor="let group of selectedSquadRoundGroups(); trackBy: trackByRoundGroup">
+          <h4>
+            Ronde {{ group.roundNumber }}
+            <ng-container *ngIf="group.opponentSquadId"> — vs {{ squadName(group.opponentSquadId) }}</ng-container>
+          </h4>
+          <table>
+            <thead>
+              <tr>
+                <th>Coach</th>
+                <th>Race</th>
+                <th>Résultat</th>
+                <th>Score</th>
+                <th>Coach adverse</th>
+                <th>Race adverse</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of group.matches; trackBy: trackBySquadMatchRow">
+                <td>
+                  <button type="button" class="link-btn" (click)="openTeamFromSquad(row.teamId)">{{ teamCoach(row.teamId) }}</button>
+                </td>
+                <td>{{ teamRace(row.teamId) }}</td>
+                <td>
+                  <span
+                    class="badge"
+                    *ngIf="matchOutcome(row.challenge, row.teamId) as outcome"
+                    [ngClass]="'badge-outcome-' + outcome"
+                  >{{ matchOutcomeLabel(row.challenge, row.teamId) }}</span>
+                  <span class="muted" *ngIf="!row.challenge.result">—</span>
+                </td>
+                <td>{{ matchScoreLabel(row.challenge, row.teamId) }}</td>
+                <td class="muted">{{ teamCoach(row.opponentTeamId) }}</td>
+                <td class="muted">{{ teamRace(row.opponentTeamId) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </ng-container>
       <ng-template #noSquadMatches>
         <p class="muted">Aucun match joué pour le moment.</p>
       </ng-template>

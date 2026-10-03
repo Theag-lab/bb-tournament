@@ -27,11 +27,15 @@ export class BbTournamentStack extends cdk.Stack {
     super(scope, id, props);
 
     // --- Tournament data storage: one JSON object per tournament, no database ---
+    // Versioning used to be on here, but it kept a noncurrent version on every single write
+    // (every result submission, every admin tweak) and piled up far too many objects. Replaced by
+    // an explicit backup copy (storage.backupTournament) taken once per round launch instead — the
+    // lifecycle rule below is kept only to age out whatever noncurrent versions already
+    // accumulated from before this change.
     const dataBucket = new s3.Bucket(this, 'DataBucket', {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
-      versioned: true,
       lifecycleRules: [
         {
           noncurrentVersionExpiration: cdk.Duration.days(30),
@@ -142,12 +146,38 @@ export class BbTournamentStack extends cdk.Stack {
       ],
     });
 
-    new s3deploy.BucketDeployment(this, 'DeploySite', {
-      sources: [s3deploy.Source.asset(path.join(__dirname, '..', '..', 'frontend', 'dist', 'frontend', 'browser'))],
+    const frontendBuildDir = path.join(__dirname, '..', '..', 'frontend', 'dist', 'frontend', 'browser');
+
+    // Every build's JS/CSS filenames are content-hashed (new content -> new filename), so they're
+    // safe to cache for a long time — they're never mutated at a given URL, only replaced by a
+    // differently-named file next build.
+    const assetsDeployment = new s3deploy.BucketDeployment(this, 'DeploySite', {
+      sources: [s3deploy.Source.asset(frontendBuildDir, { exclude: ['index.html'] })],
       destinationBucket: siteBucket,
+      cacheControl: [s3deploy.CacheControl.maxAge(cdk.Duration.days(365)), s3deploy.CacheControl.immutable()],
+      // Needs prune: false — see the "index.html gets its own deployment" comment below.
+      prune: false,
+    });
+
+    // index.html references THIS build's hashed chunk filenames, and old chunks get pruned from
+    // the bucket next deploy — so a browser (or an intermediate cache) serving a STALE cached
+    // index.html after a deploy would 404 on chunks that no longer exist, which is exactly the
+    // black-screen-after-deploy symptom this fixes. index.html must always be revalidated, never
+    // served from a stale cache. It needs its own BucketDeployment (one cacheControl applies per
+    // deployment) with prune: false on both deployments, since each only tracks the files it
+    // itself uploaded — prune: true here would delete the other deployment's files from their
+    // shared destination. See the CDK docs' s3-deployment README, "Prune" section.
+    const indexDeployment = new s3deploy.BucketDeployment(this, 'DeployIndexHtml', {
+      sources: [s3deploy.Source.asset(frontendBuildDir, { exclude: ['*', '!index.html'] })],
+      destinationBucket: siteBucket,
+      cacheControl: [s3deploy.CacheControl.noCache(), s3deploy.CacheControl.mustRevalidate()],
+      prune: false,
       distribution,
       distributionPaths: ['/*'],
     });
+    // Belt-and-suspenders: makes sure this build's new chunks are already in the bucket before
+    // index.html (which references them) gets published and the CloudFront invalidation fires.
+    indexDeployment.node.addDependency(assetsDeployment);
 
     // The domain was bought via Route53 Domains, which auto-creates a hosted zone for it — point
     // the apex at CloudFront with a native Alias record (handles the apex, unlike a plain CNAME,

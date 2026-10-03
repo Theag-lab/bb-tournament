@@ -61,6 +61,11 @@ export async function launch(c: Context) {
   const roundNumber = parseRoundNumber(c);
   const token = c.req.query('token');
 
+  // Checked up front (before spending a backup copy) rather than inside the update's own
+  // requireAdmin check further down.
+  requireAdmin(await storage.getTournament(tournamentId), token);
+  await storage.backupTournament(tournamentId);
+
   await storage.updateTournament(tournamentId, (t) => {
     requireAdmin(t, token);
     launchRound(t, roundNumber);

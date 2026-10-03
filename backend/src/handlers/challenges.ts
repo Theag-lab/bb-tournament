@@ -6,6 +6,7 @@ import {
   CreateChallengeRequest,
   CustomStatValue,
   DEFAULT_INDIVIDUAL_SCORING,
+  MatchResult,
   SubmitResultRequest,
   Tournament,
   computeMatchScore,
@@ -229,6 +230,15 @@ function sameResultValues(a: SubmitResultRequest, b: SubmitResultRequest): boole
   );
 }
 
+/**
+ * Audit trail for every match-sheet event, written to CloudWatch (via the Lambda's stdout) rather
+ * than persisted anywhere — "<tournament> - <who/what submitted> - <match sheet>", so an admin can
+ * grep the tournament's name or a coach's name across every proposal/acceptance/admin override.
+ */
+function logMatchSheetEvent(tournamentName: string, action: string, result: MatchResult | null): void {
+  console.log(`${tournamentName} - ${action} - ${JSON.stringify(result)}`);
+}
+
 export async function submitResult(c: Context) {
   const tournamentId = c.req.param('tournamentId')!;
   const challengeId = c.req.param('challengeId')!;
@@ -237,6 +247,7 @@ export async function submitResult(c: Context) {
   const body = await c.req.json<SubmitResultRequest>().catch(() => null);
   const input = validateResultInput(body);
 
+  let submittedByTeamId = '';
   await storage.updateTournament(tournamentId, (t) => {
     const challenge = t.challenges.find((ch) => ch.id === challengeId);
     if (!challenge) throw notFound('Challenge not found');
@@ -246,6 +257,7 @@ export async function submitResult(c: Context) {
     assertRoundIsLaunched(t, challenge);
 
     const team = authenticateTeam(t, teamId, password);
+    submittedByTeamId = team.id;
     if (team.id !== challenge.team1Id && team.id !== challenge.team2Id) {
       throw forbidden('Only the two participating teams can submit a result');
     }
@@ -331,6 +343,12 @@ export async function submitResult(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
+  const coachName = tournament.teams.find((tm) => tm.id === submittedByTeamId)?.coachName ?? submittedByTeamId;
+  logMatchSheetEvent(
+    tournament.name,
+    `Proposition par un coach ${coachName}`,
+    tournament.challenges.find((ch) => ch.id === challengeId)?.result ?? null
+  );
   return c.json(toPublicTournament(tournament, teamId ?? null));
 }
 
@@ -340,6 +358,7 @@ export async function confirmResult(c: Context) {
   const teamId = c.req.query('teamId');
   const password = c.req.query('password');
 
+  let confirmedByTeamId = '';
   await storage.updateTournament(tournamentId, (t) => {
     const challenge = t.challenges.find((ch) => ch.id === challengeId);
     if (!challenge) throw notFound('Challenge not found');
@@ -349,6 +368,7 @@ export async function confirmResult(c: Context) {
     assertRoundIsLaunched(t, challenge);
 
     const team = authenticateTeam(t, teamId, password);
+    confirmedByTeamId = team.id;
     if (team.id !== challenge.team1Id && team.id !== challenge.team2Id) {
       throw forbidden('Only the two participating teams can confirm a result');
     }
@@ -364,6 +384,12 @@ export async function confirmResult(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
+  const coachName = tournament.teams.find((tm) => tm.id === confirmedByTeamId)?.coachName ?? confirmedByTeamId;
+  logMatchSheetEvent(
+    tournament.name,
+    `Acceptation par un coach ${coachName}`,
+    tournament.challenges.find((ch) => ch.id === challengeId)?.result ?? null
+  );
   return c.json(toPublicTournament(tournament, teamId ?? null));
 }
 
@@ -406,5 +432,10 @@ export async function adminSetResult(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
+  logMatchSheetEvent(
+    tournament.name,
+    "Soumission par l'admin",
+    tournament.challenges.find((ch) => ch.id === challengeId)?.result ?? null
+  );
   return c.json(toPublicTournament(tournament));
 }

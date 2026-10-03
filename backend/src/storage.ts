@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { CopyObjectCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import type { Tournament } from '@bb-tournament/shared';
 import { conflict, notFound } from './errors';
 
@@ -7,6 +7,14 @@ const BUCKET = process.env.DATA_BUCKET_NAME;
 
 function objectKey(tournamentId: string): string {
   return `tournaments/${tournamentId}.json`;
+}
+
+function backupPrefix(tournamentId: string): string {
+  return `tournaments/${tournamentId}-bkp-`;
+}
+
+function backupObjectKey(tournamentId: string, index: number): string {
+  return `${backupPrefix(tournamentId)}${index}.json`;
 }
 
 function bucketName(): string {
@@ -98,4 +106,41 @@ export async function updateTournament<T>(
     }
   }
   throw conflict('Could not save tournament after multiple attempts', 'write_conflict');
+}
+
+/** One past the highest `<id>-bkp-<N>.json` already in the bucket (0 if there are none yet). */
+async function nextBackupIndex(id: string): Promise<number> {
+  const prefix = backupPrefix(id);
+  let maxIndex = 0;
+  let continuationToken: string | undefined;
+  do {
+    const res = await s3.send(
+      new ListObjectsV2Command({ Bucket: bucketName(), Prefix: prefix, ContinuationToken: continuationToken })
+    );
+    for (const obj of res.Contents ?? []) {
+      const suffix = obj.Key?.slice(prefix.length).replace(/\.json$/, '');
+      const index = suffix ? Number(suffix) : NaN;
+      if (Number.isInteger(index) && index > maxIndex) maxIndex = index;
+    }
+    continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
+  } while (continuationToken);
+  return maxIndex + 1;
+}
+
+/**
+ * Manual snapshot of the tournament's current S3 object, named `<id>-bkp-<N>.json` (N one past
+ * the highest backup index already present) — replaces S3 object versioning, which kept a
+ * noncurrent version on every single write and accumulated far too many objects. Taken right
+ * before a round launches (see rounds.launch) so there's always a restore point for "the
+ * tournament exactly as it stood right before this round went live".
+ */
+export async function backupTournament(id: string): Promise<void> {
+  const index = await nextBackupIndex(id);
+  await s3.send(
+    new CopyObjectCommand({
+      Bucket: bucketName(),
+      CopySource: `${bucketName()}/${objectKey(id)}`,
+      Key: backupObjectKey(id, index),
+    })
+  );
 }

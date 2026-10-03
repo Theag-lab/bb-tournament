@@ -207,11 +207,12 @@ function validateResultInput(body: Partial<SubmitResultRequest> | null): SubmitR
 
 /**
  * Audit trail for every match-sheet event, written to CloudWatch (via the Lambda's stdout) rather
- * than persisted anywhere — "<tournament> - <who/what submitted> - <match sheet>", so an admin can
- * grep the tournament's name or a coach's name across every proposal/acceptance/admin override.
+ * than persisted anywhere — "[TID:<id>] <tournament name> - <who/what submitted> - <match sheet>".
+ * The leading `[TID:<id>]` tag (not just the tournament name, which isn't guaranteed unique) is
+ * what handlers/logs.ts filters on when an admin downloads this tournament's own log slice.
  */
-function logMatchSheetEvent(tournamentName: string, action: string, result: MatchResult | null): void {
-  console.log(`${tournamentName} - ${action} - ${JSON.stringify(result)}`);
+function logMatchSheetEvent(tournamentId: string, tournamentName: string, action: string, result: MatchResult | null): void {
+  console.log(`[TID:${tournamentId}] ${tournamentName} - ${action} - ${JSON.stringify(result)}`);
 }
 
 /**
@@ -276,6 +277,7 @@ export async function submitResult(c: Context) {
   const tournament = await storage.getTournament(tournamentId);
   const coachName = tournament.teams.find((tm) => tm.id === submittedByTeamId)?.coachName ?? submittedByTeamId;
   logMatchSheetEvent(
+    tournamentId,
     tournament.name,
     `Proposition par un coach ${coachName}`,
     tournament.challenges.find((ch) => ch.id === challengeId)?.result ?? null
@@ -317,6 +319,7 @@ export async function confirmResult(c: Context) {
   const tournament = await storage.getTournament(tournamentId);
   const coachName = tournament.teams.find((tm) => tm.id === confirmedByTeamId)?.coachName ?? confirmedByTeamId;
   logMatchSheetEvent(
+    tournamentId,
     tournament.name,
     `Acceptation par un coach ${coachName}`,
     tournament.challenges.find((ch) => ch.id === challengeId)?.result ?? null
@@ -364,6 +367,7 @@ export async function adminSetResult(c: Context) {
 
   const tournament = await storage.getTournament(tournamentId);
   logMatchSheetEvent(
+    tournamentId,
     tournament.name,
     "Soumission par l'admin",
     tournament.challenges.find((ch) => ch.id === challengeId)?.result ?? null

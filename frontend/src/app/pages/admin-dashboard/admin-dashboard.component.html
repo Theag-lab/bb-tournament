@@ -11,7 +11,7 @@
     🚑 Vous êtes sur la sauvegarde <strong>#{{ b.backupIndex }}</strong> de "{{ b.originalTournamentId }}" — c'est une
     instance indépendante : toute action ici (lancer une ronde, saisir un résultat, changer la config…) n'affecte
     QUE cette sauvegarde, jamais le tournoi en cours.
-    <a [routerLink]="['/tournaments', b.originalTournamentId, 'admin', token]">→ Retour au tournoi en cours</a>
+    <a [href]="'/tournaments/' + b.originalTournamentId + '/admin/' + token">→ Retour au tournoi en cours</a>
   </div>
 
   <p class="muted">
@@ -88,7 +88,7 @@
       Score et Feuille de match
     </button>
     <button type="button" class="tab-btn" [class.active]="activeAdminTab === 'backups'" (click)="openBackupsTab()">
-      🚑 Sauvegardes
+      🚑 Urgences
     </button>
   </div>
 
@@ -1107,7 +1107,7 @@
 
   <ng-container *ngIf="activeAdminTab === 'backups'">
     <section class="card">
-      <h2>🚑 Sauvegardes</h2>
+      <h2>🚑 Urgences</h2>
       <p class="muted">
         Un backup est créé automatiquement à chaque lancement de ronde. Vous pouvez aussi en créer un
         manuellement à tout moment. Les backups sont des instances du tournoi à part entières et navigable. Vous pouvez aussi utiliser les backup pour tester, mais cela altère le backup.
@@ -1134,7 +1134,7 @@
               <td>{{ tournamentId }}-bkp-{{ backup.index }}</td>
               <td>{{ backup.createdAt | date: 'medium' }}</td>
               <td>
-                <a class="btn" [routerLink]="['/tournaments', tournamentId + '-bkp-' + backup.index, 'admin', token]">
+                <a class="btn" [href]="'/tournaments/' + tournamentId + '-bkp-' + backup.index + '/admin/' + token">
                   Lien admin
                 </a>
               </td>
@@ -1143,6 +1143,17 @@
         </table>
       </div>
       <p class="muted" *ngIf="!backupsLoading && backups.length === 0">Aucune sauvegarde pour le moment.</p>
+    </section>
+
+    <section class="card">
+      <h2>Logs des feuilles de match</h2>
+      <p class="muted">
+        Chaque soumission, acceptation ou forçage de résultat est journalisé. Ce téléchargement ne contient que les
+        entrées de ce tournoi, limitées aux 7 derniers jours.
+      </p>
+      <a class="btn btn-primary" [href]="matchSheetLogsUrl()" target="_blank" rel="noopener">
+        Télécharger les logs (.txt, 7 derniers jours)
+      </a>
     </section>
   </ng-container>
 

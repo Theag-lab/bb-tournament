@@ -454,6 +454,10 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     return this.api.nafExportUrl(this.tournamentId, this.token);
   }
 
+  matchSheetLogsUrl(): string {
+    return this.api.matchSheetLogsUrl(this.tournamentId, this.token);
+  }
+
   showTeamImport = false;
 
   onTeamsImported(tournament: AdminTournamentView): void {

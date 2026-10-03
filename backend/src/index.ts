@@ -10,6 +10,7 @@ import * as squads from './handlers/squads';
 import * as pools from './handlers/pools';
 import * as naf from './handlers/naf';
 import * as backups from './handlers/backups';
+import * as logs from './handlers/logs';
 import * as rosterImage from './rosterImage';
 
 const app = new Hono().basePath('/api');
@@ -41,6 +42,7 @@ app.get('/tournaments/:tournamentId/naf-export', naf.exportNaf);
 
 app.get('/tournaments/:tournamentId/backups', backups.listBackups);
 app.post('/tournaments/:tournamentId/backups', backups.createBackup);
+app.get('/tournaments/:tournamentId/match-sheet-logs', logs.downloadMatchSheetLogs);
 
 app.post('/tournaments/:tournamentId/teams', teams.createTeam);
 app.post('/tournaments/:tournamentId/teams/import', teams.importTeams);

@@ -10,7 +10,7 @@
   <div class="alert alert-info backup-banner" *ngIf="backupInfo as b">
     🚑 Sauvegarde <strong>#{{ b.backupIndex }}</strong> de "{{ b.originalTournamentId }}" — instance de test
     indépendante, ce n'est pas le tournoi en cours.
-    <a [routerLink]="['/tournaments', b.originalTournamentId]">→ Voir le tournoi en cours</a>
+    <a [href]="'/tournaments/' + b.originalTournamentId">→ Voir le tournoi en cours</a>
   </div>
 
   <section class="card">

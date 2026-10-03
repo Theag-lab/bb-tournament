@@ -3,6 +3,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigwv2integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
@@ -80,6 +81,15 @@ export class BbTournamentStack extends cdk.Stack {
     // itself (CloudFront + the browser handle that), so it needs put/delete but not get.
     assetsBucket.grantPut(apiFunction, 'roster-images/*');
     assetsBucket.grantDelete(apiFunction, 'roster-images/*');
+    // Lambdas can write their own logs by default, but not read them back — needed for the
+    // admin's "download this tournament's match-sheet logs" export (handlers/logs.ts), which
+    // filters this same function's own log group.
+    apiFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['logs:FilterLogEvents'],
+        resources: [apiFunction.logGroup.logGroupArn],
+      })
+    );
 
     const httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
       defaultIntegration: new apigwv2integrations.HttpLambdaIntegration('DefaultIntegration', apiFunction),

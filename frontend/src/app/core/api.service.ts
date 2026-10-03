@@ -287,6 +287,11 @@ export class ApiService {
     return `${API_BASE}/tournaments/${tournamentId}/naf-export?token=${encodeURIComponent(token)}`;
   }
 
+  /** Direct download link for this tournament's own match-sheet logs (last 7 days, see handlers/logs.ts). */
+  matchSheetLogsUrl(tournamentId: string, token: string): string {
+    return `${API_BASE}/tournaments/${tournamentId}/match-sheet-logs?token=${encodeURIComponent(token)}`;
+  }
+
   launchRound(tournamentId: string, token: string, roundNumber: number) {
     return firstValueFrom(
       this.http.post<AdminTournamentView>(

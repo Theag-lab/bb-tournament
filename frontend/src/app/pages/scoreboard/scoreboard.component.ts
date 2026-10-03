@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   RACES,
   type CustomStatLeaderboard,
@@ -45,7 +45,7 @@ export interface RoundMatchRow {
 @Component({
   selector: 'app-scoreboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, BracketGraphComponent],
+  imports: [CommonModule, FormsModule, BracketGraphComponent],
   templateUrl: './scoreboard.component.html',
   styleUrl: './scoreboard.component.scss',
 })

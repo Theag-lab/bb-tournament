@@ -239,24 +239,10 @@
             <button type="button" class="btn btn-primary" [disabled]="actionBusy" (click)="confirmResult(c.id)">
               Confirmer ce score
             </button>
+            <p class="muted" style="margin: 0.5rem 0 0">
+              En cas de désaccord, contactez l'organisateur : seul l'admin peut modifier un score déjà soumis.
+            </p>
           </div>
-
-          <button type="button" class="btn" (click)="toggleResultForm(c.id)">
-            {{ editingResultChallengeId === c.id ? 'Fermer' : 'Proposer une correction' }}
-          </button>
-          <app-match-result-form
-            *ngIf="editingResultChallengeId === c.id"
-            [team1Id]="c.team1Id"
-            [team2Id]="c.team2Id"
-            [team1Name]="teamName(c.team1Id)"
-            [team2Name]="teamName(c.team2Id)"
-            [initial]="c.result"
-            submitLabel="Envoyer la correction"
-            [matchSheetConfig]="tournament.matchSheetConfig"
-            [customStatCategories]="tournament.customStatCategories"
-            [busy]="actionBusy"
-            (submitResult)="submitResult(c.id, $event)"
-          ></app-match-result-form>
         </div>
 
         <div *ngSwitchCase="'completed'">

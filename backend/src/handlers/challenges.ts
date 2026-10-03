@@ -205,31 +205,6 @@ function validateResultInput(body: Partial<SubmitResultRequest> | null): SubmitR
   };
 }
 
-function sameCustomStats(a: Record<string, CustomStatValue> | undefined, b: Record<string, CustomStatValue> | undefined): boolean {
-  const aKeys = Object.keys(a ?? {});
-  const bKeys = Object.keys(b ?? {});
-  if (aKeys.length !== bKeys.length) return false;
-  return aKeys.every((key) => {
-    const av = a![key];
-    const bv = b?.[key];
-    return bv !== undefined && av.team1 === bv.team1 && av.team2 === bv.team2;
-  });
-}
-
-function sameResultValues(a: SubmitResultRequest, b: SubmitResultRequest): boolean {
-  return (
-    a.playedAt === b.playedAt &&
-    a.team1Td === b.team1Td &&
-    a.team2Td === b.team2Td &&
-    a.team1Cas === b.team1Cas &&
-    a.team2Cas === b.team2Cas &&
-    a.team1Agg === b.team1Agg &&
-    a.team2Agg === b.team2Agg &&
-    a.concededByTeamId === b.concededByTeamId &&
-    sameCustomStats(a.customStats, b.customStats)
-  );
-}
-
 /**
  * Audit trail for every match-sheet event, written to CloudWatch (via the Lambda's stdout) rather
  * than persisted anywhere — "<tournament> - <who/what submitted> - <match sheet>", so an admin can
@@ -239,6 +214,14 @@ function logMatchSheetEvent(tournamentName: string, action: string, result: Matc
   console.log(`${tournamentName} - ${action} - ${JSON.stringify(result)}`);
 }
 
+/**
+ * A coach can only submit a result for a challenge that hasn't had one submitted yet. Once it's
+ * awaiting the other side's confirmation, there's deliberately no coach-level "correction" path —
+ * the other coach either confirms it (confirmResult) as-is, or the match stays pending until the
+ * admin resolves it (adminSetResult, which can override at any status). This keeps the coach-facing
+ * flow to a single, unambiguous round-trip instead of an open-ended back-and-forth between the two
+ * coaches over what the score should be.
+ */
 export async function submitResult(c: Context) {
   const tournamentId = c.req.param('tournamentId')!;
   const challengeId = c.req.param('challengeId')!;
@@ -251,7 +234,7 @@ export async function submitResult(c: Context) {
   await storage.updateTournament(tournamentId, (t) => {
     const challenge = t.challenges.find((ch) => ch.id === challengeId);
     if (!challenge) throw notFound('Challenge not found');
-    if (challenge.status !== 'accepted' && challenge.status !== 'awaiting_confirmation') {
+    if (challenge.status !== 'accepted') {
       throw forbidden(`Cannot submit a result for a challenge with status: ${challenge.status}`);
     }
     assertRoundIsLaunched(t, challenge);
@@ -274,60 +257,8 @@ export async function submitResult(c: Context) {
     );
     const now = new Date().toISOString();
 
-    if (challenge.status === 'awaiting_confirmation' && challenge.result) {
-      const previousSubmitter = challenge.result.submittedByTeamId;
-      if (team.id === previousSubmitter) {
-        // Same team editing their own pending submission.
-        challenge.result = {
-          ...score,
-          playedAt: input.playedAt,
-          concededByTeamId: input.concededByTeamId,
-          submittedByTeamId: team.id,
-          submittedAt: now,
-          confirmedByTeamId: null,
-          completedAt: null,
-        };
-        challenge.updatedAt = now;
-        return;
-      }
-
-      const previousInput: SubmitResultRequest = {
-        playedAt: challenge.result.playedAt,
-        team1Td: challenge.result.team1Td,
-        team2Td: challenge.result.team2Td,
-        team1Cas: challenge.result.team1Cas,
-        team2Cas: challenge.result.team2Cas,
-        team1Agg: challenge.result.team1Agg,
-        team2Agg: challenge.result.team2Agg,
-        customStats: challenge.result.customStats,
-        concededByTeamId: challenge.result.concededByTeamId,
-      };
-      if (sameResultValues(previousInput, input)) {
-        // The other team submitted matching numbers: auto-confirm.
-        challenge.result.confirmedByTeamId = team.id;
-        challenge.result.completedAt = now;
-        challenge.status = 'completed';
-        challenge.updatedAt = now;
-        return;
-      }
-
-      // Disagreement: this becomes the new pending submission awaiting the other side.
-      challenge.result = {
-        ...score,
-        playedAt: input.playedAt,
-        concededByTeamId: input.concededByTeamId,
-        submittedByTeamId: team.id,
-        submittedAt: now,
-        confirmedByTeamId: null,
-        completedAt: null,
-      };
-      challenge.updatedAt = now;
-      return;
-    }
-
-    // First submission for this challenge. When the tournament doesn't require double
-    // validation, a single coach's submission is immediately final — no need to wait on the
-    // opponent to confirm the same numbers.
+    // When the tournament doesn't require double validation, a single coach's submission is
+    // immediately final — no need to wait on the opponent to confirm the same numbers.
     const requireConfirmation = t.requireResultConfirmation ?? true;
     challenge.result = {
       ...score,

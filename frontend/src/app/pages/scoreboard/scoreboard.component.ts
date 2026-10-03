@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   RACES,
   type CustomStatLeaderboard,
@@ -13,6 +13,7 @@ import {
   type StandingEntry,
 } from '@bb-tournament/shared';
 import { ApiService } from '../../core/api.service';
+import { type BackupIdInfo, parseBackupId } from '../../core/backup';
 import { extractErrorMessage } from '../../core/http-error';
 import { copyToClipboard, participantUrl, rosterImageUrl, scoreboardUrl } from '../../core/links';
 import { renderMarkdown } from '../../core/markdown';
@@ -44,7 +45,7 @@ export interface RoundMatchRow {
 @Component({
   selector: 'app-scoreboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, BracketGraphComponent],
+  imports: [CommonModule, FormsModule, RouterLink, BracketGraphComponent],
   templateUrl: './scoreboard.component.html',
   styleUrl: './scoreboard.component.scss',
 })
@@ -58,6 +59,7 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   readonly rosterStatusLabel = rosterStatusLabel;
 
   tournamentId = '';
+  backupInfo: BackupIdInfo | null = null;
   tournament: PublicTournament | null = null;
   loading = true;
   error: string | null = null;
@@ -148,6 +150,7 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     this.tournamentId = this.route.snapshot.paramMap.get('tournamentId')!;
+    this.backupInfo = parseBackupId(this.tournamentId);
     await this.load();
     this.pollHandle = setInterval(() => this.load(true), POLL_INTERVAL_MS);
   }

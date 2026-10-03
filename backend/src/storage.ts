@@ -1,10 +1,16 @@
 import { CopyObjectCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import type { Tournament } from '@bb-tournament/shared';
+import type { Tournament, TournamentBackupSummary } from '@bb-tournament/shared';
 import { conflict, notFound } from './errors';
 
 const s3 = new S3Client({});
 const BUCKET = process.env.DATA_BUCKET_NAME;
 
+// A backup's object key (`<id>-bkp-<N>.json`) is deliberately indistinguishable, to objectKey,
+// from any other tournament's — every route/handler keys purely off whatever id string it's
+// given, so a backup works as its own fully independent, writable "tournament" simply by using
+// `<id>-bkp-<N>` as the id everywhere (e.g. GET/admin mutations on it never touch the original).
+// There's no dedicated "read a backup" codepath for that reason; the frontend just navigates to
+// the normal admin/public routes with that composite id (see frontend/src/app/core/backup.ts).
 function objectKey(tournamentId: string): string {
   return `tournaments/${tournamentId}.json`;
 }
@@ -108,10 +114,10 @@ export async function updateTournament<T>(
   throw conflict('Could not save tournament after multiple attempts', 'write_conflict');
 }
 
-/** One past the highest `<id>-bkp-<N>.json` already in the bucket (0 if there are none yet). */
-async function nextBackupIndex(id: string): Promise<number> {
+/** Every manual backup for this tournament, most recent (highest index) first. */
+export async function listBackups(id: string): Promise<TournamentBackupSummary[]> {
   const prefix = backupPrefix(id);
-  let maxIndex = 0;
+  const summaries: TournamentBackupSummary[] = [];
   let continuationToken: string | undefined;
   do {
     const res = await s3.send(
@@ -120,21 +126,30 @@ async function nextBackupIndex(id: string): Promise<number> {
     for (const obj of res.Contents ?? []) {
       const suffix = obj.Key?.slice(prefix.length).replace(/\.json$/, '');
       const index = suffix ? Number(suffix) : NaN;
-      if (Number.isInteger(index) && index > maxIndex) maxIndex = index;
+      if (Number.isInteger(index) && obj.LastModified) {
+        summaries.push({ index, createdAt: obj.LastModified.toISOString() });
+      }
     }
     continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
   } while (continuationToken);
-  return maxIndex + 1;
+  return summaries.sort((a, b) => b.index - a.index);
+}
+
+/** One past the highest `<id>-bkp-<N>.json` already in the bucket (1 if there are none yet). */
+async function nextBackupIndex(id: string): Promise<number> {
+  const backups = await listBackups(id);
+  return backups.reduce((max, b) => Math.max(max, b.index), 0) + 1;
 }
 
 /**
  * Manual snapshot of the tournament's current S3 object, named `<id>-bkp-<N>.json` (N one past
  * the highest backup index already present) — replaces S3 object versioning, which kept a
  * noncurrent version on every single write and accumulated far too many objects. Taken right
- * before a round launches (see rounds.launch) so there's always a restore point for "the
- * tournament exactly as it stood right before this round went live".
+ * before a round launches (see rounds.launch), and also available on demand (see
+ * handlers/backups.ts), so there's always a restore point for "the tournament exactly as it stood
+ * at this moment".
  */
-export async function backupTournament(id: string): Promise<void> {
+export async function backupTournament(id: string): Promise<TournamentBackupSummary> {
   const index = await nextBackupIndex(id);
   await s3.send(
     new CopyObjectCommand({
@@ -143,4 +158,5 @@ export async function backupTournament(id: string): Promise<void> {
       Key: backupObjectKey(id, index),
     })
   );
+  return { index, createdAt: new Date().toISOString() };
 }

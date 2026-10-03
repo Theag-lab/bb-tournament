@@ -7,6 +7,13 @@
 </ng-container>
 
 <ng-container *ngIf="!loading && !loadError && tournament as t">
+  <div class="alert alert-info backup-banner" *ngIf="backupInfo as b">
+    🚑 Vous êtes sur la sauvegarde <strong>#{{ b.backupIndex }}</strong> de "{{ b.originalTournamentId }}" — c'est une
+    instance indépendante : toute action ici (lancer une ronde, saisir un résultat, changer la config…) n'affecte
+    QUE cette sauvegarde, jamais le tournoi en cours.
+    <a [routerLink]="['/tournaments', b.originalTournamentId, 'admin', token]">→ Retour au tournoi en cours</a>
+  </div>
+
   <p class="muted">
     <a [routerLink]="['/tournaments', tournamentId]">← Voir le tableau des scores public</a>
   </p>
@@ -79,6 +86,9 @@
       (click)="activeAdminTab = 'matchSheet'"
     >
       Score et Feuille de match
+    </button>
+    <button type="button" class="tab-btn" [class.active]="activeAdminTab === 'backups'" (click)="openBackupsTab()">
+      🚑 Sauvegardes
     </button>
   </div>
 
@@ -1092,6 +1102,47 @@
         [matchSheetConfig]="previewSheet"
         [customStatCategories]="customStatCategoriesDraft"
       ></app-match-result-form>
+    </section>
+  </ng-container>
+
+  <ng-container *ngIf="activeAdminTab === 'backups'">
+    <section class="card">
+      <h2>🚑 Sauvegardes</h2>
+      <p class="muted">
+        Un backup est créé automatiquement à chaque lancement de ronde. Vous pouvez aussi en créer un
+        manuellement à tout moment. Les backups sont des instances du tournoi à part entières et navigable. Vous pouvez aussi utiliser les backup pour tester, mais cela altère le backup.
+      </p>
+      <div class="alert alert-error" *ngIf="backupsError">{{ backupsError }}</div>
+
+      <button type="button" class="btn btn-primary" [disabled]="creatingBackup" (click)="createBackup()">
+        {{ creatingBackup ? 'Création…' : 'Créer une sauvegarde maintenant' }}
+      </button>
+
+      <p class="muted" *ngIf="backupsLoading" style="margin-top: 0.75rem">Chargement…</p>
+
+      <div class="table-wrap" *ngIf="!backupsLoading && backups.length > 0" style="margin-top: 0.75rem">
+        <table>
+          <thead>
+            <tr>
+              <th>Sauvegarde</th>
+              <th>Date</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let backup of backups">
+              <td>{{ tournamentId }}-bkp-{{ backup.index }}</td>
+              <td>{{ backup.createdAt | date: 'medium' }}</td>
+              <td>
+                <a class="btn" [routerLink]="['/tournaments', tournamentId + '-bkp-' + backup.index, 'admin', token]">
+                  Lien admin
+                </a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" *ngIf="!backupsLoading && backups.length === 0">Aucune sauvegarde pour le moment.</p>
     </section>
   </ng-container>
 

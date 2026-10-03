@@ -11,6 +11,7 @@ import {
   type SubmitResultRequest,
 } from '@bb-tournament/shared';
 import { ApiService, type Auth } from '../../core/api.service';
+import { type BackupIdInfo, parseBackupId } from '../../core/backup';
 import { extractErrorMessage } from '../../core/http-error';
 import { rosterImageUrl } from '../../core/links';
 import { rosterStatusLabel as labelForRosterStatus } from '../../core/roster-status';
@@ -36,6 +37,7 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
   tournamentId = '';
   teamId = '';
   password = '';
+  backupInfo: BackupIdInfo | null = null;
 
   tournament: PublicTournament | null = null;
   loading = true;
@@ -69,6 +71,7 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     this.tournamentId = this.route.snapshot.paramMap.get('tournamentId')!;
     this.teamId = this.route.snapshot.paramMap.get('teamId')!;
     this.password = this.route.snapshot.paramMap.get('password')!;
+    this.backupInfo = parseBackupId(this.tournamentId);
 
     try {
       await this.api.verifyTeamAccess(this.tournamentId, this.teamId, this.password);

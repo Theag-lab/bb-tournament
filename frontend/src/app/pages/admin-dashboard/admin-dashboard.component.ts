@@ -27,8 +27,10 @@ import {
   type StandingEntry,
   type SubmitResultRequest,
   type TiebreakerCriterion,
+  type TournamentBackupSummary,
 } from '@bb-tournament/shared';
 import { ApiService } from '../../core/api.service';
+import { type BackupIdInfo, parseBackupId } from '../../core/backup';
 import { extractErrorMessage } from '../../core/http-error';
 import { copyToClipboard, kioskUrl, participantUrl, rosterImageUrl, scoreboardUrl } from '../../core/links';
 import { renderMarkdown } from '../../core/markdown';
@@ -39,7 +41,7 @@ import { TeamImportComponent } from './team-import/team-import.component';
 
 const POLL_INTERVAL_MS = 60000;
 
-type AdminTab = 'overview' | 'rounds' | 'teams' | 'squads' | 'pools' | 'bracket' | 'challenges' | 'matchSheet';
+type AdminTab = 'overview' | 'rounds' | 'teams' | 'squads' | 'pools' | 'bracket' | 'challenges' | 'matchSheet' | 'backups';
 
 function cloneIndividualScoring(config: IndividualScoringConfig): IndividualScoringConfig {
   return {
@@ -108,6 +110,13 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   tournamentId = '';
   token = '';
 
+  /** Set once ngOnInit parses the route — non-null means "this id is a backup, not a live tournament". */
+  backupInfo: BackupIdInfo | null = null;
+
+  get isBackupView(): boolean {
+    return this.backupInfo !== null;
+  }
+
   tournament: AdminTournamentView | null = null;
   loading = true;
   loadError: string | null = null;
@@ -150,6 +159,44 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   organizerError: string | null = null;
 
   activeAdminTab: AdminTab = 'overview';
+
+  backups: TournamentBackupSummary[] = [];
+  backupsLoaded = false;
+  backupsLoading = false;
+  backupsError: string | null = null;
+  creatingBackup = false;
+
+  openBackupsTab(): void {
+    this.activeAdminTab = 'backups';
+    if (!this.backupsLoaded) void this.loadBackups();
+  }
+
+  async loadBackups(): Promise<void> {
+    this.backupsLoading = true;
+    this.backupsError = null;
+    try {
+      const res = await this.api.listBackups(this.tournamentId, this.token);
+      this.backups = res.backups;
+      this.backupsLoaded = true;
+    } catch (err) {
+      this.backupsError = extractErrorMessage(err);
+    } finally {
+      this.backupsLoading = false;
+    }
+  }
+
+  async createBackup(): Promise<void> {
+    this.creatingBackup = true;
+    this.backupsError = null;
+    try {
+      const backup = await this.api.createBackup(this.tournamentId, this.token);
+      this.backups = [backup, ...this.backups];
+    } catch (err) {
+      this.backupsError = extractErrorMessage(err);
+    } finally {
+      this.creatingBackup = false;
+    }
+  }
 
   private derivedCache: DerivedLookups = {
     tournament: null,
@@ -216,6 +263,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     this.tournamentId = this.route.snapshot.paramMap.get('tournamentId')!;
     this.token = this.route.snapshot.paramMap.get('token')!;
+    this.backupInfo = parseBackupId(this.tournamentId);
     await this.load();
     this.pollHandle = setInterval(() => this.load(true), POLL_INTERVAL_MS);
   }

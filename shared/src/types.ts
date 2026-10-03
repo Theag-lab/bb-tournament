@@ -524,6 +524,21 @@ export interface AdminTournamentView {
   knockoutChampionTeamId: string | null;
 }
 
+/**
+ * One manual backup snapshot (see storage.backupTournament) — `index` is the `N` in
+ * `tournaments/<id>-bkp-<N>.json`, `createdAt` the S3 object's last-modified time.
+ */
+export interface TournamentBackupSummary {
+  index: number;
+  createdAt: string;
+}
+
+export interface ListBackupsResponse {
+  backups: TournamentBackupSummary[]; // most recent first
+}
+
+export type CreateBackupResponse = TournamentBackupSummary;
+
 export interface UpdateTournamentDescriptionRequest {
   description: string;
 }

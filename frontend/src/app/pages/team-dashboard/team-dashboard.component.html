@@ -11,6 +11,12 @@
 </ng-container>
 
 <ng-container *ngIf="!loading && !loadError && tournament && myTeam as team">
+  <div class="alert alert-info backup-banner" *ngIf="backupInfo as b">
+    🚑 Sauvegarde <strong>#{{ b.backupIndex }}</strong> de "{{ b.originalTournamentId }}" — instance de test
+    indépendante, ce n'est pas le tournoi en cours.
+    <a [routerLink]="['/tournaments', b.originalTournamentId]">→ Voir le tournoi en cours</a>
+  </div>
+
   <p class="muted">
     <a [routerLink]="['/tournaments', tournamentId]">← Voir le tableau des scores complet</a>
   </p>

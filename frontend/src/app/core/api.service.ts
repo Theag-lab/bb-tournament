@@ -7,6 +7,7 @@ import type {
   UpdatePoolRequest,
   AssignTeamSquadRequest,
   ChallengeAction,
+  CreateBackupResponse,
   CreateChallengeRequest,
   CreateSquadRequest,
   CreateTeamRequest,
@@ -15,6 +16,7 @@ import type {
   CreateTournamentResponse,
   ImportTeamRow,
   ImportTeamsResponse,
+  ListBackupsResponse,
   PublicTournament,
   ResolveTeamResponse,
   RosterImageUploadUrlRequest,
@@ -72,6 +74,18 @@ export class ApiService {
   getAdminTournament(tournamentId: string, token: string) {
     return firstValueFrom(
       this.http.get<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/admin`, { params: { token } })
+    );
+  }
+
+  listBackups(tournamentId: string, token: string) {
+    return firstValueFrom(
+      this.http.get<ListBackupsResponse>(`${API_BASE}/tournaments/${tournamentId}/backups`, { params: { token } })
+    );
+  }
+
+  createBackup(tournamentId: string, token: string) {
+    return firstValueFrom(
+      this.http.post<CreateBackupResponse>(`${API_BASE}/tournaments/${tournamentId}/backups`, {}, { params: { token } })
     );
   }
 

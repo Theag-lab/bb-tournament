@@ -119,6 +119,17 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   scoreboardCopied = false;
   kioskCopied = false;
 
+  private visiblePasswordTeamIds = new Set<string>();
+
+  isPasswordVisible(teamId: string): boolean {
+    return this.visiblePasswordTeamIds.has(teamId);
+  }
+
+  togglePasswordVisibility(teamId: string): void {
+    if (this.visiblePasswordTeamIds.has(teamId)) this.visiblePasswordTeamIds.delete(teamId);
+    else this.visiblePasswordTeamIds.add(teamId);
+  }
+
   roundTimerDurationMinutesDraft = 0;
   savingRoundTimer = false;
   roundTimerError: string | null = null;

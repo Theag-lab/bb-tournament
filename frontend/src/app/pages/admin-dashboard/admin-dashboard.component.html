@@ -509,7 +509,18 @@
                   <option *ngFor="let pool of t.pools; trackBy: trackById" [value]="pool.id">{{ pool.name }}</option>
                 </select>
               </td>
-              <td><strong>{{ team.password }}</strong></td>
+              <td class="password-cell">
+                <strong>{{ isPasswordVisible(team.id) ? team.password : '••••••••' }}</strong>
+                <button
+                  type="button"
+                  class="icon-btn"
+                  (click)="togglePasswordVisibility(team.id)"
+                  [title]="isPasswordVisible(team.id) ? 'Masquer le mot de passe' : 'Afficher le mot de passe'"
+                  [attr.aria-label]="isPasswordVisible(team.id) ? 'Masquer le mot de passe' : 'Afficher le mot de passe'"
+                >
+                  {{ isPasswordVisible(team.id) ? '🙈' : '👁️' }}
+                </button>
+              </td>
               <td>
                 <button type="button" class="btn" (click)="copyTeamLink(team.id, team.password)">
                   {{ copiedTeamId === team.id ? 'Copié !' : 'Copier le lien' }}

@@ -69,7 +69,13 @@ export class BbTournamentStack extends cdk.Stack {
       handler: 'index.handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'backend', 'dist')),
       memorySize: 256,
-      timeout: cdk.Duration.seconds(10),
+      // Was 10s; bumped for the match-sheet log download (handlers/logs.ts), which can page
+      // through a full week of this shared Lambda's own log volume (every invocation, including
+      // every 60s poll from every open page) — comfortably fast for every other route, but
+      // FilterLogEvents over that much volume can take a while. logs.ts also self-limits to a
+      // time budget well under this so it returns a (possibly partial) result instead of being
+      // killed mid-request.
+      timeout: cdk.Duration.seconds(30),
       environment: {
         DATA_BUCKET_NAME: dataBucket.bucketName,
         ASSETS_BUCKET_NAME: assetsBucket.bucketName,

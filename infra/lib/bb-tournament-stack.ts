@@ -5,6 +5,7 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigwv2integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
@@ -76,6 +77,10 @@ export class BbTournamentStack extends cdk.Stack {
       // time budget well under this so it returns a (possibly partial) result instead of being
       // killed mid-request.
       timeout: cdk.Duration.seconds(30),
+      // Without this, the auto-created log group keeps everything forever. Covers both the normal
+      // per-invocation streams and the dedicated match-sheet-events stream (matchSheetLog.ts) —
+      // one group, one retention setting.
+      logRetention: logs.RetentionDays.ONE_MONTH,
       environment: {
         DATA_BUCKET_NAME: dataBucket.bucketName,
         ASSETS_BUCKET_NAME: assetsBucket.bucketName,
@@ -87,18 +92,19 @@ export class BbTournamentStack extends cdk.Stack {
     // itself (CloudFront + the browser handle that), so it needs put/delete but not get.
     assetsBucket.grantPut(apiFunction, 'roster-images/*');
     assetsBucket.grantDelete(apiFunction, 'roster-images/*');
-    // Lambdas can write their own logs by default, but not read them back — needed for the
-    // admin's "download this tournament's match-sheet logs" export (handlers/logs.ts), which
-    // filters this same function's own log group. The resource pattern deliberately wildcards the
-    // function-name segment instead of referencing `apiFunction.functionName`/`apiFunction.logGroup`:
-    // either one would put a reference to the function inside its OWN role's policy, and since the
-    // function already has an explicit CloudFormation DependsOn on that policy (standard CDK
-    // behaviour, for IAM propagation), that reference closes a circular dependency
-    // (Function -> its role's policy -> Function). There's only one Lambda in this stack, so the
-    // wildcard is no broader in practice than naming it directly.
+    // Lambdas can write their own logs by default, but not read them back, nor manage a specific
+    // named stream — both needed for the match-sheet audit trail (src/matchSheetLog.ts, written
+    // to its own dedicated log stream rather than via console.log) and its admin-facing download
+    // (handlers/logs.ts). The resource pattern deliberately wildcards the function-name segment
+    // instead of referencing `apiFunction.functionName`/`apiFunction.logGroup`: either one would
+    // put a reference to the function inside its OWN role's policy, and since the function already
+    // has an explicit CloudFormation DependsOn on that policy (standard CDK behaviour, for IAM
+    // propagation), that reference closes a circular dependency (Function -> its role's policy ->
+    // Function). There's only one Lambda in this stack, so the wildcard is no broader in practice
+    // than naming it directly.
     apiFunction.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ['logs:FilterLogEvents'],
+        actions: ['logs:FilterLogEvents', 'logs:PutLogEvents', 'logs:CreateLogStream'],
         resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/*:*`],
       })
     );

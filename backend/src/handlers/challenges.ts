@@ -6,18 +6,22 @@ import {
   CreateChallengeRequest,
   CustomStatValue,
   DEFAULT_INDIVIDUAL_SCORING,
-  MatchResult,
   SubmitResultRequest,
   Tournament,
   computeMatchScore,
 } from '@bb-tournament/shared';
 import * as storage from '../storage';
 import { authenticateTeam, isAdmin } from '../auth';
+import { logMatchSheetEvent, toMatchResultLogView } from '../matchSheetLog';
 import { toPublicTournament } from '../sanitize';
 import { badRequest, forbidden, notFound, unauthorized } from '../errors';
 
 const ACTIVE_STATUSES = new Set(['pending', 'accepted', 'awaiting_confirmation']);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function coachNameOf(tournament: Tournament, teamId: string): string {
+  return tournament.teams.find((tm) => tm.id === teamId)?.coachName ?? teamId;
+}
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -205,15 +209,6 @@ function validateResultInput(body: Partial<SubmitResultRequest> | null): SubmitR
   };
 }
 
-/**
- * Audit trail for every match-sheet event, written to CloudWatch (via the Lambda's stdout) rather
- * than persisted anywhere — "[TID:<id>] <tournament name> - <who/what submitted> - <match sheet>".
- * The leading `[TID:<id>]` tag (not just the tournament name, which isn't guaranteed unique) is
- * what handlers/logs.ts filters on when an admin downloads this tournament's own log slice.
- */
-function logMatchSheetEvent(tournamentId: string, tournamentName: string, action: string, result: MatchResult | null): void {
-  console.log(`[TID:${tournamentId}] ${tournamentName} - ${action} - ${JSON.stringify(result)}`);
-}
 
 /**
  * A coach can only submit a result for a challenge that hasn't had one submitted yet. Once it's
@@ -275,13 +270,18 @@ export async function submitResult(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
-  const coachName = tournament.teams.find((tm) => tm.id === submittedByTeamId)?.coachName ?? submittedByTeamId;
-  logMatchSheetEvent(
-    tournamentId,
-    tournament.name,
-    `Proposition par un coach ${coachName}`,
-    tournament.challenges.find((ch) => ch.id === challengeId)?.result ?? null
-  );
+  const challenge = tournament.challenges.find((ch) => ch.id === challengeId);
+  const coachName = coachNameOf(tournament, submittedByTeamId);
+  if (challenge) {
+    await logMatchSheetEvent(
+      tournamentId,
+      tournament.name,
+      coachNameOf(tournament, challenge.team1Id),
+      coachNameOf(tournament, challenge.team2Id),
+      `Proposition par un coach ${coachName}`,
+      challenge.result ? toMatchResultLogView(challenge.result, (id) => coachNameOf(tournament, id)) : null
+    );
+  }
   return c.json(toPublicTournament(tournament, teamId ?? null));
 }
 
@@ -317,13 +317,18 @@ export async function confirmResult(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
-  const coachName = tournament.teams.find((tm) => tm.id === confirmedByTeamId)?.coachName ?? confirmedByTeamId;
-  logMatchSheetEvent(
-    tournamentId,
-    tournament.name,
-    `Acceptation par un coach ${coachName}`,
-    tournament.challenges.find((ch) => ch.id === challengeId)?.result ?? null
-  );
+  const challenge = tournament.challenges.find((ch) => ch.id === challengeId);
+  const coachName = coachNameOf(tournament, confirmedByTeamId);
+  if (challenge) {
+    await logMatchSheetEvent(
+      tournamentId,
+      tournament.name,
+      coachNameOf(tournament, challenge.team1Id),
+      coachNameOf(tournament, challenge.team2Id),
+      `Acceptation par un coach ${coachName}`,
+      challenge.result ? toMatchResultLogView(challenge.result, (id) => coachNameOf(tournament, id)) : null
+    );
+  }
   return c.json(toPublicTournament(tournament, teamId ?? null));
 }
 
@@ -366,11 +371,16 @@ export async function adminSetResult(c: Context) {
   });
 
   const tournament = await storage.getTournament(tournamentId);
-  logMatchSheetEvent(
-    tournamentId,
-    tournament.name,
-    "Soumission par l'admin",
-    tournament.challenges.find((ch) => ch.id === challengeId)?.result ?? null
-  );
+  const challenge = tournament.challenges.find((ch) => ch.id === challengeId);
+  if (challenge) {
+    await logMatchSheetEvent(
+      tournamentId,
+      tournament.name,
+      coachNameOf(tournament, challenge.team1Id),
+      coachNameOf(tournament, challenge.team2Id),
+      "Soumission par l'admin",
+      challenge.result ? toMatchResultLogView(challenge.result, (id) => coachNameOf(tournament, id)) : null
+    );
+  }
   return c.json(toPublicTournament(tournament));
 }

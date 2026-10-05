@@ -113,6 +113,9 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   /** Set once ngOnInit parses the route — non-null means "this id is a backup, not a live tournament". */
   backupInfo: BackupIdInfo | null = null;
 
+  /** True only right after navigating here from the tournament-creation screen (see home.component.ts's goToAdmin). */
+  showBookmarkReminder = false;
+
   get isBackupView(): boolean {
     return this.backupInfo !== null;
   }
@@ -264,8 +267,13 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     this.tournamentId = this.route.snapshot.paramMap.get('tournamentId')!;
     this.token = this.route.snapshot.paramMap.get('token')!;
     this.backupInfo = parseBackupId(this.tournamentId);
+    this.showBookmarkReminder = !!(history.state as { justCreated?: boolean } | null)?.justCreated;
     await this.load();
     this.pollHandle = setInterval(() => this.load(true), POLL_INTERVAL_MS);
+  }
+
+  dismissBookmarkReminder(): void {
+    this.showBookmarkReminder = false;
   }
 
   ngOnDestroy(): void {

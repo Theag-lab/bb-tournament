@@ -312,7 +312,10 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   goToAdmin(): void {
     if (this.createdTournamentId && this.createdAdminToken) {
-      this.router.navigate(['/tournaments', this.createdTournamentId, 'admin', this.createdAdminToken]);
+      // Not a query param: it must not end up in the URL the admin is about to bookmark.
+      this.router.navigate(['/tournaments', this.createdTournamentId, 'admin', this.createdAdminToken], {
+        state: { justCreated: true },
+      });
     }
   }
 

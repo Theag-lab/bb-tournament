@@ -14,6 +14,12 @@
     <a [href]="'/tournaments/' + b.originalTournamentId + '/admin/' + token">→ Retour au tournoi en cours</a>
   </div>
 
+  <div class="alert alert-info" *ngIf="showBookmarkReminder">
+    💡 Astuce : <kbd>Ctrl</kbd>+<kbd>D</kbd> (<kbd>⌘</kbd>+<kbd>D</kbd> sur Mac) pour ajouter cette page à vos favoris
+    maintenant que vous êtes sur le bon lien.
+    <button type="button" class="btn" (click)="dismissBookmarkReminder()">OK</button>
+  </div>
+
   <p class="muted">
     <a [routerLink]="['/tournaments', tournamentId]">← Voir le tableau des scores public</a>
   </p>

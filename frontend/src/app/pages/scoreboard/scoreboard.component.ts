@@ -164,6 +164,10 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     try {
       this.tournament = await this.api.getTournament(this.tournamentId);
       this.descriptionHtml = renderMarkdown(this.tournament.description);
+      // Once the knockout bracket exists it's what visitors come for — open on it by default.
+      if (!silent && this.tournament.mode === 'pools_knockout' && this.tournament.bracket !== null) {
+        this.activeTab = 'bracket';
+      }
       this.error = null;
     } catch (err) {
       this.error = extractErrorMessage(err);

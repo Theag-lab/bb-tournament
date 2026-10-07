@@ -49,6 +49,15 @@
   </section>
 
   <div class="tabs">
+    <button
+      *ngIf="t.mode === 'pools_knockout' && t.bracket !== null"
+      type="button"
+      class="tab-btn"
+      [class.active]="activeTab === 'bracket'"
+      (click)="activeTab = 'bracket'"
+    >
+      Tableau final
+    </button>
     <button type="button" class="tab-btn" [class.active]="activeTab === 'scores'" (click)="activeTab = 'scores'">
       Tableau des scores
     </button>
@@ -63,15 +72,6 @@
       (click)="activeTab = roundTabId(r.number)"
     >
       Ronde {{ r.number }}
-    </button>
-    <button
-      *ngIf="t.mode === 'pools_knockout' && t.bracket !== null"
-      type="button"
-      class="tab-btn"
-      [class.active]="activeTab === 'bracket'"
-      (click)="activeTab = 'bracket'"
-    >
-      Tableau final
     </button>
     <button
       type="button"

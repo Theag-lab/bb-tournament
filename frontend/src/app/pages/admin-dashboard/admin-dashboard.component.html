@@ -344,8 +344,32 @@
         </div>
 
         <ng-container *ngIf="r.status === 'draft'">
+          <div class="actions" style="margin-bottom: 0.25rem" *ngIf="isTeamFormat">
+            <select [(ngModel)]="pairSquadId1" [name]="'pairSquad1-' + r.number">
+              <option value="" disabled selected>Équipe A</option>
+              <option *ngFor="let squad of roundSquads(r.number)" [value]="squad.squadId">{{ squad.label }}</option>
+            </select>
+            <span>contre</span>
+            <select [(ngModel)]="pairSquadId2" [name]="'pairSquad2-' + r.number">
+              <option value="" disabled selected>Équipe B</option>
+              <option *ngFor="let squad of roundSquads(r.number)" [value]="squad.squadId">{{ squad.label }}</option>
+            </select>
+            <button
+              type="button"
+              class="btn"
+              [disabled]="roundBusy || !pairSquadId1 || !pairSquadId2 || pairSquadId1 === pairSquadId2"
+              (click)="pairSquads(r.number)"
+            >
+              Faire s'affronter ces deux équipes
+            </button>
+          </div>
+          <p class="muted" style="margin: 0 0 0.75rem" *ngIf="isTeamFormat">
+            Les coachs des deux équipes sont alors appariés {{ r.number === 1 ? 'au hasard' : 'par classement' }}, sauf
+            ceux que vous avez forcés. Leurs anciens adversaires s'affrontent entre eux.
+          </p>
+
           <div class="actions" style="margin-bottom: 0.75rem">
-            <select [(ngModel)]="swapTeamId1" [name]="'swap1-' + r.number">
+            <select [(ngModel)]="swapTeamId1" [name]="'swap1-' + r.number" (ngModelChange)="onSwapTeam1Change(r.number)">
               <option value="" disabled selected>Coach A</option>
               <option *ngFor="let coach of roundCoaches(r.number)" [value]="coach.teamId">
                 {{ coach.label }}
@@ -354,7 +378,7 @@
             <span>contre</span>
             <select [(ngModel)]="swapTeamId2" [name]="'swap2-' + r.number">
               <option value="" disabled selected>Coach B</option>
-              <option *ngFor="let coach of roundCoaches(r.number)" [value]="coach.teamId">
+              <option *ngFor="let coach of swapCandidates(r.number)" [value]="coach.teamId">
                 {{ coach.label }}
               </option>
             </select>
@@ -366,24 +390,42 @@
             >
               Faire s'affronter ces deux coachs
             </button>
+          </div>
+
+          <div class="actions" style="margin-bottom: 0.75rem" *ngIf="canRedrawRound(r)">
+            <button type="button" class="btn" [disabled]="roundBusy" (click)="rerandomizeRound(r.number)">
+              Regénérer aléatoirement la ronde {{ r.number }}
+            </button>
+            <label *ngIf="lockCount(r) > 0">
+              <input type="checkbox" [(ngModel)]="redrawKeepLocks" [name]="'redrawKeepLocks-' + r.number" />
+              Conserver les appariements forcés 🔒 ({{ lockCount(r) }})
+            </label>
+          </div>
+
+          <div class="actions" style="margin-bottom: 0.75rem">
             <button type="button" class="btn btn-primary" [disabled]="roundBusy" (click)="launchRound(r.number)">
               Lancer la ronde {{ r.number }}
             </button>
           </div>
         </ng-container>
 
+        <ng-container *ngFor="let row of roundMatchGroups(r.number); trackBy: trackByRoundMatchRow">
+        <div class="group-divider challenge-group-header" *ngIf="row.groupLabel">{{ row.groupLabel }}</div>
         <div
           class="challenge"
-          *ngFor="let row of roundMatchGroups(r.number); trackBy: trackByRoundMatchRow"
-          [class.challenge-group-start]="row.groupStart"
+          [class.challenge-group-start]="row.groupStart && !row.groupLabel"
           [class.match-group-alt]="row.groupIndex % 2 === 1"
         >
           <div class="challenge-head">
-            <strong>{{ matchPrimaryLabel(row.leftTeamId) }} vs {{ matchPrimaryLabel(row.rightTeamId) }}</strong>
+            <strong>
+              {{ matchPrimaryLabel(row.leftTeamId) }} vs {{ matchPrimaryLabel(row.rightTeamId) }}
+              <span *ngIf="isLockedMatch(r, row.leftTeamId, row.rightTeamId)" title="Appariement forcé par l'admin">🔒</span>
+            </strong>
             <span class="badge" [ngClass]="'badge-' + row.challenge.status">{{ row.challenge.status }}</span>
           </div>
           <div class="subtext" *ngIf="isTeamFormat">
             {{ squadName(teamSquadId(row.leftTeamId)) }} vs {{ squadName(teamSquadId(row.rightTeamId)) }}
+            <span *ngIf="isLockedSquadMatch(r, row.leftTeamId, row.rightTeamId)" title="Confrontation forcée par l'admin">🔒</span>
           </div>
           <div class="subtext" *ngIf="!isTeamFormat">
             {{ teamRace(row.leftTeamId) }} vs {{ teamRace(row.rightTeamId) }}
@@ -416,6 +458,7 @@
             (submitResult)="forceResult(row.challenge.id, $event)"
           ></app-match-result-form>
         </div>
+        </ng-container>
 
         <p class="muted" *ngIf="roundMatches(r.number).length === 0">Aucun match dans cette ronde.</p>
       </ng-container>

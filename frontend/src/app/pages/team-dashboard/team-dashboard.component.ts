@@ -12,7 +12,7 @@ import {
 } from '@bb-tournament/shared';
 import { ApiService, type Auth } from '../../core/api.service';
 import { type BackupIdInfo, parseBackupId } from '../../core/backup';
-import { extractErrorMessage } from '../../core/http-error';
+import { extractErrorBody, extractErrorMessage } from '../../core/http-error';
 import { rosterImageUrl } from '../../core/links';
 import { rosterStatusLabel as labelForRosterStatus } from '../../core/roster-status';
 import { uploadToS3 } from '../../core/upload';
@@ -50,6 +50,9 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
   editCoachName = '';
   editRace = '';
   editNafNumber = '';
+  /** Set when the NAF has another coach name on file for the entered NAF number (see saveProfile). */
+  nafMismatch: { nafNumber: string; nafName: string } | null = null;
+  nafNumberUnknown = false;
   editPassword = '';
   savingProfile = false;
 
@@ -240,6 +243,8 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     if (!this.isTeamFormat && !name) return;
     this.savingProfile = true;
     this.actionError = null;
+    this.nafMismatch = null;
+    this.nafNumberUnknown = false;
     try {
       this.tournament = await this.api.updateTeam(this.tournamentId, this.teamId, this.auth, {
         name: this.isTeamFormat ? undefined : name,
@@ -252,10 +257,30 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
       });
       this.password = password;
     } catch (err) {
-      this.actionError = extractErrorMessage(err);
+      const { code, details } = extractErrorBody(err);
+      if (code === 'naf_name_mismatch' && typeof details['nafName'] === 'string') {
+        this.nafMismatch = { nafNumber: String(details['nafNumber'] ?? nafNumber), nafName: details['nafName'] };
+      } else if (code === 'naf_number_unknown') {
+        this.nafNumberUnknown = true;
+      } else {
+        this.actionError = extractErrorMessage(err);
+      }
     } finally {
       this.savingProfile = false;
     }
+  }
+
+  /** Adopts the coach name the NAF has on file for this NAF number, and saves again. */
+  async useNafCoachName(): Promise<void> {
+    if (!this.nafMismatch) return;
+    this.editCoachName = this.nafMismatch.nafName;
+    await this.saveProfile();
+  }
+
+  /** Dismisses the mismatch and puts the cursor back in the NAF number field so the coach can fix it. */
+  fixNafNumber(): void {
+    this.nafMismatch = null;
+    document.getElementById('edit-naf-number')?.focus();
   }
 
   async sendChallenge(): Promise<void> {

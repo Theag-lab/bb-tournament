@@ -350,6 +350,28 @@ table {
   margin-top: 1rem;
 }
 
+// Team format: the divider itself names the table and the two squads facing each other — the
+// red line runs on both sides of the centred label, interrupted by it.
+.group-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text);
+  font-weight: 700;
+  text-align: center;
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    border-top: 2px solid var(--primary);
+  }
+}
+
+.challenge-group-header {
+  margin-top: 1rem;
+}
+
 .link-copy {
   display: flex;
   align-items: center;

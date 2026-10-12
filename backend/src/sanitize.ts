@@ -71,7 +71,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
     // Round metadata (number + draft/launched status) never leaks pairing details, so it's
     // always shown — this lets the frontend know e.g. registration is closed while a draft
     // round is still being prepared, without exposing who's actually paired with whom yet.
-    rounds: t.rounds,
+    rounds: t.rounds.map((r) => ({ number: r.number, status: r.status })),
     format: t.format,
     squadSize: t.squadSize,
     squadScoring: t.squadScoring,

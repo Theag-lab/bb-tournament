@@ -282,6 +282,26 @@ export class ApiService {
     );
   }
 
+  pairRoundSquads(tournamentId: string, token: string, roundNumber: number, squadId1: string, squadId2: string) {
+    return firstValueFrom(
+      this.http.post<AdminTournamentView>(
+        `${API_BASE}/tournaments/${tournamentId}/rounds/${roundNumber}/pair-squads`,
+        { squadId1, squadId2 },
+        { params: { token } }
+      )
+    );
+  }
+
+  rerandomizeRound(tournamentId: string, token: string, roundNumber: number, keepLocks: boolean) {
+    return firstValueFrom(
+      this.http.post<AdminTournamentView>(
+        `${API_BASE}/tournaments/${tournamentId}/rounds/${roundNumber}/rerandomize`,
+        { keepLocks },
+        { params: { token } }
+      )
+    );
+  }
+
   /** Direct download link (GET, admin token in the query string) rather than a fetch — it's a file, not JSON. */
   nafExportUrl(tournamentId: string, token: string): string {
     return `${API_BASE}/tournaments/${tournamentId}/naf-export?token=${encodeURIComponent(token)}`;

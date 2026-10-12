@@ -54,7 +54,23 @@
           placeholder="Ex : 12345"
           inputmode="numeric"
           pattern="[0-9]*"
+          (ngModelChange)="nafNumberUnknown = false"
         />
+        <div class="alert alert-error" *ngIf="nafNumberUnknown">
+          Ce numéro NAF est inconnu de la NAF : vérifiez-le, ou laissez le champ vide.
+        </div>
+        <div class="alert alert-error" *ngIf="nafMismatch as m">
+          <p style="margin-top: 0">
+            À la NAF, le numéro {{ m.nafNumber }} correspond au coach <strong>« {{ m.nafName }} »</strong>, pas à
+            « {{ editCoachName.trim() }} ». Le nom de coach doit être le même que votre nom NAF.
+          </p>
+          <div class="actions">
+            <button type="button" class="btn btn-primary" [disabled]="savingProfile" (click)="useNafCoachName()">
+              Utiliser « {{ m.nafName }} » comme nom de coach
+            </button>
+            <button type="button" class="btn" (click)="fixNafNumber()">Corriger mon numéro NAF</button>
+          </div>
+        </div>
         <p class="muted">
           Renseignez-le si vous êtes inscrit à la <a href="https://www.thenaf.net" target="_blank" rel="noopener">NAF</a> —
           cela permet à l'organisateur d'exporter les résultats vers la NAF après le tournoi.

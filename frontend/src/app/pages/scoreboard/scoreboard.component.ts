@@ -14,7 +14,7 @@ import {
 } from '@bb-tournament/shared';
 import { ApiService } from '../../core/api.service';
 import { type BackupIdInfo, parseBackupId } from '../../core/backup';
-import { extractErrorMessage } from '../../core/http-error';
+import { extractErrorBody, extractErrorMessage } from '../../core/http-error';
 import { copyToClipboard, participantUrl, rosterImageUrl, scoreboardUrl } from '../../core/links';
 import { renderMarkdown } from '../../core/markdown';
 import { rosterStatusLabel } from '../../core/roster-status';
@@ -36,6 +36,8 @@ export interface RoundMatchRow {
   challenge: PublicTournament['challenges'][number];
   groupStart: boolean;
   groupIndex: number;
+  /** Team format, first row of each squad confrontation: "Table N : Squad A vs Squad B". */
+  groupLabel?: string;
   leftTeamId: string;
   rightTeamId: string;
   leftTd: number | null;
@@ -74,6 +76,10 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   joinCoachName = '';
   joinRace = '';
   joinPassword = '';
+  joinNafNumber = '';
+  /** Set when the NAF has another coach name on file for the entered NAF number (see submitJoin). */
+  joinNafMismatch: { nafNumber: string; nafName: string } | null = null;
+  joinNafNumberUnknown = false;
   joinSquadChoice: 'existing' | 'new' = 'existing';
   joinSquadId = '';
   joinNewSquadName = '';
@@ -251,6 +257,36 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     return this.tournament?.rounds.filter((r) => r.status === 'launched') ?? [];
   }
 
+  /**
+   * Races stay hidden from the public until round 1 launches (see rosterDetailsHiddenFromOthers in
+   * the backend), so the roster breakdown only shows once a round is launched — or in ladder mode,
+   * where races are visible from the start.
+   */
+  get showRaceStats(): boolean {
+    return !!this.tournament && (this.tournament.mode === 'ladder' || this.launchedRounds.length > 0);
+  }
+
+  private raceStatsCache: { tournament: PublicTournament | null; rows: { race: string; count: number; widthPct: number }[] } = {
+    tournament: null,
+    rows: [],
+  };
+
+  /** Teams per roster, most played first (ties alphabetical), bar widths relative to the most played. */
+  get raceStats(): { race: string; count: number; widthPct: number }[] {
+    if (this.raceStatsCache.tournament === this.tournament) return this.raceStatsCache.rows;
+    const counts = new Map<string, number>();
+    for (const team of this.tournament?.teams ?? []) {
+      if (!team.race || team.race === '—') continue;
+      counts.set(team.race, (counts.get(team.race) ?? 0) + 1);
+    }
+    const max = Math.max(1, ...counts.values());
+    const rows = Array.from(counts, ([race, count]) => ({ race, count, widthPct: (count / max) * 100 })).sort(
+      (a, b) => b.count - a.count || a.race.localeCompare(b.race)
+    );
+    this.raceStatsCache = { tournament: this.tournament, rows };
+    return rows;
+  }
+
   get registrationClosed(): boolean {
     return !!this.tournament && this.tournament.mode !== 'ladder' && this.tournament.rounds.length > 0;
   }
@@ -354,10 +390,13 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
       const anchorSquad = this.squadRank(squadX) <= this.squadRank(squadY) ? squadX : squadY;
       groupsByKey.get(key)!.forEach((challenge, i) => {
         const team1IsAnchor = this.teamSquadId(challenge.team1Id) === anchorSquad;
+        const otherSquad = anchorSquad === squadX ? squadY : squadX;
         rows.push({
           challenge,
           groupStart: i === 0 && groupIndex > 0,
           groupIndex,
+          groupLabel:
+            i === 0 ? `Table ${groupIndex + 1} : ${this.squadName(anchorSquad)} vs ${this.squadName(otherSquad)}` : undefined,
           leftTeamId: team1IsAnchor ? challenge.team1Id : challenge.team2Id,
           rightTeamId: team1IsAnchor ? challenge.team2Id : challenge.team1Id,
           leftTd: challenge.result ? (team1IsAnchor ? challenge.result.team1Td : challenge.result.team2Td) : null,
@@ -403,24 +442,48 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     const race = this.joinRace.trim();
     const password = this.joinPassword.trim();
     if (!this.canSubmitJoin) return;
+    const nafNumber = this.joinNafNumber.trim();
     this.joinBusy = true;
     this.joinError = null;
+    this.joinNafMismatch = null;
+    this.joinNafNumberUnknown = false;
     try {
       const res = await this.api.createTeam(this.tournamentId, {
         name: this.isTeamFormat ? undefined : name,
         coachName,
         race,
         password,
+        nafNumber: nafNumber || null,
         squadId: this.isTeamFormat && this.joinSquadChoice === 'existing' ? this.joinSquadId : undefined,
         newSquadName: this.isTeamFormat && this.joinSquadChoice === 'new' ? this.joinNewSquadName.trim() : undefined,
       });
       this.createdTeam = { teamId: res.teamId, password };
       await this.load(true);
     } catch (err) {
-      this.joinError = extractErrorMessage(err);
+      const { code, details } = extractErrorBody(err);
+      if (code === 'naf_name_mismatch' && typeof details['nafName'] === 'string') {
+        this.joinNafMismatch = { nafNumber: String(details['nafNumber'] ?? nafNumber), nafName: details['nafName'] };
+      } else if (code === 'naf_number_unknown') {
+        this.joinNafNumberUnknown = true;
+      } else {
+        this.joinError = extractErrorMessage(err);
+      }
     } finally {
       this.joinBusy = false;
     }
+  }
+
+  /** Adopts the coach name the NAF has on file for this NAF number, and submits again. */
+  async useJoinNafCoachName(): Promise<void> {
+    if (!this.joinNafMismatch) return;
+    this.joinCoachName = this.joinNafMismatch.nafName;
+    await this.submitJoin();
+  }
+
+  /** Dismisses the mismatch and puts the cursor back in the NAF number field so the coach can fix it. */
+  fixJoinNafNumber(): void {
+    this.joinNafMismatch = null;
+    document.getElementById('join-naf-number')?.focus();
   }
 
   get createdTeamUrl(): string {

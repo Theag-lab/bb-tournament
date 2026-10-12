@@ -94,3 +94,57 @@
   max-height: 70vh;
   border-radius: var(--radius);
 }
+
+// Horizontal bar chart of teams per roster: one series, so one color and no legend — the count is
+// written at the end of each bar, which doubles as the table view.
+.race-stats-title {
+  margin: 1.5rem 0 0.75rem;
+  font-size: 1rem;
+}
+
+.race-stats {
+  display: grid;
+  grid-template-columns: minmax(6rem, max-content) 1fr 2.5rem;
+  row-gap: 2px;
+  column-gap: 0.75rem;
+  align-items: center;
+}
+
+.race-stats-row {
+  display: contents;
+
+  &:hover .race-stats-bar {
+    background: var(--primary-hover);
+  }
+
+  &:hover .race-stats-label {
+    color: var(--text);
+  }
+}
+
+.race-stats-label {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.race-stats-track {
+  display: block;
+  padding: 3px 0;
+}
+
+.race-stats-bar {
+  display: block;
+  height: 14px;
+  min-width: 4px;
+  background: var(--primary);
+  border-radius: 0 4px 4px 0;
+}
+
+.race-stats-count {
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}

@@ -1,8 +1,8 @@
 import type { Context } from 'hono';
-import type { SwapRoundMatchesRequest } from '@bb-tournament/shared';
+import type { PairRoundSquadsRequest, RerandomizeRoundRequest, SwapRoundMatchesRequest } from '@bb-tournament/shared';
 import * as storage from '../storage';
 import { requireAdmin } from '../auth';
-import { cancelRoundLaunch, generateNextRound, launchRound, swapRoundMatches } from '../rounds';
+import { cancelRoundLaunch, generateNextRound, launchRound, pairRoundSquads, rerandomizeRound, swapRoundMatches } from '../rounds';
 import { launchKnockoutPhase } from '../bracket';
 import { toAdminTournamentView } from '../sanitize';
 import { badRequest } from '../errors';
@@ -37,6 +37,37 @@ export async function swapMatches(c: Context) {
   await storage.updateTournament(tournamentId, (t) => {
     requireAdmin(t, token);
     swapRoundMatches(t, roundNumber, body.teamId1, body.teamId2);
+  });
+
+  const tournament = await storage.getTournament(tournamentId);
+  return c.json(toAdminTournamentView(tournament));
+}
+
+export async function pairSquads(c: Context) {
+  const tournamentId = c.req.param('tournamentId')!;
+  const roundNumber = parseRoundNumber(c);
+  const token = c.req.query('token');
+  const body = await c.req.json<PairRoundSquadsRequest>().catch(() => null);
+  if (!body?.squadId1 || !body?.squadId2) throw badRequest('squadId1 and squadId2 are required');
+
+  await storage.updateTournament(tournamentId, (t) => {
+    requireAdmin(t, token);
+    pairRoundSquads(t, roundNumber, body.squadId1, body.squadId2);
+  });
+
+  const tournament = await storage.getTournament(tournamentId);
+  return c.json(toAdminTournamentView(tournament));
+}
+
+export async function rerandomize(c: Context) {
+  const tournamentId = c.req.param('tournamentId')!;
+  const roundNumber = parseRoundNumber(c);
+  const token = c.req.query('token');
+  const body = await c.req.json<RerandomizeRoundRequest>().catch(() => null);
+
+  await storage.updateTournament(tournamentId, (t) => {
+    requireAdmin(t, token);
+    rerandomizeRound(t, roundNumber, body?.keepLocks !== false);
   });
 
   const tournament = await storage.getTournament(tournamentId);

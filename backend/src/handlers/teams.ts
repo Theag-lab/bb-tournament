@@ -23,6 +23,7 @@ import { authenticateTeam, findTeamById, isAdmin, requireAdmin, validatePassword
 import { toAdminTournamentView, toPublicTournament } from '../sanitize';
 import { badRequest, conflict, forbidden, notFound, unauthorized } from '../errors';
 import { assetsBucketName, rosterImageKey } from '../rosterImage';
+import { lookupNafCoach } from '../nafCoachCheck';
 
 const s3 = new S3Client({});
 const MAX_FIELD_LENGTH = 40;
@@ -132,6 +133,7 @@ export async function createTeam(c: Context) {
   const tournamentId = c.req.param('tournamentId')!;
   const body = await c.req.json<CreateTeamRequest>().catch(() => null);
   const { name: rawName, coachName, race, password, nafNumber } = validateTeamInput(body);
+  if (nafNumber) await assertNafIdentity(coachName, nafNumber);
 
   let newTeamId = '';
   await storage.updateTournament(tournamentId, (t) => {
@@ -390,6 +392,8 @@ export async function updateTeam(c: Context) {
   const token = c.req.query('token');
   const body = await c.req.json<Partial<CreateTeamRequest>>().catch(() => ({}) as Partial<CreateTeamRequest>);
 
+  await assertNafIdentityConsistent(tournamentId, teamId, password, token, body);
+
   await storage.updateTournament(tournamentId, (t) => {
     const team = findTeamById(t, teamId);
 
@@ -434,6 +438,51 @@ export async function updateTeam(c: Context) {
 
   const tournament = await storage.getTournament(tournamentId);
   return c.json(toPublicTournament(tournament, teamId));
+}
+
+/**
+ * Checks a coach name / NAF number pair against the NAF's own records — an unknown number has to
+ * be re-entered, and a name that doesn't match the NAF's is refused with that name in
+ * `details.nafName`, so the coach can adopt it (or fix their number). Never blocks when the NAF
+ * site doesn't answer. Async (NAF call), so callers run it before their storage update.
+ */
+async function assertNafIdentity(coachName: string, nafNumber: string): Promise<void> {
+  const lookup = await lookupNafCoach(nafNumber);
+  if (lookup.status === 'not_found') {
+    throw badRequest(`Le numéro NAF ${nafNumber} est inconnu de la NAF : vérifiez-le`, 'naf_number_unknown');
+  }
+  // Exact match on purpose (case, accents, spaces): the NAF export needs the very same name.
+  if (lookup.status === 'found' && coachName !== lookup.nafName) {
+    throw conflict(
+      `Le numéro NAF ${nafNumber} correspond au coach « ${lookup.nafName} » à la NAF, pas à « ${coachName} »`,
+      'naf_name_mismatch',
+      { nafNumber, nafName: lookup.nafName }
+    );
+  }
+}
+
+/**
+ * Coach edits only: re-checks the NAF identity (see assertNafIdentity) when the coach name or NAF
+ * number changes. Admin edits skip it: the organiser can always correct what they know better.
+ */
+async function assertNafIdentityConsistent(
+  tournamentId: string,
+  teamId: string,
+  password: string | undefined,
+  token: string | undefined,
+  body: Partial<CreateTeamRequest>
+): Promise<void> {
+  if (body.coachName === undefined && body.nafNumber === undefined) return;
+  const t = await storage.getTournament(tournamentId);
+  if (isAdmin(t, token)) return;
+  const team = findTeamById(t, teamId);
+  authenticateTeam(t, teamId, password);
+
+  const coachName = body.coachName !== undefined ? body.coachName.trim() : team.coachName;
+  const nafNumber = body.nafNumber !== undefined ? validateNafNumber(body.nafNumber) : team.nafNumber;
+  if (!nafNumber || !coachName) return;
+  if (coachName === team.coachName && nafNumber === team.nafNumber) return;
+  await assertNafIdentity(coachName, nafNumber);
 }
 
 export async function deleteTeam(c: Context) {

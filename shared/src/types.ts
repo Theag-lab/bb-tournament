@@ -60,6 +60,15 @@ export type RoundStatus = 'draft' | 'launched'; // draft = admin-only, pairings 
 export interface RoundInfo {
   number: number;
   status: RoundStatus;
+  /**
+   * Pairings the admin explicitly forced while preparing this round (coach vs coach, and in team
+   * format squad vs squad) — remembered so that regenerating round 1 at random keeps them. Admin
+   * view only: stripped from the public view, like the draft pairings themselves.
+   */
+  lockedPairs?: [string, string][];
+  lockedSquadPairs?: [string, string][];
+  /** swiss_with_challenge round 1: matches carried over from pre-round challenges, never re-randomized. */
+  fixedChallengeIds?: string[];
 }
 
 /**
@@ -621,6 +630,16 @@ export interface UpdateRosterStatusRequest {
 export interface SwapRoundMatchesRequest {
   teamId1: string;
   teamId2: string;
+}
+
+/** Team format: pits two squads against each other, their members paired at random (round 1) or by rank. */
+export interface PairRoundSquadsRequest {
+  squadId1: string;
+  squadId2: string;
+}
+
+export interface RerandomizeRoundRequest {
+  keepLocks: boolean; // false = also forget every pairing the admin forced
 }
 
 export interface CreateTournamentResponse {

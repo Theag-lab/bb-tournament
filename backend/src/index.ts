@@ -19,7 +19,7 @@ app.use('*', cors());
 
 app.onError((err, c) => {
   if (err instanceof AppError) {
-    return c.json({ error: { code: err.code, message: err.message } }, err.statusCode as 400);
+    return c.json({ error: { code: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) } }, err.statusCode as 400);
   }
   console.error('Unhandled error', err);
   return c.json({ error: { code: 'internal_error', message: 'Something went wrong' } }, 500);
@@ -72,6 +72,8 @@ app.put('/tournaments/:tournamentId/challenges/:challengeId/result/admin', chall
 
 app.post('/tournaments/:tournamentId/rounds', rounds.generateRound);
 app.post('/tournaments/:tournamentId/rounds/:roundNumber/swap', rounds.swapMatches);
+app.post('/tournaments/:tournamentId/rounds/:roundNumber/pair-squads', rounds.pairSquads);
+app.post('/tournaments/:tournamentId/rounds/:roundNumber/rerandomize', rounds.rerandomize);
 app.post('/tournaments/:tournamentId/rounds/:roundNumber/launch', rounds.launch);
 app.post('/tournaments/:tournamentId/rounds/:roundNumber/cancel-launch', rounds.cancelLaunch);
 app.post('/tournaments/:tournamentId/knockout/launch', rounds.launchKnockout);

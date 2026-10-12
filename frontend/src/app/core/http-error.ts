@@ -9,3 +9,9 @@ export function extractErrorMessage(err: unknown): string {
   }
   return 'Une erreur inattendue est survenue';
 }
+
+/** The backend's machine-readable error code and details (see AppError), when the error carries them. */
+export function extractErrorBody(err: unknown): { code: string | null; details: Record<string, unknown> } {
+  const error = err instanceof HttpErrorResponse ? (err.error as { error?: { code?: string; details?: Record<string, unknown> } } | null)?.error : null;
+  return { code: error?.code ?? null, details: error?.details ?? {} };
+}

@@ -87,6 +87,8 @@ export interface RoundMatchRow {
   challenge: PublicTournament['challenges'][number];
   groupStart: boolean;
   groupIndex: number;
+  /** Team format, first row of each squad confrontation: "Table N : Squad A vs Squad B". */
+  groupLabel?: string;
   leftTeamId: string;
   rightTeamId: string;
   leftTd: number | null;
@@ -542,6 +544,9 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   roundError: string | null = null;
   swapTeamId1 = '';
   swapTeamId2 = '';
+  pairSquadId1 = '';
+  pairSquadId2 = '';
+  redrawKeepLocks = true;
 
   /** null = "follow the latest round" (auto-advances as new rounds get generated); a number pins it. */
   private pinnedRoundNumber: number | null = null;
@@ -563,14 +568,77 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     return this.tournament?.challenges.filter((c) => c.round === roundNumber) ?? [];
   }
 
-  /** Every coach in the round, each labeled with their current opponent, for the swap-opponent pickers. */
+  /**
+   * Every coach in the round, each labeled with their current opponent, for the swap-opponent
+   * pickers. Team format also lists coaches on a bye (uneven squads), and labels each with their squad.
+   */
   roundCoaches(roundNumber: number): { teamId: string; label: string }[] {
-    const rows: { teamId: string; label: string }[] = [];
+    const opponents = new Map<string, string>();
     for (const c of this.roundMatches(roundNumber)) {
-      rows.push({ teamId: c.team1Id, label: `${this.teamCoach(c.team1Id)} (vs ${this.teamCoach(c.team2Id)})` });
-      rows.push({ teamId: c.team2Id, label: `${this.teamCoach(c.team2Id)} (vs ${this.teamCoach(c.team1Id)})` });
+      opponents.set(c.team1Id, c.team2Id);
+      opponents.set(c.team2Id, c.team1Id);
     }
-    return rows;
+    const teamIds = this.isTeamFormat ? (this.tournament?.teams ?? []).map((tm) => tm.id) : Array.from(opponents.keys());
+    return teamIds.map((teamId) => {
+      const opponentId = opponents.get(teamId);
+      const versus = opponentId ? `vs ${this.teamCoach(opponentId)}` : 'exempt';
+      const squad = this.isTeamFormat ? ` — ${this.squadName(this.teamSquadId(teamId))}` : '';
+      return { teamId, label: `${this.teamCoach(teamId)}${squad} (${versus})` };
+    });
+  }
+
+  /** Squads facing `squadId` in this round (normally exactly one). */
+  private roundOpponentSquads(roundNumber: number, squadId: string | null): Set<string> {
+    const opponents = new Set<string>();
+    for (const c of this.roundMatches(roundNumber)) {
+      const [x, y] = [this.teamSquadId(c.team1Id), this.teamSquadId(c.team2Id)];
+      if (x === squadId && y) opponents.add(y);
+      if (y === squadId && x) opponents.add(x);
+    }
+    return opponents;
+  }
+
+  /** Coach B candidates: in team format, only coaches of the squad currently facing coach A's squad. */
+  swapCandidates(roundNumber: number): { teamId: string; label: string }[] {
+    const coaches = this.roundCoaches(roundNumber).filter((coach) => coach.teamId !== this.swapTeamId1);
+    if (!this.isTeamFormat || !this.swapTeamId1) return coaches;
+    const opponentSquads = this.roundOpponentSquads(roundNumber, this.teamSquadId(this.swapTeamId1));
+    return coaches.filter((coach) => opponentSquads.has(this.teamSquadId(coach.teamId) ?? ''));
+  }
+
+  onSwapTeam1Change(roundNumber: number): void {
+    if (!this.swapCandidates(roundNumber).some((coach) => coach.teamId === this.swapTeamId2)) this.swapTeamId2 = '';
+  }
+
+  /** Every squad, labeled with the squad(s) it currently faces, for the squad-pairing pickers. */
+  roundSquads(roundNumber: number): { squadId: string; label: string }[] {
+    return (this.tournament?.squads ?? []).map((squad) => {
+      const opponents = Array.from(this.roundOpponentSquads(roundNumber, squad.id)).map((id) => this.squadName(id));
+      return { squadId: squad.id, label: `${squad.name} (vs ${opponents.join(', ') || '—'})` };
+    });
+  }
+
+  private static hasPair(pairs: [string, string][] | undefined, a: string | null, b: string | null): boolean {
+    return (pairs ?? []).some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+  }
+
+  isLockedMatch(round: RoundInfo, teamId1: string, teamId2: string): boolean {
+    return AdminDashboardComponent.hasPair(round.lockedPairs, teamId1, teamId2);
+  }
+
+  isLockedSquadMatch(round: RoundInfo, teamId1: string, teamId2: string): boolean {
+    return AdminDashboardComponent.hasPair(round.lockedSquadPairs, this.teamSquadId(teamId1), this.teamSquadId(teamId2));
+  }
+
+  lockCount(round: RoundInfo): number {
+    return (round.lockedPairs?.length ?? 0) + (this.isTeamFormat ? (round.lockedSquadPairs?.length ?? 0) : 0);
+  }
+
+  /** Round 1 of a swiss tournament, still in draft, can be redrawn at random (see rerandomizeRound in the backend). */
+  canRedrawRound(round: RoundInfo): boolean {
+    const t = this.tournament;
+    if (!t || (t.mode !== 'swiss' && t.mode !== 'swiss_with_challenge')) return false;
+    return round.number === 1 && round.status === 'draft' && t.rounds.length === 1;
   }
 
   get isTeamFormat(): boolean {
@@ -699,10 +767,13 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       const anchorSquad = this.squadRank(squadX) <= this.squadRank(squadY) ? squadX : squadY;
       groupsByKey.get(key)!.forEach((challenge, i) => {
         const team1IsAnchor = this.teamSquadId(challenge.team1Id) === anchorSquad;
+        const otherSquad = anchorSquad === squadX ? squadY : squadX;
         rows.push({
           challenge,
           groupStart: i === 0 && groupIndex > 0,
           groupIndex,
+          groupLabel:
+            i === 0 ? `Table ${groupIndex + 1} : ${this.squadName(anchorSquad)} vs ${this.squadName(otherSquad)}` : undefined,
           leftTeamId: team1IsAnchor ? challenge.team1Id : challenge.team2Id,
           rightTeamId: team1IsAnchor ? challenge.team2Id : challenge.team1Id,
           leftTd: challenge.result ? (team1IsAnchor ? challenge.result.team1Td : challenge.result.team2Td) : null,
@@ -741,6 +812,39 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       );
       this.swapTeamId1 = '';
       this.swapTeamId2 = '';
+    } catch (err) {
+      this.roundError = extractErrorMessage(err);
+    } finally {
+      this.roundBusy = false;
+    }
+  }
+
+  async pairSquads(roundNumber: number): Promise<void> {
+    if (!this.pairSquadId1 || !this.pairSquadId2) return;
+    this.roundBusy = true;
+    this.roundError = null;
+    try {
+      this.tournament = await this.api.pairRoundSquads(
+        this.tournamentId,
+        this.token,
+        roundNumber,
+        this.pairSquadId1,
+        this.pairSquadId2
+      );
+      this.pairSquadId1 = '';
+      this.pairSquadId2 = '';
+    } catch (err) {
+      this.roundError = extractErrorMessage(err);
+    } finally {
+      this.roundBusy = false;
+    }
+  }
+
+  async rerandomizeRound(roundNumber: number): Promise<void> {
+    this.roundBusy = true;
+    this.roundError = null;
+    try {
+      this.tournament = await this.api.rerandomizeRound(this.tournamentId, this.token, roundNumber, this.redrawKeepLocks);
     } catch (err) {
       this.roundError = extractErrorMessage(err);
     } finally {

@@ -378,6 +378,11 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     return this.derived.teamsById.get(teamId)?.coachName ?? '—';
   }
 
+  /** Match-sheet field label: coach first, like the match header, so each field is unambiguous. */
+  resultFormLabel(teamId: string): string {
+    return `${this.teamCoach(teamId)} (${this.teamName(teamId)})`;
+  }
+
   teamHasChallenges(teamId: string): boolean {
     return this.derived.teamsWithChallenges.has(teamId);
   }

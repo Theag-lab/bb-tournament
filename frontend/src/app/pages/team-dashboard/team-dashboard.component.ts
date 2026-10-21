@@ -195,6 +195,11 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     return this.tournament?.teams.find((t) => t.id === teamId)?.coachName ?? '—';
   }
 
+  /** Match-sheet field label: coach first, like the match header, so each field is unambiguous. */
+  resultFormLabel(teamId: string): string {
+    return `${this.teamCoach(teamId)} (${this.teamName(teamId)})`;
+  }
+
   opponentId(c: PublicTournament['challenges'][number]): string {
     return c.team1Id === this.teamId ? c.team2Id : c.team1Id;
   }

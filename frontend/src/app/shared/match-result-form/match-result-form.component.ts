@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   DEFAULT_MATCH_SHEET_CONFIG,
@@ -46,12 +46,14 @@ export class MatchResultFormComponent implements OnChanges {
     return this.customStatCategories.filter((c) => c.enabled);
   }
 
-  ngOnChanges(): void {
+  ngOnChanges(changes: SimpleChanges): void {
     for (const category of this.enabledCustomStatCategories) {
       if (!this.customStats[category.id]) this.customStats[category.id] = { team1: 0, team2: 0 };
     }
 
-    if (this.initial) {
+    // Prefill only when the form opens: the host pages poll every 60s, which hands us a fresh
+    // `initial` object each time — re-applying it then would silently wipe what's being typed.
+    if (changes['initial']?.firstChange && this.initial) {
       this.playedAt = this.initial.playedAt;
       this.team1Td = this.initial.team1Td;
       this.team2Td = this.initial.team2Td;

@@ -660,12 +660,12 @@
       </table>
     </div>
 
-    <ng-container *ngIf="showRaceStats && raceStats.length > 0">
+    <ng-container *ngIf="showRaceStats && t.teams.length > 0">
       <h3 class="race-stats-title">Équipes par roster</h3>
       <div class="race-stats" role="list">
         <div class="race-stats-row" role="listitem" *ngFor="let row of raceStats" [title]="row.race + ' : ' + row.count + ' équipe' + (row.count > 1 ? 's' : '')">
           <span class="race-stats-label">{{ row.race }}</span>
-          <span class="race-stats-track"><span class="race-stats-bar" [style.width.%]="row.widthPct"></span></span>
+          <span class="race-stats-track"><span class="race-stats-bar" *ngIf="row.count > 0" [style.width.%]="row.widthPct"></span></span>
           <span class="race-stats-count">{{ row.count }}</span>
         </div>
       </div>

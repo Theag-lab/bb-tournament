@@ -271,10 +271,13 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     rows: [],
   };
 
-  /** Teams per roster, most played first (ties alphabetical), bar widths relative to the most played. */
+  /**
+   * Teams per roster, most played first (ties alphabetical), bar widths relative to the most
+   * played. Every roster is listed, unplayed ones at 0 at the bottom.
+   */
   get raceStats(): { race: string; count: number; widthPct: number }[] {
     if (this.raceStatsCache.tournament === this.tournament) return this.raceStatsCache.rows;
-    const counts = new Map<string, number>();
+    const counts = new Map<string, number>(RACES.map((race) => [race, 0]));
     for (const team of this.tournament?.teams ?? []) {
       if (!team.race || team.race === '—') continue;
       counts.set(team.race, (counts.get(team.race) ?? 0) + 1);

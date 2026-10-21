@@ -815,7 +815,7 @@ export const RACE_TO_NAF_TEAM: Record<(typeof RACES)[number], string | null> = {
   'Black Orc': 'Black Orc',
   Bretonnia: 'Bretonnian',
   'Chaos Chosen': 'Chaos Chosen',
-  'Chaos Dwarf': 'Chaos Dwarves',
+  'Chaos Dwarf': 'Chaos Dwarf',
   'Chaos Renegade': 'Chaos Renegade',
   'Dark Elf': 'Dark Elf',
   Dwarf: 'Dwarf',

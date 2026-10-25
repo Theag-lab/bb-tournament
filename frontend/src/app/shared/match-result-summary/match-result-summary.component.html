@@ -1,0 +1,19 @@
+<p class="summary-meta">Joué le {{ result.playedAt }}</p>
+<div class="table-wrap">
+  <table class="summary-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>{{ team1Name }}</th>
+        <th>{{ team2Name }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let row of rows">
+        <th scope="row">{{ row.label }}</th>
+        <td>{{ row.team1 }}</td>
+        <td>{{ row.team2 }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

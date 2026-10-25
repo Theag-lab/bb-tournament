@@ -23,14 +23,14 @@
     <ng-container *ngIf="matchSheetConfig.cas.enabled">
       <div class="field">
         <label>
-          Casualties infligées par {{ team1Name }}
+          Sorties infligées par {{ team1Name }}
           <span class="precision" *ngIf="matchSheetConfig.cas.precision">— {{ matchSheetConfig.cas.precision }}</span>
         </label>
         <input type="number" min="0" name="team1Cas" [(ngModel)]="team1Cas" />
       </div>
       <div class="field">
         <label>
-          Casualties infligées par {{ team2Name }}
+          Sorties infligées par {{ team2Name }}
           <span class="precision" *ngIf="matchSheetConfig.cas.precision">— {{ matchSheetConfig.cas.precision }}</span>
         </label>
         <input type="number" min="0" name="team2Cas" [(ngModel)]="team2Cas" />

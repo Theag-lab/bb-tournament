@@ -62,7 +62,7 @@ export const TIEBREAKER_LABELS: Record<Exclude<TiebreakerCriterion, `custom:${st
   most_td_scored: 'TD marqués (plus = mieux)',
   opponent_score: "Points adverses (Buchholz)",
   net_td: 'Différentiel de TD',
-  net_cas: 'Différentiel de casses',
+  net_cas: 'Différentiel de sorties',
   net_agg: "Différentiel d'agressions",
   random: 'Au pif (stable)',
 };
@@ -70,7 +70,7 @@ export const TIEBREAKER_LABELS: Record<Exclude<TiebreakerCriterion, `custom:${st
 export const SQUAD_TIEBREAKER_LABELS: Record<SquadTiebreakerCriterion, string> = {
   member_points: 'Somme des points des coachs',
   net_td: 'Différentiel de TD',
-  net_cas: 'Différentiel de casses',
+  net_cas: 'Différentiel de sorties',
   net_agg: "Différentiel d'agressions",
   most_td_scored: 'TD marqués (plus = mieux)',
   fewest_td_conceded: 'TD encaissés (moins = mieux)',

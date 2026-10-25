@@ -140,14 +140,14 @@
     <ng-container *ngIf="isTeamFormat">
       <section class="card" *ngIf="casCollected">
         <h2>🩸 Bashlord — par équipe</h2>
-        <p class="muted">L'équipe qui a infligé le plus de casualties au total.</p>
+        <p class="muted">L'équipe qui a infligé le plus de sorties au total.</p>
         <div class="table-wrap" *ngIf="squadBashlordRanking().length > 0; else noSquadBashlord">
           <table>
             <thead>
               <tr>
                 <th></th>
                 <th>Équipe</th>
-                <th>Casualties</th>
+                <th>Sorties</th>
               </tr>
             </thead>
             <tbody>
@@ -219,7 +219,7 @@
 
     <section class="card" *ngIf="casCollected">
       <h2>🩸 Bashlord{{ isTeamFormat ? ' — individuel' : '' }}</h2>
-      <p class="muted">Le plus de casualties infligées.</p>
+      <p class="muted">Le plus de sorties infligées.</p>
       <div class="table-wrap" *ngIf="bashlordRanking().length > 0; else noBashlord">
         <table>
           <thead>
@@ -227,7 +227,7 @@
               <th></th>
               <th>Coach</th>
               <th *ngIf="showTeamNames">Équipe</th>
-              <th>Casualties</th>
+              <th>Sorties</th>
             </tr>
           </thead>
           <tbody>
@@ -508,7 +508,7 @@
             <th>V-N-D</th>
             <th>Points</th>
             <th>TD +/-</th>
-            <th>Cas +/-</th>
+            <th>Sorties +/-</th>
           </tr>
         </thead>
         <tbody>
@@ -544,7 +544,7 @@
               <th>V-N-D</th>
               <th>Points</th>
               <th>TD +/-</th>
-              <th>Cas +/-</th>
+              <th>Sorties +/-</th>
             </tr>
           </thead>
           <tbody>
@@ -589,7 +589,7 @@
             <th>V-N-D</th>
             <th>Points</th>
             <th>TD +/-</th>
-            <th>Cas +/-</th>
+            <th>Sorties +/-</th>
           </tr>
         </thead>
         <tbody>
@@ -682,7 +682,7 @@
             <th>Statut</th>
             <th>Date</th>
             <th>TD</th>
-            <th>Cas</th>
+            <th>Sorties</th>
           </tr>
         </thead>
         <tbody>
@@ -732,7 +732,7 @@
             <dd>{{ s.tdFor }} / {{ s.tdAgainst }}</dd>
             <dt>Score adverse</dt>
             <dd>{{ s.opponentScore }}</dd>
-            <dt>Casualties +/-</dt>
+            <dt>Sorties +/-</dt>
             <dd>{{ s.casFor }} / {{ s.casAgainst }}</dd>
           </ng-container>
         </dl>
@@ -802,7 +802,7 @@
         <dd class="nowrap">{{ s.wins }}/{{ s.draws }}/{{ s.losses }}</dd>
         <dt>Touchdowns +/-</dt>
         <dd>{{ s.tdFor }} / {{ s.tdAgainst }}</dd>
-        <dt>Casualties +/-</dt>
+        <dt>Sorties +/-</dt>
         <dd>{{ s.casFor }} / {{ s.casAgainst }}</dd>
       </dl>
 

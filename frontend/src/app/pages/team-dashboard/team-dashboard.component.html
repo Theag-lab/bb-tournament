@@ -248,11 +248,16 @@
         </div>
 
         <div *ngSwitchCase="'awaiting_confirmation'">
-          <p *ngIf="c.result">
-            Score soumis par {{ teamName(c.result.submittedByTeamId) }} pour le {{ c.result.playedAt }} :
-            <strong>{{ c.result.team1Td }} - {{ c.result.team2Td }}</strong>
-            (casualties {{ c.result.team1Cas }} - {{ c.result.team2Cas }})
-          </p>
+          <ng-container *ngIf="c.result">
+            <p>Feuille de match soumise par {{ teamCoach(c.result.submittedByTeamId) }} :</p>
+            <app-match-result-summary
+            [result]="c.result"
+            [team1Name]="resultFormLabel(c.team1Id)"
+            [team2Name]="resultFormLabel(c.team2Id)"
+            [matchSheetConfig]="tournament.matchSheetConfig"
+            [customStatCategories]="tournament.customStatCategories"
+          ></app-match-result-summary>
+          </ng-container>
 
           <div class="actions" *ngIf="iSubmittedLast(c)">
             <span class="muted">En attente de confirmation de {{ teamName(opponentId(c)) }}</span>
@@ -268,10 +273,16 @@
         </div>
 
         <div *ngSwitchCase="'completed'">
-          <p *ngIf="c.result">
-            Résultat final du {{ c.result.playedAt }} : <strong>{{ c.result.team1Td }} - {{ c.result.team2Td }}</strong>
-            (casualties {{ c.result.team1Cas }} - {{ c.result.team2Cas }})
-          </p>
+          <ng-container *ngIf="c.result">
+            <p>Résultat final :</p>
+            <app-match-result-summary
+            [result]="c.result"
+            [team1Name]="resultFormLabel(c.team1Id)"
+            [team2Name]="resultFormLabel(c.team2Id)"
+            [matchSheetConfig]="tournament.matchSheetConfig"
+            [customStatCategories]="tournament.customStatCategories"
+          ></app-match-result-summary>
+          </ng-container>
           <p class="muted" *ngIf="c.result">
             Points gagnés : {{ c.team1Id === teamId ? c.result.team1Points : c.result.team2Points }}
           </p>

@@ -436,7 +436,7 @@
 
           <p *ngIf="row.challenge.result" class="muted">
             Joué le {{ row.challenge.result.playedAt }} — Score : {{ row.leftTd }} -
-            {{ row.rightTd }} (casualties {{ row.leftCas }} -
+            {{ row.rightTd }} (sorties {{ row.leftCas }} -
             {{ row.rightCas }})
             <span *ngIf="row.challenge.result.finalizedByAdmin">— forcé par l'admin</span>
           </p>
@@ -893,7 +893,7 @@
         </div>
 
         <p *ngIf="c.result" class="muted">
-          Joué le {{ c.result.playedAt }} — Score : {{ c.result.team1Td }} - {{ c.result.team2Td }} (casualties
+          Joué le {{ c.result.playedAt }} — Score : {{ c.result.team1Td }} - {{ c.result.team2Td }} (sorties
           {{ c.result.team1Cas }} - {{ c.result.team2Cas }})
           <span *ngIf="c.result.finalizedByAdmin">— forcé par l'admin</span>
         </p>
@@ -937,7 +937,7 @@
       <h2>Champs de la feuille de match</h2>
       <p class="muted">
         Choisissez ce qui est affiché et collecté sur la feuille de match. Les touchdowns sont toujours obligatoires
-        (ils décident du résultat du match) ; casualties et agressions peuvent être désactivées. La "précision" est
+        (ils décident du résultat du match) ; sorties et agressions peuvent être désactivées. La "précision" est
         une note affichée à côté du champ pour expliquer exactement ce qui doit être compté (ex. "uniquement les
         blocages").
       </p>
@@ -956,10 +956,10 @@
 
       <label class="checkbox-field">
         <input type="checkbox" name="sheetCasEnabled" [(ngModel)]="sheet.cas.enabled" />
-        <span>Afficher / collecter les casualties</span>
+        <span>Afficher / collecter les sorties</span>
       </label>
       <div class="field" *ngIf="sheet.cas.enabled">
-        <label for="sheet-cas-precision">Casualties — précision (optionnel)</label>
+        <label for="sheet-cas-precision">Sorties — précision (optionnel)</label>
         <input
           id="sheet-cas-precision"
           type="text"
@@ -1142,14 +1142,14 @@
         </div>
 
         <div class="field">
-          <label for="scoring-cas-basis">Casses — base</label>
+          <label for="scoring-cas-basis">Sorties — base</label>
           <select id="scoring-cas-basis" name="casBasis" [(ngModel)]="scoring.cas.basis">
             <option value="total">Total infligé</option>
             <option value="diff">Différentiel</option>
           </select>
         </div>
         <div class="field">
-          <label for="scoring-cas-mult">Casses — points par unité</label>
+          <label for="scoring-cas-mult">Sorties — points par unité</label>
           <input id="scoring-cas-mult" type="number" name="casMultiplier" [(ngModel)]="scoring.cas.multiplier" />
         </div>
 

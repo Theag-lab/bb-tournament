@@ -1,0 +1,22 @@
+.summary-meta {
+  margin: 0 0 0.4rem;
+}
+
+.summary-table {
+  margin-bottom: 0.75rem;
+
+  th[scope='row'] {
+    text-align: left;
+    font-weight: normal;
+    color: var(--text-muted);
+  }
+
+  td {
+    text-align: center;
+    font-weight: 600;
+  }
+
+  thead th:not(:first-child) {
+    text-align: center;
+  }
+}

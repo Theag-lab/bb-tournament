@@ -61,7 +61,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       image: '/screenshots/scoreboard.png',
       alt: 'Tableau des scores public',
       title: 'Classement en direct',
-      description: 'Points, V-N-D, touchdowns et casualties, actualisés toutes les 60 secondes — partageable en un lien.',
+      description: 'Points, V-N-D, touchdowns et sorties, actualisés toutes les 60 secondes — partageable en un lien.',
     },
     {
       image: '/screenshots/team.png',

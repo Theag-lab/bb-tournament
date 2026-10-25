@@ -133,6 +133,33 @@ export interface Pool {
  * winning 3-2 (diff +1) is only "petite victoire" — both used to count as the same plain "win"
  * before this became board-diff-based.
  */
+/**
+ * Squad-standings tiebreaker criteria, applied in the order given by `SquadScoringConfig.tiebreakers`
+ * when two squads are level on squad points. Separate from the individual TiebreakerCriterion list:
+ * `member_points` (sum of the squad members' individual standings points) only makes sense for squads.
+ */
+export type SquadTiebreakerCriterion =
+  | 'member_points'
+  | 'net_td'
+  | 'net_cas'
+  | 'net_agg'
+  | 'most_td_scored'
+  | 'fewest_td_conceded'
+  | 'random';
+
+export const ALL_SQUAD_TIEBREAKER_CRITERIA: SquadTiebreakerCriterion[] = [
+  'member_points',
+  'net_td',
+  'net_cas',
+  'net_agg',
+  'most_td_scored',
+  'fewest_td_conceded',
+  'random',
+];
+
+/** Criteria only meaningful at squad level — flagged "squad only" in the admin UI. */
+export const SQUAD_ONLY_TIEBREAKER_CRITERIA: SquadTiebreakerCriterion[] = ['member_points'];
+
 export interface SquadScoringConfig {
   smallMarginMaxDiff: number; // board-diff in [1, this] => "petite" tier (win or loss side)
   bigMarginMinDiff: number; // board-diff >= this => "victoire totale" (win side only)
@@ -142,6 +169,8 @@ export interface SquadScoringConfig {
   pointsDraw: number;
   pointsSmallLoss: number;
   pointsLoss: number;
+  /** Optional in stored data: tournaments created before it existed fall back to the default order. */
+  tiebreakers?: SquadTiebreakerCriterion[];
 }
 
 export const DEFAULT_SQUAD_SCORING: SquadScoringConfig = {
@@ -153,7 +182,15 @@ export const DEFAULT_SQUAD_SCORING: SquadScoringConfig = {
   pointsDraw: 2,
   pointsSmallLoss: 1,
   pointsLoss: 0,
+  // The order that used to be hardcoded in computeSquadStandings, so existing tournaments keep their ranking.
+  tiebreakers: ['net_td', 'net_cas', 'random'],
 };
+
+/** A squad scoring config with `tiebreakers` always filled in (defaults for configs stored before it existed). */
+export function resolveSquadScoring(config: SquadScoringConfig | null | undefined): Required<SquadScoringConfig> {
+  const base = config ?? DEFAULT_SQUAD_SCORING;
+  return { ...base, tiebreakers: [...(base.tiebreakers ?? DEFAULT_SQUAD_SCORING.tiebreakers!)] };
+}
 
 /**
  * Individual-standings tiebreaker criteria, only used when `IndividualScoringConfig.mode ===
@@ -426,6 +463,8 @@ export interface SquadStandingEntry {
   aggFor: number;
   aggAgainst: number;
   gamesPlayed: number;
+  /** Sum of the squad members' individual standings points (the `member_points` tiebreaker). */
+  memberPoints: number;
 }
 
 /** Pool-scoped equivalent of StandingEntry, only populated for 'pools_knockout' mode tournaments. */

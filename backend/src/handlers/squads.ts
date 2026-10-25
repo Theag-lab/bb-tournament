@@ -1,7 +1,9 @@
 import type { Context } from 'hono';
 import { v4 as uuidv4 } from 'uuid';
 import {
+  ALL_SQUAD_TIEBREAKER_CRITERIA,
   DEFAULT_SQUAD_SCORING,
+  resolveSquadScoring,
   type AssignTeamSquadRequest,
   type CreateSquadRequest,
   type Squad,
@@ -44,7 +46,18 @@ export function mergeSquadScoring(
   base: SquadScoringConfig,
   partial: Partial<SquadScoringConfig> | null | undefined
 ): SquadScoringConfig {
-  const merged: SquadScoringConfig = { ...base, ...(partial ?? {}) };
+  if (partial?.tiebreakers !== undefined && !Array.isArray(partial.tiebreakers)) {
+    throw badRequest('tiebreakers must be an array', 'invalid_squad_scoring');
+  }
+  const merged = resolveSquadScoring({ ...base, ...(partial ?? {}) });
+
+  const { tiebreakers } = merged;
+  if (
+    tiebreakers.some((c) => !ALL_SQUAD_TIEBREAKER_CRITERIA.includes(c)) ||
+    new Set(tiebreakers).size !== tiebreakers.length
+  ) {
+    throw badRequest('tiebreakers must be a list of distinct squad tiebreaker criteria', 'invalid_squad_scoring');
+  }
 
   if (
     !Number.isInteger(merged.smallMarginMaxDiff) ||

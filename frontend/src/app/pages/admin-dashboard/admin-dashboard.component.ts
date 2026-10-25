@@ -3,7 +3,9 @@ import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
+  ALL_SQUAD_TIEBREAKER_CRITERIA,
   ALL_TIEBREAKER_CRITERIA,
+  SQUAD_ONLY_TIEBREAKER_CRITERIA,
   CUSTOM_STAT_NAME_MAX_LENGTH,
   CUSTOM_STAT_PRECISION_MAX_LENGTH,
   MAX_CUSTOM_STAT_CATEGORIES,
@@ -24,6 +26,7 @@ import {
   type RoundInfo,
   type Squad,
   type SquadScoringConfig,
+  type SquadTiebreakerCriterion,
   type StandingEntry,
   type SubmitResultRequest,
   type TiebreakerCriterion,
@@ -63,6 +66,20 @@ export const TIEBREAKER_LABELS: Record<Exclude<TiebreakerCriterion, `custom:${st
   net_agg: "Différentiel d'agressions",
   random: 'Au pif (stable)',
 };
+
+export const SQUAD_TIEBREAKER_LABELS: Record<SquadTiebreakerCriterion, string> = {
+  member_points: 'Somme des points des coachs',
+  net_td: 'Différentiel de TD',
+  net_cas: 'Différentiel de casses',
+  net_agg: "Différentiel d'agressions",
+  most_td_scored: 'TD marqués (plus = mieux)',
+  fewest_td_conceded: 'TD encaissés (moins = mieux)',
+  random: 'Au pif (stable)',
+};
+
+function cloneSquadScoring(config: SquadScoringConfig): SquadScoringConfig {
+  return { ...config, tiebreakers: [...(config.tiebreakers ?? [])] };
+}
 
 function cloneMatchSheetConfig(config: MatchSheetConfig): MatchSheetConfig {
   return { td: { ...config.td }, cas: { ...config.cas }, agg: { ...config.agg } };
@@ -289,7 +306,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       if (!silent) {
         this.descriptionDraft = this.tournament.description;
         this.organizerCoachNameDraft = this.tournament.organizerCoachName;
-        if (this.tournament.squadScoring) this.squadScoringDraft = { ...this.tournament.squadScoring };
+        if (this.tournament.squadScoring) this.squadScoringDraft = cloneSquadScoring(this.tournament.squadScoring);
         this.individualScoringDraft = cloneIndividualScoring(this.tournament.individualScoring);
         this.matchSheetDraft = cloneMatchSheetConfig(this.tournament.matchSheetConfig);
         this.customStatCategoriesDraft = cloneCustomStatCategories(this.tournament.customStatCategories);
@@ -969,13 +986,44 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  squadTiebreakerLabel(criterion: SquadTiebreakerCriterion): string {
+    return SQUAD_TIEBREAKER_LABELS[criterion] ?? criterion;
+  }
+
+  isSquadOnlyTiebreaker(criterion: SquadTiebreakerCriterion): boolean {
+    return SQUAD_ONLY_TIEBREAKER_CRITERIA.includes(criterion);
+  }
+
+  availableSquadTiebreakers(): SquadTiebreakerCriterion[] {
+    const used = new Set(this.squadScoringDraft?.tiebreakers ?? []);
+    return ALL_SQUAD_TIEBREAKER_CRITERIA.filter((c) => !used.has(c));
+  }
+
+  addSquadTiebreaker(criterion: string): void {
+    const draft = this.squadScoringDraft;
+    if (!draft || !ALL_SQUAD_TIEBREAKER_CRITERIA.includes(criterion as SquadTiebreakerCriterion)) return;
+    draft.tiebreakers = [...(draft.tiebreakers ?? []), criterion as SquadTiebreakerCriterion];
+  }
+
+  removeSquadTiebreaker(index: number): void {
+    this.squadScoringDraft?.tiebreakers?.splice(index, 1);
+  }
+
+  moveSquadTiebreaker(index: number, direction: -1 | 1): void {
+    const list = this.squadScoringDraft?.tiebreakers;
+    if (!list) return;
+    const target = index + direction;
+    if (target < 0 || target >= list.length) return;
+    [list[index], list[target]] = [list[target], list[index]];
+  }
+
   async saveSquadScoring(): Promise<void> {
     if (!this.squadScoringDraft) return;
     this.savingSquadScoring = true;
     this.squadError = null;
     try {
       this.tournament = await this.api.updateSquadScoring(this.tournamentId, this.token, this.squadScoringDraft);
-      if (this.tournament.squadScoring) this.squadScoringDraft = { ...this.tournament.squadScoring };
+      if (this.tournament.squadScoring) this.squadScoringDraft = cloneSquadScoring(this.tournament.squadScoring);
     } catch (err) {
       this.squadError = extractErrorMessage(err);
     } finally {

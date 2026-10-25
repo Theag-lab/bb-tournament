@@ -147,7 +147,14 @@ function generateNextTeamRound(t: Tournament): void {
     roundNumber === 1
       ? pairInOrder(shuffle(t.squads.map((s) => s.id)), new Map())
       : pairInOrder(
-          computeSquadStandings(t.squads, t.teams, t.challenges, t.squadScoring ?? DEFAULT_SQUAD_SCORING).map((s) => s.squadId),
+          computeSquadStandings(
+            t.squads,
+            t.teams,
+            t.challenges,
+            t.squadScoring ?? DEFAULT_SQUAD_SCORING,
+            t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
+            t.customStatCategories ?? []
+          ).map((s) => s.squadId),
           buildPriorSquadOpponents(t.challenges, new Map(t.teams.map((tm) => [tm.id, tm.squadId])))
         );
 

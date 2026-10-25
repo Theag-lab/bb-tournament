@@ -109,5 +109,20 @@
     border-radius: var(--radius);
     padding: 0.5rem 0.75rem;
     flex-wrap: wrap;
+
+    &.tiebreaker-squad-only {
+      border-color: var(--squad-only, #7c3aed);
+      background: color-mix(in srgb, var(--squad-only, #7c3aed) 8%, transparent);
+    }
+  }
+
+  .squad-only-tag {
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.75em;
+    font-weight: 600;
+    color: #fff;
+    background: var(--squad-only, #7c3aed);
   }
 }

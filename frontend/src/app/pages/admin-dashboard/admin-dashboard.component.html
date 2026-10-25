@@ -715,6 +715,42 @@
         <input id="scoring-loss" type="number" name="pointsLoss" [(ngModel)]="scoring.pointsLoss" min="0" />
       </div>
 
+      <h3>Ordre de départage des équipes</h3>
+      <p class="muted">Appliqué dans cet ordre quand deux équipes sont à égalité de points d'équipe.</p>
+      <ol class="tiebreaker-list">
+        <li
+          *ngFor="let criterion of scoring.tiebreakers ?? []; let i = index; let last = last"
+          [class.tiebreaker-squad-only]="isSquadOnlyTiebreaker(criterion)"
+        >
+          <span>
+            {{ squadTiebreakerLabel(criterion) }}
+            <span class="squad-only-tag" *ngIf="isSquadOnlyTiebreaker(criterion)">squad only</span>
+          </span>
+          <span class="actions">
+            <button type="button" class="btn" [disabled]="i === 0" (click)="moveSquadTiebreaker(i, -1)" title="Monter">↑</button>
+            <button type="button" class="btn" [disabled]="last" (click)="moveSquadTiebreaker(i, 1)" title="Descendre">↓</button>
+            <button type="button" class="btn btn-danger" (click)="removeSquadTiebreaker(i)" title="Retirer">Retirer</button>
+          </span>
+        </li>
+        <li *ngIf="!scoring.tiebreakers?.length" class="muted">Aucun critère de départage configuré.</li>
+      </ol>
+      <div class="field" *ngIf="availableSquadTiebreakers().length > 0">
+        <label for="squad-scoring-add-tiebreaker">Ajouter un critère</label>
+        <select
+          id="squad-scoring-add-tiebreaker"
+          #newSquadTiebreaker
+          (change)="addSquadTiebreaker(newSquadTiebreaker.value); newSquadTiebreaker.value = ''"
+        >
+          <option value="">— choisir —</option>
+          <option *ngFor="let c of availableSquadTiebreakers()" [value]="c">
+            {{ squadTiebreakerLabel(c) }}{{ isSquadOnlyTiebreaker(c) ? ' (squad only)' : '' }}
+          </option>
+        </select>
+      </div>
+      <p class="muted">
+        « Somme des points des coachs » additionne les points du classement individuel de chaque membre de l'équipe.
+      </p>
+
       <button type="button" class="btn btn-primary" [disabled]="savingSquadScoring" (click)="saveSquadScoring()">
         {{ savingSquadScoring ? 'Enregistrement…' : 'Enregistrer le barème' }}
       </button>

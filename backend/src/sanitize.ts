@@ -12,12 +12,20 @@ import {
   computeCustomStatLeaderboards,
   computeSquadStandings,
   computeStandings,
+  resolveSquadScoring,
 } from '@bb-tournament/shared';
 import { buildBracketView, getKnockoutChampion } from './bracket';
 
 function squadStandingsOf(t: Tournament): SquadStandingEntry[] {
   if (t.format !== 'team') return [];
-  return computeSquadStandings(t.squads, t.teams, t.challenges, t.squadScoring ?? DEFAULT_SQUAD_SCORING);
+  return computeSquadStandings(
+    t.squads,
+    t.teams,
+    t.challenges,
+    t.squadScoring ?? DEFAULT_SQUAD_SCORING,
+    t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
+    t.customStatCategories ?? []
+  );
 }
 
 function customStatLeaderboardsOf(t: Tournament): CustomStatLeaderboard[] {
@@ -74,7 +82,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
     rounds: t.rounds.map((r) => ({ number: r.number, status: r.status })),
     format: t.format,
     squadSize: t.squadSize,
-    squadScoring: t.squadScoring,
+    squadScoring: t.squadScoring ? resolveSquadScoring(t.squadScoring) : null,
     squads: t.squads,
     poolSize: t.poolSize,
     poolRoundCount: t.poolRoundCount,
@@ -136,7 +144,7 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
     rounds: t.rounds,
     format: t.format,
     squadSize: t.squadSize,
-    squadScoring: t.squadScoring,
+    squadScoring: t.squadScoring ? resolveSquadScoring(t.squadScoring) : null,
     squads: t.squads,
     poolSize: t.poolSize,
     poolRoundCount: t.poolRoundCount,

@@ -44,4 +44,21 @@ describe('mergeSquadScoring', () => {
   test('rejects a non-integer smallMarginMaxDiff', () => {
     assert.throws(() => mergeSquadScoring(DEFAULT_SQUAD_SCORING, { smallMarginMaxDiff: 0 }), AppError);
   });
+
+  test('fills in the default tiebreakers for a stored config that predates them', () => {
+    const { tiebreakers: _omitted, ...legacy } = DEFAULT_SQUAD_SCORING;
+    assert.deepEqual(mergeSquadScoring(legacy, null).tiebreakers, DEFAULT_SQUAD_SCORING.tiebreakers);
+  });
+
+  test('accepts the squad-only member_points tiebreaker', () => {
+    const merged = mergeSquadScoring(DEFAULT_SQUAD_SCORING, { tiebreakers: ['member_points', 'net_td'] });
+    assert.deepEqual(merged.tiebreakers, ['member_points', 'net_td']);
+  });
+
+  test('rejects unknown, individual-only or duplicate tiebreakers', () => {
+    const bad = [['head_to_head'], ['opponent_score'], ['net_td', 'net_td'], 'net_td'];
+    for (const tiebreakers of bad) {
+      assert.throws(() => mergeSquadScoring(DEFAULT_SQUAD_SCORING, { tiebreakers } as never), AppError);
+    }
+  });
 });

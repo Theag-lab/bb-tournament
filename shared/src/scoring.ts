@@ -10,12 +10,14 @@ import {
   Squad,
   SquadScoringConfig,
   SquadStandingEntry,
+  SquadTiebreakerCriterion,
   StandingEntry,
   SubmitResultRequest,
   Team,
   TiebreakerCriterion,
   customTiebreakerCategoryId,
   isCustomTiebreakerCriterion,
+  resolveSquadScoring,
 } from './types';
 
 export const CONCESSION_SCORE = 3;
@@ -468,7 +470,9 @@ export function computeSquadStandings(
   squads: Squad[],
   teams: Team[],
   challenges: Challenge[],
-  scoring: SquadScoringConfig
+  scoring: SquadScoringConfig,
+  individualScoring: IndividualScoringConfig = DEFAULT_INDIVIDUAL_SCORING,
+  customStatCategories: CustomStatCategoryConfig[] = []
 ): SquadStandingEntry[] {
   const squadOfTeam = new Map(teams.map((t) => [t.id, t.squadId]));
   const byId = new Map<string, SquadStandingEntry>();
@@ -486,7 +490,14 @@ export function computeSquadStandings(
       aggFor: 0,
       aggAgainst: 0,
       gamesPlayed: 0,
+      memberPoints: 0,
     });
+  }
+
+  for (const standing of computeStandings(teams, challenges, individualScoring, customStatCategories)) {
+    const squadId = squadOfTeam.get(standing.teamId);
+    const entry = squadId ? byId.get(squadId) : undefined;
+    if (entry) entry.memberPoints += standing.points;
   }
 
   // Per-round squad-vs-squad matchup board tallies, keyed so both member pairings of the same
@@ -558,16 +569,25 @@ export function computeSquadStandings(
     }
   }
 
+  const criteria = resolveSquadScoring(scoring).tiebreakers;
   return Array.from(byId.values()).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
-    const netTdA = a.tdFor - a.tdAgainst;
-    const netTdB = b.tdFor - b.tdAgainst;
-    if (netTdB !== netTdA) return netTdB - netTdA;
-    const netCasA = a.casFor - a.casAgainst;
-    const netCasB = b.casFor - b.casAgainst;
-    if (netCasB !== netCasA) return netCasB - netCasA;
-    const randomA = stableRandomKey(a.squadId);
-    const randomB = stableRandomKey(b.squadId);
-    return randomA - randomB;
+    for (const criterion of criteria) {
+      const cmp = SQUAD_TIEBREAKER_COMPARATORS[criterion](a, b);
+      if (cmp !== 0) return cmp;
+    }
+    // Final deterministic fallback so equal squads never leave the order ambiguous.
+    return SQUAD_TIEBREAKER_COMPARATORS.random(a, b);
   });
 }
+
+/** Squad equivalent of TIEBREAKER_COMPARATORS — more info wins (returns < 0 means `a` ranks first). */
+const SQUAD_TIEBREAKER_COMPARATORS: Record<SquadTiebreakerCriterion, (a: SquadStandingEntry, b: SquadStandingEntry) => number> = {
+  member_points: (a, b) => b.memberPoints - a.memberPoints,
+  net_td: (a, b) => b.tdFor - b.tdAgainst - (a.tdFor - a.tdAgainst),
+  net_cas: (a, b) => b.casFor - b.casAgainst - (a.casFor - a.casAgainst),
+  net_agg: (a, b) => b.aggFor - b.aggAgainst - (a.aggFor - a.aggAgainst),
+  most_td_scored: (a, b) => b.tdFor - a.tdFor,
+  fewest_td_conceded: (a, b) => a.tdAgainst - b.tdAgainst,
+  random: (a, b) => stableRandomKey(a.squadId) - stableRandomKey(b.squadId),
+};

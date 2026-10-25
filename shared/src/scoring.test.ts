@@ -705,3 +705,47 @@ describe('custom stat categories', () => {
     assert.deepEqual(computeCustomStatLeaderboards(teams, [], categories), []);
   });
 });
+
+describe('computeSquadStandings — squad tiebreakers', () => {
+  const squads: Squad[] = [
+    { id: 'A', name: 'A', createdAt: '2026-01-01' },
+    { id: 'B', name: 'B', createdAt: '2026-01-01' },
+  ];
+  const teams = [
+    { id: 'a0', squadId: 'A' },
+    { id: 'a1', squadId: 'A' },
+    { id: 'b0', squadId: 'B' },
+    { id: 'b1', squadId: 'B' },
+  ] as Team[];
+  // One board each (squad draw, net TD 0 for both). A's members total 6 pts (a losing bonus point),
+  // B's 5 — but B is ahead on net casualties.
+  const round: Challenge[] = [
+    completedChallenge('a0', 'b0', 1, matchResult({ team1Td: 1, team2Td: 0, team1Points: 5, team2Points: 0 })),
+    completedChallenge('a1', 'b1', 1, matchResult({ team1Td: 0, team2Td: 1, team2Cas: 1, team1Points: 1, team2Points: 5 })),
+  ];
+
+  test('sums the members\' individual standings points', () => {
+    const standings = computeSquadStandings(squads, teams, round, DEFAULT_SQUAD_SCORING);
+    assert.equal(standings.find((s) => s.squadId === 'A')!.memberPoints, 6);
+    assert.equal(standings.find((s) => s.squadId === 'B')!.memberPoints, 5);
+  });
+
+  test('default order (net TD, net cas) is unchanged: B first on casualties', () => {
+    const standings = computeSquadStandings(squads, teams, round, DEFAULT_SQUAD_SCORING);
+    assert.deepEqual(standings.map((s) => s.squadId), ['B', 'A']);
+  });
+
+  test('a stored config without tiebreakers falls back to the default order', () => {
+    const { tiebreakers: _omitted, ...legacy } = DEFAULT_SQUAD_SCORING;
+    const standings = computeSquadStandings(squads, teams, round, legacy);
+    assert.deepEqual(standings.map((s) => s.squadId), ['B', 'A']);
+  });
+
+  test('member_points first: A first on its members\' points', () => {
+    const standings = computeSquadStandings(squads, teams, round, {
+      ...DEFAULT_SQUAD_SCORING,
+      tiebreakers: ['member_points', 'net_td', 'net_cas'],
+    });
+    assert.deepEqual(standings.map((s) => s.squadId), ['A', 'B']);
+  });
+});

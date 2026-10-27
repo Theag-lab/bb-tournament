@@ -7,6 +7,7 @@ import {
   type CustomStatLeaderboard,
   type Pool,
   type PublicTeam,
+  type ChallengeStatus,
   type PublicTournament,
   type Squad,
   type SquadStandingEntry,
@@ -18,6 +19,7 @@ import { type BackupIdInfo, parseBackupId } from '../../core/backup';
 import { extractErrorBody, extractErrorMessage } from '../../core/http-error';
 import { copyToClipboard, participantUrl, rosterImageUrl } from '../../core/links';
 import { forgetTeam, rememberTeam, rememberedTeam, type TeamSession } from '../../core/team-session';
+import { exportPdf, pdfFileName, type PdfRow, type PdfTable } from '../../core/pdf-export';
 import { renderMarkdown } from '../../core/markdown';
 import { rosterStatusLabel } from '../../core/roster-status';
 import { BracketGraphComponent } from '../../shared/bracket-graph/bracket-graph.component';
@@ -45,6 +47,15 @@ export interface RoundMatchRow {
   leftTd: number | null;
   rightTd: number | null;
 }
+
+const PDF_STATUS_LABELS: Record<ChallengeStatus, string> = {
+  pending: 'En attente',
+  accepted: 'À jouer',
+  declined: 'Refusé',
+  cancelled: 'Annulé',
+  awaiting_confirmation: 'À confirmer',
+  completed: 'Terminé',
+};
 
 @Component({
   selector: 'app-scoreboard',
@@ -257,6 +268,84 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   matchSecondaryLabel(teamId: string): string {
     if (this.isTeamFormat) return this.squadName(this.teamSquadId(teamId));
     return this.teamRace(teamId);
+  }
+
+  pdfBusy = false;
+
+  async exportRoundPdf(roundNumber: number): Promise<void> {
+    const rows: PdfRow[] = [];
+    for (const row of this.roundMatchGroups(roundNumber)) {
+      if (row.groupLabel) rows.push({ group: row.groupLabel });
+      rows.push([
+        `${this.matchPrimaryLabel(row.leftTeamId)}\n${this.matchSecondaryLabel(row.leftTeamId)}`,
+        row.leftTd !== null ? `${row.leftTd} - ${row.rightTd}` : '—',
+        `${this.matchPrimaryLabel(row.rightTeamId)}\n${this.matchSecondaryLabel(row.rightTeamId)}`,
+        PDF_STATUS_LABELS[row.challenge.status],
+      ]);
+    }
+    await this.runPdfExport(`Ronde ${roundNumber}`, [{ head: ['Coach 1', 'Score', 'Coach 2', 'Statut'], rows }]);
+  }
+
+  /** Every standings table of the scores tab, in the same order: squads, then pools or the individual ranking. */
+  async exportStandingsPdf(): Promise<void> {
+    const t = this.tournament;
+    if (!t) return;
+    const tables: PdfTable[] = [];
+    if (this.isTeamFormat) {
+      tables.push({
+        heading: 'Classement par escouade',
+        head: ['#', 'Escouade', 'V-N-D', 'Points', 'TD +/-', 'Sorties +/-'],
+        rows: t.squadStandings.map((s, i) => [
+          i + 1,
+          this.squadName(s.squadId),
+          `${s.wins}/${s.draws}/${s.losses}`,
+          s.points,
+          `${s.tdFor} / ${s.tdAgainst}`,
+          `${s.casFor} / ${s.casAgainst}`,
+        ]),
+      });
+    }
+    const individualTable = (heading: string, standings: StandingEntry[]): PdfTable => ({
+      heading,
+      head: [
+        '#',
+        'Coach',
+        ...(this.showTeamNames ? ['Équipe'] : []),
+        ...(this.isTeamFormat ? ['Escouade'] : []),
+        'Race',
+        'V-N-D',
+        'Points',
+        'TD +/-',
+        'Sorties +/-',
+      ],
+      rows: standings.map((s, i) => [
+        i + 1,
+        this.teamCoach(s.teamId),
+        ...(this.showTeamNames ? [this.teamName(s.teamId)] : []),
+        ...(this.isTeamFormat ? [this.squadName(this.teamSquadId(s.teamId))] : []),
+        this.teamRace(s.teamId),
+        `${s.wins}/${s.draws}/${s.losses}`,
+        s.points,
+        `${s.tdFor} / ${s.tdAgainst}`,
+        `${s.casFor} / ${s.casAgainst}`,
+      ]),
+    });
+    if (this.isPoolsKnockout) {
+      for (const pool of t.pools) tables.push(individualTable(pool.name, this.poolStandings(pool.id)));
+    } else {
+      tables.push(individualTable(this.isTeamFormat ? 'Classement individuel' : 'Classement', t.standings));
+    }
+    await this.runPdfExport('Classements', tables);
+  }
+
+  private async runPdfExport(title: string, tables: PdfTable[]): Promise<void> {
+    const name = this.tournament?.name ?? 'Tournoi';
+    this.pdfBusy = true;
+    try {
+      await exportPdf({ tournamentName: name, title, tables, fileName: pdfFileName(name, title) });
+    } finally {
+      this.pdfBusy = false;
+    }
   }
 
   get launchedRounds() {

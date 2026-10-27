@@ -156,12 +156,60 @@
   gap: 0.5rem 0.75rem;
   margin-bottom: 1rem;
 
-  .btn-small {
-    padding: 0.25rem 0.6rem;
-    font-size: 0.8rem;
-  }
 
   .top-note {
     font-size: 0.85rem;
+  }
+}
+
+.top-actions .btn-small {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+
+  h2 {
+    margin: 0;
+  }
+}
+
+.pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+
+  &:hover:not(:disabled) {
+    border-color: var(--primary);
+    color: var(--text);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: wait;
+  }
+}
+
+// PDF exports are a desk/organiser tool — not worth the space on a phone.
+@media (max-width: 640px) {
+  .pdf-btn {
+    display: none;
   }
 }

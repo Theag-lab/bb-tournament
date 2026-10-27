@@ -673,88 +673,6 @@
         </table>
       </div>
     </section>
-
-    <section class="card" *ngIf="squadScoringDraft as scoring">
-      <h2>Barème de score d'équipe</h2>
-      <p class="muted">
-        Points attribués à l'escouade selon l'écart de touchdowns du match (indépendant des points individuels
-        W/N/D). "Victoire totale" s'applique à partir du seuil haut ; en dessous du seuil bas, il s'agit d'une
-        "petite" victoire/défaite.
-      </p>
-
-      <div class="field">
-        <label for="scoring-small-margin">Écart maximum pour une "petite" victoire/défaite</label>
-        <input id="scoring-small-margin" type="number" name="smallMarginMaxDiff" [(ngModel)]="scoring.smallMarginMaxDiff" min="1" />
-      </div>
-      <div class="field">
-        <label for="scoring-big-margin">Écart minimum pour une "victoire totale"</label>
-        <input id="scoring-big-margin" type="number" name="bigMarginMinDiff" [(ngModel)]="scoring.bigMarginMinDiff" min="2" />
-      </div>
-      <div class="field">
-        <label for="scoring-big-win">Points — victoire totale</label>
-        <input id="scoring-big-win" type="number" name="pointsBigWin" [(ngModel)]="scoring.pointsBigWin" min="0" />
-      </div>
-      <div class="field">
-        <label for="scoring-win">Points — victoire</label>
-        <input id="scoring-win" type="number" name="pointsWin" [(ngModel)]="scoring.pointsWin" min="0" />
-      </div>
-      <div class="field">
-        <label for="scoring-small-win">Points — petite victoire</label>
-        <input id="scoring-small-win" type="number" name="pointsSmallWin" [(ngModel)]="scoring.pointsSmallWin" min="0" />
-      </div>
-      <div class="field">
-        <label for="scoring-draw">Points — nul</label>
-        <input id="scoring-draw" type="number" name="pointsDraw" [(ngModel)]="scoring.pointsDraw" min="0" />
-      </div>
-      <div class="field">
-        <label for="scoring-small-loss">Points — petite défaite</label>
-        <input id="scoring-small-loss" type="number" name="pointsSmallLoss" [(ngModel)]="scoring.pointsSmallLoss" min="0" />
-      </div>
-      <div class="field">
-        <label for="scoring-loss">Points — défaite</label>
-        <input id="scoring-loss" type="number" name="pointsLoss" [(ngModel)]="scoring.pointsLoss" min="0" />
-      </div>
-
-      <h3>Ordre de départage des équipes</h3>
-      <p class="muted">Appliqué dans cet ordre quand deux équipes sont à égalité de points d'équipe.</p>
-      <ol class="tiebreaker-list">
-        <li
-          *ngFor="let criterion of scoring.tiebreakers ?? []; let i = index; let last = last"
-          [class.tiebreaker-squad-only]="isSquadOnlyTiebreaker(criterion)"
-        >
-          <span>
-            {{ squadTiebreakerLabel(criterion) }}
-            <span class="squad-only-tag" *ngIf="isSquadOnlyTiebreaker(criterion)">squad only</span>
-          </span>
-          <span class="actions">
-            <button type="button" class="btn" [disabled]="i === 0" (click)="moveSquadTiebreaker(i, -1)" title="Monter">↑</button>
-            <button type="button" class="btn" [disabled]="last" (click)="moveSquadTiebreaker(i, 1)" title="Descendre">↓</button>
-            <button type="button" class="btn btn-danger" (click)="removeSquadTiebreaker(i)" title="Retirer">Retirer</button>
-          </span>
-        </li>
-        <li *ngIf="!scoring.tiebreakers?.length" class="muted">Aucun critère de départage configuré.</li>
-      </ol>
-      <div class="field" *ngIf="availableSquadTiebreakers().length > 0">
-        <label for="squad-scoring-add-tiebreaker">Ajouter un critère</label>
-        <select
-          id="squad-scoring-add-tiebreaker"
-          #newSquadTiebreaker
-          (change)="addSquadTiebreaker(newSquadTiebreaker.value); newSquadTiebreaker.value = ''"
-        >
-          <option value="">— choisir —</option>
-          <option *ngFor="let c of availableSquadTiebreakers()" [value]="c">
-            {{ squadTiebreakerLabel(c) }}{{ isSquadOnlyTiebreaker(c) ? ' (squad only)' : '' }}
-          </option>
-        </select>
-      </div>
-      <p class="muted">
-        « Somme des points des coachs » additionne les points du classement individuel de chaque membre de l'équipe.
-      </p>
-
-      <button type="button" class="btn btn-primary" [disabled]="savingSquadScoring" (click)="saveSquadScoring()">
-        {{ savingSquadScoring ? 'Enregistrement…' : 'Enregistrer le barème' }}
-      </button>
-    </section>
   </ng-container>
 
   <ng-container *ngIf="activeAdminTab === 'pools' && t.mode === 'pools_knockout'">
@@ -1068,8 +986,8 @@
       </p>
     </section>
 
-    <section class="card" *ngIf="individualScoringDraft as scoring">
-      <h2>Barème de score individuel</h2>
+    <section class="card" [class.scope-card]="t.format === 'team'" [class.scope-individual]="t.format === 'team'" *ngIf="individualScoringDraft as scoring">
+      <h2><span class="scope-tag" *ngIf="t.format === 'team'">Individuel</span> Barème de score individuel</h2>
       <p class="muted">
         Points individuels de chaque coach (indépendant du barème d'équipe le cas échéant). Le mode "points +
         départage" attribue des points fixes par victoire/nul puis départage les égalités dans l'ordre choisi ; le
@@ -1168,6 +1086,82 @@
 
       <button type="button" class="btn btn-primary" [disabled]="savingIndividualScoring" (click)="saveIndividualScoring()">
         {{ savingIndividualScoring ? 'Enregistrement…' : 'Enregistrer le barème' }}
+      </button>
+    </section>
+
+    <section class="card scope-card scope-squad" *ngIf="squadScoringDraft as scoring">
+      <h2><span class="scope-tag">Équipe</span> Barème de score d'équipe</h2>
+      <p class="muted">
+        Points attribués à l'escouade selon l'écart de touchdowns du match (indépendant des points individuels
+        W/N/D). "Victoire totale" s'applique à partir du seuil haut ; en dessous du seuil bas, il s'agit d'une
+        "petite" victoire/défaite.
+      </p>
+
+      <div class="field">
+        <label for="scoring-small-margin">Écart maximum pour une "petite" victoire/défaite</label>
+        <input id="scoring-small-margin" type="number" name="smallMarginMaxDiff" [(ngModel)]="scoring.smallMarginMaxDiff" min="1" />
+      </div>
+      <div class="field">
+        <label for="scoring-big-margin">Écart minimum pour une "victoire totale"</label>
+        <input id="scoring-big-margin" type="number" name="bigMarginMinDiff" [(ngModel)]="scoring.bigMarginMinDiff" min="2" />
+      </div>
+      <div class="field">
+        <label for="scoring-big-win">Points — victoire totale</label>
+        <input id="scoring-big-win" type="number" name="pointsBigWin" [(ngModel)]="scoring.pointsBigWin" min="0" />
+      </div>
+      <div class="field">
+        <label for="scoring-win">Points — victoire</label>
+        <input id="scoring-win" type="number" name="pointsWin" [(ngModel)]="scoring.pointsWin" min="0" />
+      </div>
+      <div class="field">
+        <label for="scoring-small-win">Points — petite victoire</label>
+        <input id="scoring-small-win" type="number" name="pointsSmallWin" [(ngModel)]="scoring.pointsSmallWin" min="0" />
+      </div>
+      <div class="field">
+        <label for="scoring-draw">Points — nul</label>
+        <input id="scoring-draw" type="number" name="pointsDraw" [(ngModel)]="scoring.pointsDraw" min="0" />
+      </div>
+      <div class="field">
+        <label for="scoring-small-loss">Points — petite défaite</label>
+        <input id="scoring-small-loss" type="number" name="pointsSmallLoss" [(ngModel)]="scoring.pointsSmallLoss" min="0" />
+      </div>
+      <div class="field">
+        <label for="scoring-loss">Points — défaite</label>
+        <input id="scoring-loss" type="number" name="pointsLoss" [(ngModel)]="scoring.pointsLoss" min="0" />
+      </div>
+
+      <h3>Ordre de départage des équipes</h3>
+      <p class="muted">Appliqué dans cet ordre quand deux équipes sont à égalité de points d'équipe.</p>
+      <ol class="tiebreaker-list">
+        <li *ngFor="let criterion of scoring.tiebreakers ?? []; let i = index; let last = last">
+          <span>{{ squadTiebreakerLabel(criterion) }}</span>
+          <span class="actions">
+            <button type="button" class="btn" [disabled]="i === 0" (click)="moveSquadTiebreaker(i, -1)" title="Monter">↑</button>
+            <button type="button" class="btn" [disabled]="last" (click)="moveSquadTiebreaker(i, 1)" title="Descendre">↓</button>
+            <button type="button" class="btn btn-danger" (click)="removeSquadTiebreaker(i)" title="Retirer">Retirer</button>
+          </span>
+        </li>
+        <li *ngIf="!scoring.tiebreakers?.length" class="muted">Aucun critère de départage configuré.</li>
+      </ol>
+      <div class="field" *ngIf="availableSquadTiebreakers().length > 0">
+        <label for="squad-scoring-add-tiebreaker">Ajouter un critère</label>
+        <select
+          id="squad-scoring-add-tiebreaker"
+          #newSquadTiebreaker
+          (change)="addSquadTiebreaker(newSquadTiebreaker.value); newSquadTiebreaker.value = ''"
+        >
+          <option value="">— choisir —</option>
+          <option *ngFor="let c of availableSquadTiebreakers()" [value]="c">{{ squadTiebreakerLabel(c) }}</option>
+        </select>
+      </div>
+      <p class="muted">
+        « Somme des points des coachs » additionne les points du classement individuel de chaque membre de l'équipe ;
+        « Confrontation directe » départage deux équipes selon les rondes où elles se sont affrontées ;
+        « Points adverses » additionne les points d'équipe finaux de chaque équipe affrontée.
+      </p>
+
+      <button type="button" class="btn btn-primary" [disabled]="savingSquadScoring" (click)="saveSquadScoring()">
+        {{ savingSquadScoring ? 'Enregistrement…' : 'Enregistrer le barème' }}
       </button>
     </section>
 

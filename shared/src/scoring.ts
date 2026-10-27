@@ -491,6 +491,7 @@ export function computeSquadStandings(
       aggAgainst: 0,
       gamesPlayed: 0,
       memberPoints: 0,
+      opponentScore: 0,
     });
   }
 
@@ -550,11 +551,16 @@ export function computeSquadStandings(
     else if (boardOutcomeForA < 0) matchup.boardLossesA += 1;
   }
 
+  // Head-to-head: round wins of squadA minus round wins of squadB, over every round they met.
+  const headToHeadNetA = new Map<string, number>();
+
   for (const { squadA, squadB, boardWinsA, boardLossesA } of roundMatchups.values()) {
     const eA = byId.get(squadA);
     const eB = byId.get(squadB);
     if (!eA || !eB) continue;
     const netBoardsA = boardWinsA - boardLossesA;
+    const pairKey = `${squadA}:${squadB}`;
+    headToHeadNetA.set(pairKey, (headToHeadNetA.get(pairKey) ?? 0) + Math.sign(netBoardsA));
     eA.points += squadPointsForDiff(netBoardsA, scoring);
     eB.points += squadPointsForDiff(-netBoardsA, scoring);
     if (netBoardsA > 0) {
@@ -569,11 +575,21 @@ export function computeSquadStandings(
     }
   }
 
+  // Strength of schedule, from final squad points: needs every round tallied first.
+  for (const { squadA, squadB } of roundMatchups.values()) {
+    const eA = byId.get(squadA);
+    const eB = byId.get(squadB);
+    if (!eA || !eB) continue;
+    eA.opponentScore += eB.points;
+    eB.opponentScore += eA.points;
+  }
+
   const criteria = resolveSquadScoring(scoring).tiebreakers;
   return Array.from(byId.values()).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     for (const criterion of criteria) {
-      const cmp = SQUAD_TIEBREAKER_COMPARATORS[criterion](a, b);
+      const cmp =
+        criterion === 'head_to_head' ? compareSquadHeadToHead(headToHeadNetA, a, b) : SQUAD_TIEBREAKER_COMPARATORS[criterion](a, b);
       if (cmp !== 0) return cmp;
     }
     // Final deterministic fallback so equal squads never leave the order ambiguous.
@@ -581,9 +597,25 @@ export function computeSquadStandings(
   });
 }
 
+/**
+ * Squad head-to-head: the squad that won more of the rounds the two played against each other ranks
+ * first (a round's winner is decided by board differential, as for squad points). Never met, or
+ * split evenly -> 0, falling through to the next criterion.
+ */
+function compareSquadHeadToHead(headToHeadNetA: Map<string, number>, a: SquadStandingEntry, b: SquadStandingEntry): number {
+  const aIsSquadA = a.squadId < b.squadId;
+  const key = aIsSquadA ? `${a.squadId}:${b.squadId}` : `${b.squadId}:${a.squadId}`;
+  const netForA = (headToHeadNetA.get(key) ?? 0) * (aIsSquadA ? 1 : -1);
+  return -Math.sign(netForA);
+}
+
 /** Squad equivalent of TIEBREAKER_COMPARATORS — more info wins (returns < 0 means `a` ranks first). */
-const SQUAD_TIEBREAKER_COMPARATORS: Record<SquadTiebreakerCriterion, (a: SquadStandingEntry, b: SquadStandingEntry) => number> = {
+const SQUAD_TIEBREAKER_COMPARATORS: Record<
+  Exclude<SquadTiebreakerCriterion, 'head_to_head'>,
+  (a: SquadStandingEntry, b: SquadStandingEntry) => number
+> = {
   member_points: (a, b) => b.memberPoints - a.memberPoints,
+  opponent_score: (a, b) => b.opponentScore - a.opponentScore,
   net_td: (a, b) => b.tdFor - b.tdAgainst - (a.tdFor - a.tdAgainst),
   net_cas: (a, b) => b.casFor - b.casAgainst - (a.casFor - a.casAgainst),
   net_agg: (a, b) => b.aggFor - b.aggAgainst - (a.aggFor - a.aggAgainst),

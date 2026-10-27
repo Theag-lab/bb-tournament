@@ -5,7 +5,6 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   ALL_SQUAD_TIEBREAKER_CRITERIA,
   ALL_TIEBREAKER_CRITERIA,
-  SQUAD_ONLY_TIEBREAKER_CRITERIA,
   CUSTOM_STAT_NAME_MAX_LENGTH,
   CUSTOM_STAT_PRECISION_MAX_LENGTH,
   MAX_CUSTOM_STAT_CATEGORIES,
@@ -32,6 +31,7 @@ import {
   type TiebreakerCriterion,
   type TournamentBackupSummary,
 } from '@bb-tournament/shared';
+import { CurrentTournamentService } from '../../core/current-tournament.service';
 import { ApiService } from '../../core/api.service';
 import { type BackupIdInfo, parseBackupId } from '../../core/backup';
 import { extractErrorMessage } from '../../core/http-error';
@@ -68,6 +68,8 @@ export const TIEBREAKER_LABELS: Record<Exclude<TiebreakerCriterion, `custom:${st
 };
 
 export const SQUAD_TIEBREAKER_LABELS: Record<SquadTiebreakerCriterion, string> = {
+  head_to_head: 'Confrontation directe',
+  opponent_score: 'Points adverses (Buchholz)',
   member_points: 'Somme des points des coachs',
   net_td: 'Différentiel de TD',
   net_cas: 'Différentiel de sorties',
@@ -124,6 +126,7 @@ export interface RoundMatchRow {
 export class AdminDashboardComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(ApiService);
+  private readonly currentTournament = inject(CurrentTournamentService);
   private pollHandle: ReturnType<typeof setInterval> | null = null;
 
   tournamentId = '';
@@ -303,6 +306,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     if (!silent) this.loading = true;
     try {
       this.tournament = await this.api.getAdminTournament(this.tournamentId, this.token);
+      this.currentTournament.set(this.tournamentId, this.tournament.name);
       if (!silent) {
         this.descriptionDraft = this.tournament.description;
         this.organizerCoachNameDraft = this.tournament.organizerCoachName;
@@ -988,10 +992,6 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
 
   squadTiebreakerLabel(criterion: SquadTiebreakerCriterion): string {
     return SQUAD_TIEBREAKER_LABELS[criterion] ?? criterion;
-  }
-
-  isSquadOnlyTiebreaker(criterion: SquadTiebreakerCriterion): boolean {
-    return SQUAD_ONLY_TIEBREAKER_CRITERIA.includes(criterion);
   }
 
   availableSquadTiebreakers(): SquadTiebreakerCriterion[] {

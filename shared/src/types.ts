@@ -136,9 +136,12 @@ export interface Pool {
 /**
  * Squad-standings tiebreaker criteria, applied in the order given by `SquadScoringConfig.tiebreakers`
  * when two squads are level on squad points. Separate from the individual TiebreakerCriterion list:
- * `member_points` (sum of the squad members' individual standings points) only makes sense for squads.
+ * `member_points` (sum of the squad members' individual standings points) only makes sense for
+ * squads, and `head_to_head` here compares the squads' round results against each other.
  */
 export type SquadTiebreakerCriterion =
+  | 'head_to_head'
+  | 'opponent_score'
   | 'member_points'
   | 'net_td'
   | 'net_cas'
@@ -148,6 +151,8 @@ export type SquadTiebreakerCriterion =
   | 'random';
 
 export const ALL_SQUAD_TIEBREAKER_CRITERIA: SquadTiebreakerCriterion[] = [
+  'head_to_head',
+  'opponent_score',
   'member_points',
   'net_td',
   'net_cas',
@@ -156,9 +161,6 @@ export const ALL_SQUAD_TIEBREAKER_CRITERIA: SquadTiebreakerCriterion[] = [
   'fewest_td_conceded',
   'random',
 ];
-
-/** Criteria only meaningful at squad level — flagged "squad only" in the admin UI. */
-export const SQUAD_ONLY_TIEBREAKER_CRITERIA: SquadTiebreakerCriterion[] = ['member_points'];
 
 export interface SquadScoringConfig {
   smallMarginMaxDiff: number; // board-diff in [1, this] => "petite" tier (win or loss side)
@@ -465,6 +467,8 @@ export interface SquadStandingEntry {
   gamesPlayed: number;
   /** Sum of the squad members' individual standings points (the `member_points` tiebreaker). */
   memberPoints: number;
+  /** Sum of the final squad points of every squad faced, once per round met (Buchholz-style). */
+  opponentScore: number;
 }
 
 /** Pool-scoped equivalent of StandingEntry, only populated for 'pools_knockout' mode tournaments. */

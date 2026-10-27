@@ -55,8 +55,13 @@ describe('mergeSquadScoring', () => {
     assert.deepEqual(merged.tiebreakers, ['member_points', 'net_td']);
   });
 
+  test('accepts the squad head_to_head tiebreaker', () => {
+    const merged = mergeSquadScoring(DEFAULT_SQUAD_SCORING, { tiebreakers: ['head_to_head'] });
+    assert.deepEqual(merged.tiebreakers, ['head_to_head']);
+  });
+
   test('rejects unknown, individual-only or duplicate tiebreakers', () => {
-    const bad = [['head_to_head'], ['opponent_score'], ['net_td', 'net_td'], 'net_td'];
+    const bad = [['fewest_cas'], ['custom:x'], ['net_td', 'net_td'], 'net_td'];
     for (const tiebreakers of bad) {
       assert.throws(() => mergeSquadScoring(DEFAULT_SQUAD_SCORING, { tiebreakers } as never), AppError);
     }

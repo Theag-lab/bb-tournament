@@ -1,5 +1,13 @@
-<header class="header">
-  <a class="brand" [routerLink]="brandLink">🏈 BB Tournament</a>
+<header class="header" [class.has-tournament]="!!tournamentName">
+  <div class="header-left">
+    <a class="home-link" href="https://bb-tournament.eu" title="Accueil BB-tournament.eu" aria-label="Accueil BB-tournament.eu">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <path d="M3 11.5 12 4l9 7.5M5.5 9.5V20h5v-6h3v6h5V9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </a>
+    <a class="site-brand" [class.site-brand-desktop-only]="!!tournamentName" href="https://bb-tournament.eu">🏈 BB-tournament.eu</a>
+  </div>
+  <a class="tournament-name" *ngIf="tournamentName" [routerLink]="brandLink">{{ tournamentName }}</a>
   <button type="button" class="info-btn" (click)="openInfo()" aria-label="À propos de ce site">❓</button>
 </header>
 

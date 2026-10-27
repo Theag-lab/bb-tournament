@@ -23,6 +23,9 @@
 
   <div class="alert alert-error" *ngIf="actionError">{{ actionError }}</div>
 
+  <!-- Matches to play / confirm come first once there are any; otherwise the card sits at the bottom. -->
+  <ng-container *ngIf="myChallenges.length > 0" [ngTemplateOutlet]="challengesCard"></ng-container>
+
   <section class="card">
     <h1>{{ team.name }}</h1>
     <p class="muted">
@@ -195,6 +198,9 @@
     </p>
   </section>
 
+  <ng-container *ngIf="myChallenges.length === 0" [ngTemplateOutlet]="challengesCard"></ng-container>
+
+  <ng-template #challengesCard>
   <section class="card">
     <h2>Mes défis ({{ myChallenges.length }})</h2>
 
@@ -292,4 +298,5 @@
       </ng-container>
     </div>
   </section>
+  </ng-template>
 </ng-container>

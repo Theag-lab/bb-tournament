@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import type { PublicTournament } from '@bb-tournament/shared';
+import { CurrentTournamentService } from '../../core/current-tournament.service';
 import { ApiService } from '../../core/api.service';
 import { extractErrorMessage } from '../../core/http-error';
 import { scoreboardUrl } from '../../core/links';
@@ -30,6 +31,7 @@ function formatDuration(totalSeconds: number): string {
 export class KioskComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(ApiService);
+  private readonly currentTournament = inject(CurrentTournamentService);
   private pollHandle: ReturnType<typeof setInterval> | null = null;
   private tickHandle: ReturnType<typeof setInterval> | null = null;
 
@@ -58,6 +60,7 @@ export class KioskComponent implements OnInit, OnDestroy {
   private async load(): Promise<void> {
     try {
       this.tournament = await this.api.getTournament(this.tournamentId);
+      this.currentTournament.set(this.tournamentId, this.tournament.name);
       this.error = null;
     } catch (err) {
       this.error = extractErrorMessage(err);

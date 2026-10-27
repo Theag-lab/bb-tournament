@@ -17,6 +17,7 @@ import {
   type IndividualScoringConfig,
   type MatchResult,
   type Squad,
+  type SquadScoringConfig,
   type SubmitResultRequest,
   type Team,
 } from './types';
@@ -747,5 +748,60 @@ describe('computeSquadStandings — squad tiebreakers', () => {
       tiebreakers: ['member_points', 'net_td', 'net_cas'],
     });
     assert.deepEqual(standings.map((s) => s.squadId), ['A', 'B']);
+  });
+});
+
+describe('computeSquadStandings — squad head-to-head', () => {
+  const squads: Squad[] = ['A', 'B', 'C', 'D'].map((id) => ({ id, name: id, createdAt: '2026-01-01' }));
+  const teams = ['a', 'b', 'c', 'd'].map((id) => ({ id, squadId: id.toUpperCase() })) as Team[];
+  // A beats B in round 1, then A and B both end on 4 squad points; B is far ahead on net TD.
+  const challenges: Challenge[] = [
+    completedChallenge('a', 'b', 1, matchResult({ team1Td: 1, team2Td: 0 })),
+    completedChallenge('c', 'd', 1, matchResult({ team1Td: 1, team2Td: 0 })),
+    completedChallenge('a', 'c', 2, matchResult({ team1Td: 0, team2Td: 1 })),
+    completedChallenge('b', 'd', 2, matchResult({ team1Td: 5, team2Td: 0 })),
+  ];
+  const order = (tiebreakers: SquadScoringConfig['tiebreakers']) =>
+    computeSquadStandings(squads, teams, challenges, { ...DEFAULT_SQUAD_SCORING, tiebreakers })
+      .map((s) => s.squadId)
+      .filter((id) => id === 'A' || id === 'B');
+
+  test('A and B are level on squad points', () => {
+    const standings = computeSquadStandings(squads, teams, challenges, DEFAULT_SQUAD_SCORING);
+    assert.equal(standings.find((s) => s.squadId === 'A')!.points, standings.find((s) => s.squadId === 'B')!.points);
+  });
+
+  test('net TD puts B first, head-to-head puts A first', () => {
+    assert.deepEqual(order(['net_td']), ['B', 'A']);
+    assert.deepEqual(order(['head_to_head', 'net_td']), ['A', 'B']);
+  });
+});
+
+describe('computeSquadStandings — squad opponent score', () => {
+  const squads: Squad[] = ['A', 'B', 'C', 'D'].map((id) => ({ id, name: id, createdAt: '2026-01-01' }));
+  const teams = ['a', 'b', 'c', 'd'].map((id) => ({ id, squadId: id.toUpperCase() })) as Team[];
+  // Round 1: A beats C, B beats D. Round 2: C beats D, A and B draw.
+  // Squad points (small win 3 / draw 2 / small loss 1): A 5, B 5, C 4, D 2.
+  const challenges: Challenge[] = [
+    completedChallenge('a', 'c', 1, matchResult({ team1Td: 1, team2Td: 0 })),
+    completedChallenge('b', 'd', 1, matchResult({ team1Td: 1, team2Td: 0 })),
+    completedChallenge('c', 'd', 2, matchResult({ team1Td: 1, team2Td: 0 })),
+    completedChallenge('a', 'b', 2, matchResult({ team1Td: 1, team2Td: 1 })),
+  ];
+
+  test('sums the final squad points of every squad faced', () => {
+    const standings = computeSquadStandings(squads, teams, challenges, DEFAULT_SQUAD_SCORING);
+    const byId = (id: string) => standings.find((s) => s.squadId === id)!;
+    assert.equal(byId('A').opponentScore, byId('C').points + byId('B').points);
+    assert.equal(byId('B').opponentScore, byId('D').points + byId('A').points);
+  });
+
+  test('opponent_score ranks the squad with the tougher schedule first', () => {
+    const standings = computeSquadStandings(squads, teams, challenges, {
+      ...DEFAULT_SQUAD_SCORING,
+      tiebreakers: ['opponent_score'],
+    });
+    const ab = standings.map((s) => s.squadId).filter((id) => id === 'A' || id === 'B');
+    assert.deepEqual(ab, ['A', 'B']);
   });
 });

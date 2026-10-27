@@ -148,3 +148,20 @@
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
+
+.top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+
+  .btn-small {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
+  }
+
+  .top-note {
+    font-size: 0.85rem;
+  }
+}

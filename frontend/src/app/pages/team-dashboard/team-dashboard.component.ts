@@ -11,9 +11,11 @@ import {
   type SubmitResultRequest,
 } from '@bb-tournament/shared';
 import { ApiService, type Auth } from '../../core/api.service';
+import { CurrentTournamentService } from '../../core/current-tournament.service';
 import { type BackupIdInfo, parseBackupId } from '../../core/backup';
 import { extractErrorBody, extractErrorMessage } from '../../core/http-error';
 import { rosterImageUrl } from '../../core/links';
+import { forgetTeam, rememberTeam, rememberedTeam } from '../../core/team-session';
 import { rosterStatusLabel as labelForRosterStatus } from '../../core/roster-status';
 import { uploadToS3 } from '../../core/upload';
 import { MatchResultFormComponent } from '../../shared/match-result-form/match-result-form.component';
@@ -31,6 +33,7 @@ const POLL_INTERVAL_MS = 60000;
 export class TeamDashboardComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(ApiService);
+  private readonly currentTournament = inject(CurrentTournamentService);
   private pollHandle: ReturnType<typeof setInterval> | null = null;
 
   readonly races = RACES;
@@ -79,7 +82,10 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
 
     try {
       await this.api.verifyTeamAccess(this.tournamentId, this.teamId, this.password);
+      rememberTeam(this.tournamentId, { teamId: this.teamId, password: this.password });
     } catch (err) {
+      // A stale remembered link (password changed since) shouldn't keep offering "Gérer mon équipe".
+      if (rememberedTeam()?.teamId === this.teamId) forgetTeam(this.tournamentId);
       this.loadError = extractErrorMessage(err);
       this.loading = false;
       return;
@@ -100,6 +106,7 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
         teamId: this.teamId,
         password: this.password,
       });
+      this.currentTournament.set(this.tournamentId, this.tournament.name);
       this.loadError = null;
       const myTeam = this.myTeam;
       if (myTeam && !silent) {
@@ -172,8 +179,11 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     return this.tournament?.teams.filter((t) => t.id !== this.teamId) ?? [];
   }
 
+  /** Latest round first; free challenges (no round) after, newest first. */
   get myChallenges(): PublicTournament['challenges'] {
-    return this.tournament?.challenges.filter((c) => c.team1Id === this.teamId || c.team2Id === this.teamId) ?? [];
+    return (this.tournament?.challenges.filter((c) => c.team1Id === this.teamId || c.team2Id === this.teamId) ?? []).sort(
+      (a, b) => (b.round ?? -1) - (a.round ?? -1) || b.createdAt.localeCompare(a.createdAt)
+    );
   }
 
   /** Free challenges (défier) are only available in ladder mode, or pre-round-1 in swiss_with_challenge. */
@@ -262,6 +272,7 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
         password,
       });
       this.password = password;
+      rememberTeam(this.tournamentId, { teamId: this.teamId, password });
     } catch (err) {
       const { code, details } = extractErrorBody(err);
       if (code === 'naf_name_mismatch' && typeof details['nafName'] === 'string') {

@@ -12,10 +12,12 @@ import {
   type SquadStandingEntry,
   type StandingEntry,
 } from '@bb-tournament/shared';
+import { CurrentTournamentService } from '../../core/current-tournament.service';
 import { ApiService } from '../../core/api.service';
 import { type BackupIdInfo, parseBackupId } from '../../core/backup';
 import { extractErrorBody, extractErrorMessage } from '../../core/http-error';
-import { copyToClipboard, participantUrl, rosterImageUrl, scoreboardUrl } from '../../core/links';
+import { copyToClipboard, participantUrl, rosterImageUrl } from '../../core/links';
+import { forgetTeam, rememberTeam, rememberedTeam, type TeamSession } from '../../core/team-session';
 import { renderMarkdown } from '../../core/markdown';
 import { rosterStatusLabel } from '../../core/roster-status';
 import { BracketGraphComponent } from '../../shared/bracket-graph/bracket-graph.component';
@@ -55,6 +57,7 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
+  private readonly currentTournament = inject(CurrentTournamentService);
   private pollHandle: ReturnType<typeof setInterval> | null = null;
 
   readonly races = RACES;
@@ -86,7 +89,8 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
 
   createdTeam: { teamId: string; password: string } | null = null;
   copied = false;
-  shareCopied = false;
+  /** Team remembered by the "bbt_team" cookie (set on the coach's team page), if any. */
+  remembered: TeamSession | null = null;
 
   showFindForm = false;
   findCoachName = '';
@@ -157,6 +161,7 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     this.tournamentId = this.route.snapshot.paramMap.get('tournamentId')!;
     this.backupInfo = parseBackupId(this.tournamentId);
+    this.remembered = rememberedTeam();
     await this.load();
     this.pollHandle = setInterval(() => this.load(true), POLL_INTERVAL_MS);
   }
@@ -169,6 +174,7 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     if (!silent) this.loading = true;
     try {
       this.tournament = await this.api.getTournament(this.tournamentId);
+      this.currentTournament.set(this.tournamentId, this.tournament.name);
       this.descriptionHtml = renderMarkdown(this.tournament.description);
       // Once the knockout bracket exists it's what visitors come for — open on it by default.
       if (!silent && this.tournament.mode === 'pools_knockout' && this.tournament.bracket !== null) {
@@ -461,6 +467,8 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
         newSquadName: this.isTeamFormat && this.joinSquadChoice === 'new' ? this.joinNewSquadName.trim() : undefined,
       });
       this.createdTeam = { teamId: res.teamId, password };
+      rememberTeam(this.tournamentId, this.createdTeam);
+      this.remembered = this.createdTeam;
       await this.load(true);
     } catch (err) {
       const { code, details } = extractErrorBody(err);
@@ -498,20 +506,21 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     this.copied = await copyToClipboard(this.createdTeamUrl);
   }
 
-  async shareTournament(): Promise<void> {
-    const url = scoreboardUrl(this.tournamentId);
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: this.tournament?.name ?? 'Tournoi Blood Bowl', url });
-        return;
-      } catch {
-        // User cancelled the native share sheet, or it failed — fall back to copying below.
-      }
-    }
-    this.shareCopied = await copyToClipboard(url);
-    if (this.shareCopied) {
-      setTimeout(() => (this.shareCopied = false), 2000);
-    }
+  /** The remembered coach's team, only while it still exists in this tournament. */
+  get rememberedTeam(): PublicTournament['teams'][number] | null {
+    const remembered = this.remembered;
+    return remembered ? (this.tournament?.teams.find((t) => t.id === remembered.teamId) ?? null) : null;
+  }
+
+  goToRememberedTeam(): void {
+    if (!this.remembered) return;
+    this.router.navigate(['/tournaments', this.tournamentId, 'team', this.remembered.teamId, this.remembered.password]);
+  }
+
+  /** "Ce n'est pas moi" — e.g. a shared device at the venue. */
+  forgetRememberedTeam(): void {
+    forgetTeam(this.tournamentId);
+    this.remembered = null;
   }
 
   goToMyTeam(): void {

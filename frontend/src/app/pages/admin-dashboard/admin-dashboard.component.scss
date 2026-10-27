@@ -109,20 +109,37 @@
     border-radius: var(--radius);
     padding: 0.5rem 0.75rem;
     flex-wrap: wrap;
-
-    &.tiebreaker-squad-only {
-      border-color: var(--squad-only, #7c3aed);
-      background: color-mix(in srgb, var(--squad-only, #7c3aed) 8%, transparent);
-    }
   }
+}
 
-  .squad-only-tag {
-    margin-left: 0.5rem;
-    padding: 0.1rem 0.45rem;
+// Team-format scoring tab: individual vs squad settings are colour-coded so the two scoring
+// systems (and their separate tiebreaker lists) can't be mistaken for one another.
+.scope-card {
+  border-left: 4px solid var(--scope-color);
+
+  .scope-tag {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 0.4rem;
+    padding: 0.1rem 0.55rem;
     border-radius: 999px;
-    font-size: 0.75em;
-    font-weight: 600;
+    font-size: 0.6em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     color: #fff;
-    background: var(--squad-only, #7c3aed);
+    background: var(--scope-color);
   }
+
+  .tiebreaker-list li {
+    border-color: color-mix(in srgb, var(--scope-color) 45%, var(--border));
+  }
+}
+
+.scope-individual {
+  --scope-color: #3b82f6;
+}
+
+.scope-squad {
+  --scope-color: #a855f7;
 }

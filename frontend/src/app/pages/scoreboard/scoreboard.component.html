@@ -13,21 +13,14 @@
     <a [href]="'/tournaments/' + b.originalTournamentId">→ Voir le tournoi en cours</a>
   </div>
 
-  <section class="card">
-    <div class="title-row">
-      <h1>{{ t.name }}</h1>
-      <button
-        type="button"
-        class="icon-btn"
-        (click)="shareTournament()"
-        title="Partager le lien de ce tournoi"
-        aria-label="Partager le lien de ce tournoi"
-      >
-        📤
-      </button>
-      <span class="muted" *ngIf="shareCopied">Lien copié !</span>
-    </div>
-    <div class="actions">
+  <!-- Tournament name lives in the site header; this row only carries the coach's entry points. -->
+  <div class="top-actions">
+    <ng-container *ngIf="rememberedTeam as mine; else anonymousActions">
+      <button type="button" class="btn btn-primary" (click)="goToRememberedTeam()">Gérer mon équipe</button>
+      <span class="muted">{{ mine.coachName }}</span>
+      <button type="button" class="btn btn-small" (click)="forgetRememberedTeam()">Ce n'est pas moi</button>
+    </ng-container>
+    <ng-template #anonymousActions>
       <button
         type="button"
         class="btn btn-primary"
@@ -39,14 +32,11 @@
       <button type="button" class="btn" (click)="showFindForm = !showFindForm; showJoinForm = false" *ngIf="!createdTeam">
         {{ showFindForm ? 'Annuler' : "J'ai déjà une équipe" }}
       </button>
-    </div>
-    <p class="muted" *ngIf="registrationClosed" style="margin-top: 0.5rem">
-      Les inscriptions sont closes, les rondes ont commencé.
-      <ng-container *ngIf="roundInPreparation">
-        Une ronde est en cours de préparation par l'organisateur.
-      </ng-container>
-    </p>
-  </section>
+    </ng-template>
+    <span class="muted top-note" *ngIf="registrationClosed">
+      Inscriptions closes<ng-container *ngIf="roundInPreparation"> · ronde en préparation</ng-container>
+    </span>
+  </div>
 
   <div class="tabs">
     <button

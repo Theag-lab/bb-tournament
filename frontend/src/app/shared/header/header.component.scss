@@ -1,21 +1,75 @@
+// Three columns with equal outer tracks, so the tournament name sits exactly in the middle of the
+// bar: home link + site brand on the left, tournament name centred, info button on the right.
 .header {
   padding: 1rem;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 1rem;
 }
 
-.brand {
+.header-left {
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.home-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+
+  &:hover {
+    border-color: var(--primary);
+    color: var(--text);
+  }
+}
+
+.site-brand {
   font-weight: 700;
-  font-size: 1.1rem;
+  font-size: 1rem;
   color: var(--text);
   text-decoration: none;
+  white-space: nowrap;
+}
+
+.tournament-name {
+  grid-column: 2;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--text);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+// Phones: no room for the site brand next to a tournament name — keep just the home button there.
+@media (max-width: 720px) {
+  .header.has-tournament {
+    grid-template-columns: 1.8rem minmax(0, 1fr) 1.8rem;
+  }
+
+  .site-brand-desktop-only {
+    display: none;
+  }
 }
 
 .info-btn {
+  grid-column: 3;
+  justify-self: end;
   background: none;
   border: 1px solid var(--border);
   border-radius: 999px;

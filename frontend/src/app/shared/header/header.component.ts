@@ -4,6 +4,7 @@ import { NavigationEnd, Router, RouterLink, type ActivatedRouteSnapshot } from '
 import { Subscription, filter } from 'rxjs';
 import { renderMarkdown } from '../../core/markdown';
 import { SITE_INFO_MARKDOWN } from '../../core/site-info';
+import { CurrentTournamentService } from '../../core/current-tournament.service';
 
 @Component({
   selector: 'app-header',
@@ -14,6 +15,7 @@ import { SITE_INFO_MARKDOWN } from '../../core/site-info';
 })
 export class HeaderComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
+  private readonly currentTournament = inject(CurrentTournamentService);
   private navigationSub?: Subscription;
 
   tournamentId: string | null = null;
@@ -42,6 +44,12 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.navigationSub?.unsubscribe();
+  }
+
+  /** The tournament's name in place of the site brand, once the page has loaded it. */
+  get tournamentName(): string | null {
+    const current = this.currentTournament.current();
+    return current && current.id === this.tournamentId ? current.name : null;
   }
 
   get brandLink(): unknown[] {

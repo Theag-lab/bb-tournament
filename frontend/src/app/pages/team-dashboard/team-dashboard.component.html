@@ -211,6 +211,7 @@
         <strong>vs {{ teamName(opponentId(c)) }}</strong>
         <span class="badge">{{ matchLabel(c) }}</span>
         <span class="badge" [ngClass]="'badge-' + c.status">{{ c.status }}</span>
+        <app-fumbbl-link *ngIf="c.fumbbl as link" [link]="link"></app-fumbbl-link>
       </div>
 
       <ng-container [ngSwitch]="c.status">

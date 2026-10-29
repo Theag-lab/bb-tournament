@@ -20,13 +20,14 @@ import { rosterStatusLabel as labelForRosterStatus } from '../../core/roster-sta
 import { uploadToS3 } from '../../core/upload';
 import { MatchResultFormComponent } from '../../shared/match-result-form/match-result-form.component';
 import { MatchResultSummaryComponent } from '../../shared/match-result-summary/match-result-summary.component';
+import { FumbblLinkComponent } from '../../shared/fumbbl-link/fumbbl-link.component';
 
 const POLL_INTERVAL_MS = 60000;
 
 @Component({
   selector: 'app-team-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, MatchResultFormComponent, MatchResultSummaryComponent],
+  imports: [CommonModule, FormsModule, RouterLink, MatchResultFormComponent, MatchResultSummaryComponent, FumbblLinkComponent],
   templateUrl: './team-dashboard.component.html',
   styleUrl: './team-dashboard.component.scss',
 })

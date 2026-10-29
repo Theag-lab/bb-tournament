@@ -492,6 +492,7 @@ export function computeSquadStandings(
       gamesPlayed: 0,
       memberPoints: 0,
       opponentScore: 0,
+      individualLosses: 0,
     });
   }
 
@@ -535,6 +536,8 @@ export function computeSquadStandings(
     e2.aggAgainst += r.team1Agg;
     e1.gamesPlayed += 1;
     e2.gamesPlayed += 1;
+    if (r.team1Td < r.team2Td) e1.individualLosses += 1;
+    else if (r.team2Td < r.team1Td) e2.individualLosses += 1;
 
     if (squad1Id === squad2Id) continue; // shouldn't happen, but guard against self-matchup skew
     const [squadA, squadB] = squad1Id < squad2Id ? [squad1Id, squad2Id] : [squad2Id, squad1Id];
@@ -616,6 +619,7 @@ const SQUAD_TIEBREAKER_COMPARATORS: Record<
 > = {
   member_points: (a, b) => b.memberPoints - a.memberPoints,
   opponent_score: (a, b) => b.opponentScore - a.opponentScore,
+  fewest_individual_losses: (a, b) => a.individualLosses - b.individualLosses,
   net_td: (a, b) => b.tdFor - b.tdAgainst - (a.tdFor - a.tdAgainst),
   net_cas: (a, b) => b.casFor - b.casAgainst - (a.casFor - a.casAgainst),
   net_agg: (a, b) => b.aggFor - b.aggAgainst - (a.aggFor - a.aggAgainst),

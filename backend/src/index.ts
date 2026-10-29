@@ -11,6 +11,7 @@ import * as pools from './handlers/pools';
 import * as naf from './handlers/naf';
 import * as backups from './handlers/backups';
 import * as logs from './handlers/logs';
+import * as fumbbl from './handlers/fumbbl';
 import * as rosterImage from './rosterImage';
 
 const app = new Hono().basePath('/api');
@@ -38,6 +39,7 @@ app.patch('/tournaments/:tournamentId/round-timer', tournaments.updateRoundTimer
 app.patch('/tournaments/:tournamentId/individual-scoring', tournaments.updateIndividualScoring);
 app.patch('/tournaments/:tournamentId/match-sheet-config', tournaments.updateMatchSheetConfig);
 app.put('/tournaments/:tournamentId/custom-stat-categories', tournaments.updateCustomStatCategories);
+app.put('/tournaments/:tournamentId/fumbbl', fumbbl.updateFumbblTracking);
 app.get('/tournaments/:tournamentId/naf-export', naf.exportNaf);
 
 app.get('/tournaments/:tournamentId/backups', backups.listBackups);

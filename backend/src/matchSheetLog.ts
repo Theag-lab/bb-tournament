@@ -40,7 +40,12 @@ const cloudwatchLogs = new CloudWatchLogsClient({});
  */
 export const MATCH_SHEET_LOG_STREAM_NAME = 'match-sheet-events';
 
+/**
+ * The API Lambda's own log group — where the admin download reads the audit trail from. Another
+ * Lambda writing to the same trail (the FUMBBL cron) points at it with MATCH_SHEET_LOG_GROUP.
+ */
 export function apiFunctionLogGroupName(): string {
+  if (process.env.MATCH_SHEET_LOG_GROUP) return process.env.MATCH_SHEET_LOG_GROUP;
   const functionName = process.env.AWS_LAMBDA_FUNCTION_NAME;
   if (!functionName) throw new Error('AWS_LAMBDA_FUNCTION_NAME env var is not set');
   return `/aws/lambda/${functionName}`;

@@ -119,6 +119,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         result: c.result,
+        fumbbl: c.fumbbl,
       })),
     standings: computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? []),
     squadStandings: squadStandingsOf(t),
@@ -154,6 +155,7 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
     matchSheetConfig: t.matchSheetConfig ?? DEFAULT_MATCH_SHEET_CONFIG,
     customStatCategories: t.customStatCategories ?? [],
     roundTimer: t.roundTimer ?? DEFAULT_ROUND_TIMER,
+    fumbbl: t.fumbbl ?? null,
     createdAt: t.createdAt,
     teams: t.teams.map((team) => ({
       id: team.id,
@@ -177,6 +179,7 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
       result: c.result,
+      fumbbl: c.fumbbl,
     })),
     standings: computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? []),
     squadStandings: squadStandingsOf(t),

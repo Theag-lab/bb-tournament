@@ -29,6 +29,7 @@ import type {
   UpdateRoundTimerRequest,
   UpdateSquadRequest,
   UpdateSquadScoringRequest,
+  FumbblTrackingConfig,
 } from '@bb-tournament/shared';
 
 /** Identifies "myself" when loading a tournament, so I still see my own team even if others are masked. */
@@ -378,6 +379,12 @@ export class ApiService {
       this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/individual-scoring`, body, {
         params: { token },
       })
+    );
+  }
+
+  updateFumbblTracking(tournamentId: string, token: string, body: FumbblTrackingConfig) {
+    return firstValueFrom(
+      this.http.put<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/fumbbl`, body, { params: { token } })
     );
   }
 

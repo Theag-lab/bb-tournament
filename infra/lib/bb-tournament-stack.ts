@@ -6,6 +6,8 @@ import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as eventsTargets from 'aws-cdk-lib/aws-events-targets';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigwv2integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
@@ -88,6 +90,8 @@ export class BbTournamentStack extends cdk.Stack {
       architecture: lambda.Architecture.ARM_64,
     });
     dataBucket.grantReadWrite(apiFunction, 'tournaments/*');
+    // The admin's FUMBBL opt-in (un)subscribes the tournament here (storage.setFumbblSubscription).
+    dataBucket.grantReadWrite(apiFunction, 'fumbbl/*');
     // The Lambda only *signs* presigned POSTs for roster images; it never reads/serves them
     // itself (CloudFront + the browser handle that), so it needs put/delete but not get.
     assetsBucket.grantPut(apiFunction, 'roster-images/*');
@@ -100,14 +104,44 @@ export class BbTournamentStack extends cdk.Stack {
     // put a reference to the function inside its OWN role's policy, and since the function already
     // has an explicit CloudFormation DependsOn on that policy (standard CDK behaviour, for IAM
     // propagation), that reference closes a circular dependency (Function -> its role's policy ->
-    // Function). There's only one Lambda in this stack, so the wildcard is no broader in practice
-    // than naming it directly.
+    // Function). The only other Lambda (the FUMBBL cron) writes to this same audit trail, so the
+    // wildcard is no broader in practice than naming the groups directly.
     apiFunction.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['logs:FilterLogEvents', 'logs:PutLogEvents', 'logs:CreateLogStream'],
         resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/*:*`],
       })
     );
+
+    // --- FUMBBL result tracking: cron Lambda, every 15 minutes ---
+    // Same build output as the API (backend/dist), other entry point (src/fumbblCron.ts). Reads the
+    // subscribed tournament list, polls FUMBBL's live games, links/enters results on tournaments.
+    const fumbblCronFunction = new lambda.Function(this, 'FumbblCronFunction', {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      handler: 'fumbblCron.handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'backend', 'dist')),
+      memorySize: 256,
+      timeout: cdk.Duration.minutes(2),
+      logRetention: logs.RetentionDays.ONE_MONTH,
+      environment: {
+        DATA_BUCKET_NAME: dataBucket.bucketName,
+        // Results it enters go to the API's match-sheet audit trail, which the admin downloads.
+        MATCH_SHEET_LOG_GROUP: `/aws/lambda/${apiFunction.functionName}`,
+      },
+      architecture: lambda.Architecture.ARM_64,
+    });
+    dataBucket.grantReadWrite(fumbblCronFunction, 'tournaments/*');
+    dataBucket.grantRead(fumbblCronFunction, 'fumbbl/*');
+    fumbblCronFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['logs:PutLogEvents', 'logs:CreateLogStream'],
+        resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/*:*`],
+      })
+    );
+    new events.Rule(this, 'FumbblCronSchedule', {
+      schedule: events.Schedule.rate(cdk.Duration.minutes(15)),
+      targets: [new eventsTargets.LambdaFunction(fumbblCronFunction)],
+    });
 
     const httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
       defaultIntegration: new apigwv2integrations.HttpLambdaIntegration('DefaultIntegration', apiFunction),

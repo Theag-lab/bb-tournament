@@ -805,3 +805,31 @@ describe('computeSquadStandings — squad opponent score', () => {
     assert.deepEqual(ab, ['A', 'B']);
   });
 });
+
+describe('computeSquadStandings — fewest individual losses', () => {
+  const squads: Squad[] = ['A', 'B', 'C', 'D'].map((id) => ({ id, name: id, createdAt: '2026-01-01' }));
+  const teams = ['a0', 'a1', 'b0', 'b1', 'c0', 'c1', 'd0', 'd1'].map((id) => ({ id, squadId: id[0].toUpperCase() })) as Team[];
+  // Both A and B draw their round (board diff 0, same squad points, same net TD 0):
+  // A with two drawn boards (0 lost), B with one won and one lost board (1 lost).
+  const challenges: Challenge[] = [
+    completedChallenge('a0', 'c0', 1, matchResult({ team1Td: 0, team2Td: 0 })),
+    completedChallenge('a1', 'c1', 1, matchResult({ team1Td: 1, team2Td: 1 })),
+    completedChallenge('b0', 'd0', 1, matchResult({ team1Td: 1, team2Td: 0 })),
+    completedChallenge('b1', 'd1', 1, matchResult({ team1Td: 0, team2Td: 1 })),
+  ];
+
+  test('counts the members\' lost boards', () => {
+    const standings = computeSquadStandings(squads, teams, challenges, DEFAULT_SQUAD_SCORING);
+    const byId = (id: string) => standings.find((s) => s.squadId === id)!;
+    assert.deepEqual([byId('A').individualLosses, byId('B').individualLosses], [0, 1]);
+    assert.equal(byId('A').points, byId('B').points);
+  });
+
+  test('fewer individual losses ranks first, whatever the default random order says', () => {
+    for (const tiebreakers of [['fewest_individual_losses'], ['net_td', 'fewest_individual_losses']] as const) {
+      const standings = computeSquadStandings(squads, teams, challenges, { ...DEFAULT_SQUAD_SCORING, tiebreakers: [...tiebreakers] });
+      const ab = standings.map((s) => s.squadId).filter((id) => id === 'A' || id === 'B');
+      assert.deepEqual(ab, ['A', 'B']);
+    }
+  });
+});

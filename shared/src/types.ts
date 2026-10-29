@@ -33,6 +33,26 @@ export interface MatchResult {
   confirmedByTeamId: string | null;
   completedAt: string | null;
   finalizedByAdmin?: boolean;
+  /** Set when the result was entered automatically from a finished FUMBBL match (see FumbblMatchLink). */
+  source?: 'fumbbl';
+}
+
+/**
+ * FUMBBL tracking of one tournament match, filled in by the FUMBBL cron Lambda: it spots the game
+ * live on FUMBBL (both teams carrying the tournament's tag, coaches matching a scheduled match),
+ * remembers it here, and once the game has finished enters the result from FUMBBL's match record.
+ */
+export interface FumbblMatchLink {
+  /** FUMBBL's live game id — the spectate id while it's played, and the finished match's replayId. */
+  liveGameId: number;
+  /** FUMBBL team ids of this match's team1 / team2, used to look the finished match up. */
+  team1FumbblTeamId: number;
+  team2FumbblTeamId: number;
+  state: 'live' | 'finished';
+  /** FUMBBL match id once the finished match was found (link to its match page). */
+  matchId: number | null;
+  detectedAt: string;
+  finishedAt: string | null;
 }
 
 export interface Challenge {
@@ -44,6 +64,7 @@ export interface Challenge {
   createdAt: string;
   updatedAt: string;
   result: MatchResult | null;
+  fumbbl?: FumbblMatchLink;
 }
 
 export interface RosterImage {
@@ -142,6 +163,7 @@ export interface Pool {
 export type SquadTiebreakerCriterion =
   | 'head_to_head'
   | 'opponent_score'
+  | 'fewest_individual_losses'
   | 'member_points'
   | 'net_td'
   | 'net_cas'
@@ -153,6 +175,7 @@ export type SquadTiebreakerCriterion =
 export const ALL_SQUAD_TIEBREAKER_CRITERIA: SquadTiebreakerCriterion[] = [
   'head_to_head',
   'opponent_score',
+  'fewest_individual_losses',
   'member_points',
   'net_td',
   'net_cas',
@@ -387,6 +410,28 @@ export interface Tournament {
   createdAt: string;
   teams: Team[];
   challenges: Challenge[];
+  /** Automatic FUMBBL result tracking (see FumbblTrackingConfig); absent on tournaments created before it. */
+  fumbbl?: FumbblTrackingConfig | null;
+}
+
+/**
+ * Admin opt-in for automatic FUMBBL results: every FUMBBL team taking part must have `tag` in its
+ * name (e.g. "[LuteceWC2027] Les Écorcheurs"); the cron Lambda then matches live games to the
+ * tournament's scheduled matches by coach name.
+ */
+export interface FumbblTrackingConfig {
+  enabled: boolean;
+  tag: string;
+}
+
+export const FUMBBL_TAG_MAX_LENGTH = 40;
+
+export function fumbblSpectateUrl(liveGameId: number): string {
+  return `https://fumbbl.com/ffblive.jnlp?spectate=${liveGameId}`;
+}
+
+export function fumbblMatchUrl(matchId: number): string {
+  return `https://fumbbl.com/p/match?id=${matchId}`;
 }
 
 export const TOURNAMENT_DESCRIPTION_MAX_LENGTH = 20000;
@@ -416,6 +461,7 @@ export interface PublicChallenge {
   createdAt: string;
   updatedAt: string;
   result: MatchResult | null;
+  fumbbl?: FumbblMatchLink;
 }
 
 export interface StandingEntry {
@@ -469,6 +515,8 @@ export interface SquadStandingEntry {
   memberPoints: number;
   /** Sum of the final squad points of every squad faced, once per round met (Buchholz-style). */
   opponentScore: number;
+  /** Individual matches (boards) lost by the squad's members, by plain TD comparison. */
+  individualLosses: number;
 }
 
 /** Pool-scoped equivalent of StandingEntry, only populated for 'pools_knockout' mode tournaments. */
@@ -574,6 +622,7 @@ export interface AdminTournamentView {
   customStatLeaderboards: CustomStatLeaderboard[];
   bracket: BracketRoundView[] | null;
   knockoutChampionTeamId: string | null;
+  fumbbl: FumbblTrackingConfig | null;
 }
 
 /**

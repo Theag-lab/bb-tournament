@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --outfile=dist/index.js",
+    "build": "esbuild src/index.ts src/fumbblCron.ts --bundle --platform=node --target=node22 --outdir=dist",
     "clean": "rm -rf dist dist-test",
     "typecheck": "tsc --noEmit",
     "test": "tsc -p tsconfig.test.json && find dist-test -name '*.test.js' -print0 | xargs -0 node --test"

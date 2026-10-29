@@ -169,6 +169,32 @@
     </section>
 
     <section class="card">
+      <h2>Suivi FUMBBL</h2>
+      <p class="muted">
+        Pour un tournoi joué sur FUMBBL : toutes les 15 minutes, les matchs en cours sur FUMBBL entre deux équipes dont
+        le nom contient le tag ci-dessous, et dont les coachs (nom FUMBBL = nom de coach du tournoi) doivent
+        s'affronter dans une ronde lancée, sont repérés — un lien pour regarder le match apparaît. Une fois le match
+        terminé, son résultat (TD, sorties) est saisi automatiquement comme résultat final, sauf si un résultat a déjà
+        été saisi entre-temps. Les agressions et compteurs personnalisés ne sont pas fournis par FUMBBL.
+      </p>
+      <div class="alert alert-error" *ngIf="fumbblError">{{ fumbblError }}</div>
+      <label class="checkbox-field">
+        <input type="checkbox" name="fumbblEnabled" [(ngModel)]="fumbblEnabledDraft" [disabled]="savingFumbbl" />
+        <span>Activer la remontée automatique des résultats FUMBBL</span>
+      </label>
+      <div class="field">
+        <label for="fumbbl-tag">Tag obligatoire dans le nom des équipes FUMBBL</label>
+        <input id="fumbbl-tag" name="fumbblTag" [(ngModel)]="fumbblTagDraft" maxlength="40" placeholder="[LuteceWC2027]" />
+      </div>
+      <div class="actions">
+        <button type="button" class="btn btn-primary" [disabled]="savingFumbbl" (click)="saveFumbblTracking()">
+          {{ savingFumbbl ? 'Enregistrement…' : 'Enregistrer' }}
+        </button>
+        <span class="muted" *ngIf="fumbblSaved">Enregistré.</span>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>Description du tournoi</h2>
       <p class="muted">Visible par tous dans l'onglet "Description" du tableau des scores. Markdown pris en charge.</p>
       <div class="alert alert-error" *ngIf="descriptionError">{{ descriptionError }}</div>
@@ -422,6 +448,7 @@
               <span *ngIf="isLockedMatch(r, row.leftTeamId, row.rightTeamId)" title="Appariement forcé par l'admin">🔒</span>
             </strong>
             <span class="badge" [ngClass]="'badge-' + row.challenge.status">{{ row.challenge.status }}</span>
+            <app-fumbbl-link *ngIf="row.challenge.fumbbl as link" [link]="link"></app-fumbbl-link>
           </div>
           <div class="subtext" *ngIf="isTeamFormat">
             {{ squadName(teamSquadId(row.leftTeamId)) }} vs {{ squadName(teamSquadId(row.rightTeamId)) }}
@@ -439,6 +466,7 @@
             {{ row.rightTd }} (sorties {{ row.leftCas }} -
             {{ row.rightCas }})
             <span *ngIf="row.challenge.result.finalizedByAdmin">— forcé par l'admin</span>
+            <span *ngIf="row.challenge.result.source === 'fumbbl' && !row.challenge.result.finalizedByAdmin">— saisi automatiquement depuis FUMBBL</span>
           </p>
 
           <button type="button" class="btn" (click)="toggleResultForm(row.challenge.id)">
@@ -1157,7 +1185,8 @@
       <p class="muted">
         « Somme des points des coachs » additionne les points du classement individuel de chaque membre de l'équipe ;
         « Confrontation directe » départage deux équipes selon les rondes où elles se sont affrontées ;
-        « Points adverses » additionne les points d'équipe finaux de chaque équipe affrontée.
+        « Points adverses » additionne les points d'équipe finaux de chaque équipe affrontée ;
+        « Moins de défaites individuelles » compte les matchs perdus par les coachs de l'équipe.
       </p>
 
       <button type="button" class="btn btn-primary" [disabled]="savingSquadScoring" (click)="saveSquadScoring()">

@@ -41,6 +41,7 @@ import { rosterStatusLabel } from '../../core/roster-status';
 import { MatchResultFormComponent } from '../../shared/match-result-form/match-result-form.component';
 import { BracketGraphComponent } from '../../shared/bracket-graph/bracket-graph.component';
 import { TeamImportComponent } from './team-import/team-import.component';
+import { FumbblLinkComponent } from '../../shared/fumbbl-link/fumbbl-link.component';
 
 const POLL_INTERVAL_MS = 60000;
 
@@ -70,6 +71,7 @@ export const TIEBREAKER_LABELS: Record<Exclude<TiebreakerCriterion, `custom:${st
 export const SQUAD_TIEBREAKER_LABELS: Record<SquadTiebreakerCriterion, string> = {
   head_to_head: 'Confrontation directe',
   opponent_score: 'Points adverses (Buchholz)',
+  fewest_individual_losses: 'Moins de défaites individuelles',
   member_points: 'Somme des points des coachs',
   net_td: 'Différentiel de TD',
   net_cas: 'Différentiel de sorties',
@@ -119,7 +121,7 @@ export interface RoundMatchRow {
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, MatchResultFormComponent, BracketGraphComponent, TeamImportComponent],
+  imports: [CommonModule, FormsModule, RouterLink, MatchResultFormComponent, BracketGraphComponent, TeamImportComponent, FumbblLinkComponent],
   templateUrl: './admin-dashboard.component.html',
   styleUrl: './admin-dashboard.component.scss',
 })
@@ -315,6 +317,8 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
         this.matchSheetDraft = cloneMatchSheetConfig(this.tournament.matchSheetConfig);
         this.customStatCategoriesDraft = cloneCustomStatCategories(this.tournament.customStatCategories);
         this.roundTimerDurationMinutesDraft = Math.round(this.tournament.roundTimer.durationSeconds / 60);
+        this.fumbblEnabledDraft = this.tournament.fumbbl?.enabled ?? false;
+        this.fumbblTagDraft = this.tournament.fumbbl?.tag ?? '';
       }
       this.loadError = null;
     } catch (err) {
@@ -374,6 +378,30 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
 
   savingResultValidation = false;
   resultValidationError: string | null = null;
+
+  fumbblEnabledDraft = false;
+  fumbblTagDraft = '';
+  savingFumbbl = false;
+  fumbblError: string | null = null;
+  fumbblSaved = false;
+
+  async saveFumbblTracking(): Promise<void> {
+    this.savingFumbbl = true;
+    this.fumbblError = null;
+    this.fumbblSaved = false;
+    try {
+      this.tournament = await this.api.updateFumbblTracking(this.tournamentId, this.token, {
+        enabled: this.fumbblEnabledDraft,
+        tag: this.fumbblTagDraft.trim(),
+      });
+      this.fumbblTagDraft = this.tournament.fumbbl?.tag ?? '';
+      this.fumbblSaved = true;
+    } catch (err) {
+      this.fumbblError = extractErrorMessage(err);
+    } finally {
+      this.savingFumbbl = false;
+    }
+  }
 
   async setRequireResultConfirmation(requireResultConfirmation: boolean): Promise<void> {
     this.savingResultValidation = true;

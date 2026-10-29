@@ -23,6 +23,7 @@ import { exportPdf, pdfFileName, type PdfRow, type PdfTable } from '../../core/p
 import { renderMarkdown } from '../../core/markdown';
 import { rosterStatusLabel } from '../../core/roster-status';
 import { BracketGraphComponent } from '../../shared/bracket-graph/bracket-graph.component';
+import { FumbblLinkComponent } from '../../shared/fumbbl-link/fumbbl-link.component';
 
 const POLL_INTERVAL_MS = 60000;
 
@@ -60,7 +61,7 @@ const PDF_STATUS_LABELS: Record<ChallengeStatus, string> = {
 @Component({
   selector: 'app-scoreboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, BracketGraphComponent],
+  imports: [CommonModule, FormsModule, BracketGraphComponent, FumbblLinkComponent],
   templateUrl: './scoreboard.component.html',
   styleUrl: './scoreboard.component.scss',
 })

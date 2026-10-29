@@ -121,7 +121,10 @@
                 <strong>{{ matchPrimaryLabel(row.leftTeamId) }}</strong>
                 <div class="subtext">{{ matchSecondaryLabel(row.leftTeamId) }}</div>
               </td>
-              <td class="nowrap">{{ row.leftTd !== null ? (row.leftTd + ' - ' + row.rightTd) : '—' }}</td>
+              <td class="nowrap">
+                {{ row.leftTd !== null ? (row.leftTd + ' - ' + row.rightTd) : '—' }}
+                <app-fumbbl-link *ngIf="row.challenge.fumbbl as link" [link]="link"></app-fumbbl-link>
+              </td>
               <td>
                 <strong>{{ matchPrimaryLabel(row.rightTeamId) }}</strong>
                 <div class="subtext">{{ matchSecondaryLabel(row.rightTeamId) }}</div>

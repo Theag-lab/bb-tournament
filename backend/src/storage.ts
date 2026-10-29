@@ -160,3 +160,52 @@ export async function backupTournament(id: string): Promise<TournamentBackupSumm
   );
   return { index, createdAt: new Date().toISOString() };
 }
+
+// ---- FUMBBL subscriptions ----
+// The tournaments the FUMBBL cron Lambda polls for (admin opt-in, see handlers/fumbbl.ts). One small
+// object rather than a scan of every tournament, so a run with nobody subscribed costs one GET.
+const FUMBBL_SUBSCRIPTIONS_KEY = 'fumbbl/subscriptions.json';
+
+interface FumbblSubscriptions {
+  tournamentIds: string[];
+}
+
+async function loadFumbblSubscriptions(): Promise<{ data: FumbblSubscriptions; etag: string | null }> {
+  try {
+    const res = await s3.send(new GetObjectCommand({ Bucket: bucketName(), Key: FUMBBL_SUBSCRIPTIONS_KEY }));
+    return { data: JSON.parse(await res.Body!.transformToString()) as FumbblSubscriptions, etag: res.ETag! };
+  } catch (e: any) {
+    if (e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) return { data: { tournamentIds: [] }, etag: null };
+    throw e;
+  }
+}
+
+export async function getFumbblSubscriptions(): Promise<string[]> {
+  return (await loadFumbblSubscriptions()).data.tournamentIds;
+}
+
+/** Adds or removes a tournament from the FUMBBL subscriptions, with the same optimistic retry as updateTournament. */
+export async function setFumbblSubscription(tournamentId: string, subscribed: boolean): Promise<void> {
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const { data, etag } = await loadFumbblSubscriptions();
+    const ids = new Set(data.tournamentIds);
+    if (ids.has(tournamentId) === subscribed) return;
+    if (subscribed) ids.add(tournamentId);
+    else ids.delete(tournamentId);
+    try {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucketName(),
+          Key: FUMBBL_SUBSCRIPTIONS_KEY,
+          Body: JSON.stringify({ tournamentIds: [...ids] } satisfies FumbblSubscriptions),
+          ContentType: 'application/json',
+          ...(etag ? { IfMatch: etag } : { IfNoneMatch: '*' }),
+        })
+      );
+      return;
+    } catch (e: any) {
+      if (e.$metadata?.httpStatusCode === 412 && attempt < 5) continue;
+      throw e;
+    }
+  }
+}

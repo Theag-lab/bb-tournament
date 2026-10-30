@@ -12,8 +12,8 @@ import {
 import { logMatchSheetEvent, toMatchResultLogView } from './matchSheetLog';
 
 /**
- * Entry point of the FUMBBL cron Lambda (EventBridge, every 15 minutes — see the CDK stack). One
- * call to FUMBBL's live-games list per run, shared by every subscribed tournament; finished games
+ * Entry point of the FUMBBL cron Lambda (EventBridge Scheduler: every 5 minutes 18h-midnight Paris
+ * time, every 15 otherwise — see the CDK stack). One call to FUMBBL's live-games list per run, shared by every subscribed tournament; finished games
  * cost two more calls each. Each tournament is processed independently so one failure (FUMBBL
  * hiccup, deleted tournament) doesn't block the others.
  */

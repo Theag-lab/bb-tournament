@@ -6,8 +6,8 @@ import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import * as events from 'aws-cdk-lib/aws-events';
-import * as eventsTargets from 'aws-cdk-lib/aws-events-targets';
+import * as scheduler from 'aws-cdk-lib/aws-scheduler';
+import * as schedulerTargets from 'aws-cdk-lib/aws-scheduler-targets';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigwv2integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
@@ -113,7 +113,7 @@ export class BbTournamentStack extends cdk.Stack {
       })
     );
 
-    // --- FUMBBL result tracking: cron Lambda, every 15 minutes ---
+    // --- FUMBBL result tracking: cron Lambda (schedules below) ---
     // Same build output as the API (backend/dist), other entry point (src/fumbblCron.ts). Reads the
     // subscribed tournament list, polls FUMBBL's live games, links/enters results on tournaments.
     const fumbblCronFunction = new lambda.Function(this, 'FumbblCronFunction', {
@@ -138,9 +138,17 @@ export class BbTournamentStack extends cdk.Stack {
         resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/*:*`],
       })
     );
-    new events.Rule(this, 'FumbblCronSchedule', {
-      schedule: events.Schedule.rate(cdk.Duration.minutes(15)),
-      targets: [new eventsTargets.LambdaFunction(fumbblCronFunction)],
+    // Every 5 minutes in the evening (when tournament games are played), every 15 minutes the rest
+    // of the day so an afternoon game is still picked up. EventBridge Scheduler (not a plain Rule)
+    // because it takes a time zone: "18h-minuit" stays right across daylight-saving changes.
+    const fumbblCronTarget = new schedulerTargets.LambdaInvoke(fumbblCronFunction);
+    new scheduler.Schedule(this, 'FumbblCronEvening', {
+      schedule: scheduler.ScheduleExpression.expression('cron(0/5 18-23 * * ? *)', cdk.TimeZone.EUROPE_PARIS),
+      target: fumbblCronTarget,
+    });
+    new scheduler.Schedule(this, 'FumbblCronDaytime', {
+      schedule: scheduler.ScheduleExpression.expression('cron(0/15 0-17 * * ? *)', cdk.TimeZone.EUROPE_PARIS),
+      target: fumbblCronTarget,
     });
 
     const httpApi = new apigwv2.HttpApi(this, 'HttpApi', {

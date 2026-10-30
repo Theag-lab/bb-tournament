@@ -71,8 +71,13 @@ describe('linkLiveGames', () => {
     assert.deepEqual(linkLiveGames(t, [liveGame], NOW), []);
   });
 
-  test('ignores a game where one team lacks the tag', () => {
-    const untagged = { ...liveGame, teams: [liveGame.teams[0], { ...liveGame.teams[1], name: 'Theag' }] };
+  test('links a game where only one team carries the tag', () => {
+    const halfTagged = { ...liveGame, teams: [liveGame.teams[0], { ...liveGame.teams[1], name: 'Theag' }] };
+    assert.equal(linkLiveGames(tournament(), [halfTagged], NOW).length, 1);
+  });
+
+  test('ignores a game where neither team carries the tag', () => {
+    const untagged = { ...liveGame, teams: liveGame.teams.map((team, i) => ({ ...team, name: `Team ${i}` })) };
     assert.deepEqual(linkLiveGames(tournament(), [untagged], NOW), []);
   });
 

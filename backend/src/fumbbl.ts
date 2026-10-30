@@ -8,10 +8,10 @@ import {
 } from '@bb-tournament/shared';
 
 /**
- * FUMBBL result tracking, run by the cron Lambda (fumbblCron.ts) every 15 minutes:
- * 1. a game live on FUMBBL whose two teams both carry the tournament's tag, between the coaches of
- *    a scheduled (accepted, launched-round) match, gets linked to that match — its spectate link
- *    then shows on the scoreboard;
+ * FUMBBL result tracking, run by the cron Lambda (fumbblCron.ts) every 5 minutes from 18h to midnight, 15 otherwise:
+ * 1. a game live on FUMBBL where at least one of the two teams carries the tournament's tag (some
+ *    coaches forget to rename theirs), between the coaches of a scheduled (accepted, launched-round)
+ *    match, gets linked to that match — its spectate link then shows on the scoreboard;
  * 2. once that game has left FUMBBL's live list, its finished match record is looked up (its
  *    replayId is the live game id) and the result is entered on the tournament.
  * Everything here except the fetch helpers is pure, so it's unit-tested without the network.
@@ -70,9 +70,9 @@ function isTrackingEnabled(t: Tournament): boolean {
 }
 
 /**
- * Links each newly seen tagged live game to the scheduled match between its two coaches (status
- * 'accepted', round launched or free challenge, not already linked). Mutates `t`; returns the ids
- * of the challenges it linked.
+ * Links each newly seen live game with at least one tagged team to the scheduled match between
+ * its two coaches (status 'accepted', round launched or free challenge, not already linked).
+ * Mutates `t`; returns the ids of the challenges it linked.
  */
 export function linkLiveGames(t: Tournament, games: FumbblLiveGame[], now: string): string[] {
   if (!isTrackingEnabled(t)) return [];
@@ -85,7 +85,7 @@ export function linkLiveGames(t: Tournament, games: FumbblLiveGame[], now: strin
   for (const game of games) {
     if (trackedGameIds.has(game.id) || game.teams.length !== 2) continue;
     const [home, away] = game.teams;
-    if (!hasTag(home.name, tag) || !hasTag(away.name, tag)) continue;
+    if (!hasTag(home.name, tag) && !hasTag(away.name, tag)) continue;
     const homeTeam = byCoach.get(normalize(home.coach));
     const awayTeam = byCoach.get(normalize(away.coach));
     if (!homeTeam || !awayTeam || homeTeam.id === awayTeam.id) continue;

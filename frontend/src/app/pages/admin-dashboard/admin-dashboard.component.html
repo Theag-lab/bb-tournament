@@ -171,8 +171,8 @@
     <section class="card">
       <h2>Suivi FUMBBL</h2>
       <p class="muted">
-        Pour un tournoi joué sur FUMBBL : toutes les 15 minutes, les matchs en cours sur FUMBBL entre deux équipes dont
-        le nom contient le tag ci-dessous, et dont les coachs (nom FUMBBL = nom de coach du tournoi) doivent
+        Pour un tournoi joué sur FUMBBL : toutes les 5 minutes de 18h à minuit (toutes les 15 minutes le reste de la journée), les matchs en cours sur FUMBBL dont
+        au moins une des deux équipes porte le tag ci-dessous dans son nom, et dont les coachs (nom FUMBBL = nom de coach du tournoi) doivent
         s'affronter dans une ronde lancée, sont repérés — un lien pour regarder le match apparaît. Une fois le match
         terminé, son résultat (TD, sorties) est saisi automatiquement comme résultat final, sauf si un résultat a déjà
         été saisi entre-temps. Les agressions et compteurs personnalisés ne sont pas fournis par FUMBBL.
@@ -183,7 +183,7 @@
         <span>Activer la remontée automatique des résultats FUMBBL</span>
       </label>
       <div class="field">
-        <label for="fumbbl-tag">Tag obligatoire dans le nom des équipes FUMBBL</label>
+        <label for="fumbbl-tag">Tag dans le nom des équipes FUMBBL (au moins une des deux)</label>
         <input id="fumbbl-tag" name="fumbblTag" [(ngModel)]="fumbblTagDraft" maxlength="40" placeholder="[LuteceWC2027]" />
       </div>
       <div class="actions">

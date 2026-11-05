@@ -49,7 +49,13 @@ export interface FumbblMatch {
 /** A tracked game still unresolved this long after it was spotted (e.g. abandoned) is dropped. */
 export const STALE_LINK_MS = 24 * 60 * 60 * 1000;
 
-const normalize = (value: string) => value.trim().toLowerCase();
+/** Case- and accent-insensitive comparison key: "Ménalque " and "menalque" match. */
+const normalize = (value: string) =>
+  value
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 
 export function hasTag(teamName: string, tag: string): boolean {
   return normalize(teamName).includes(normalize(tag));

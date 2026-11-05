@@ -71,6 +71,20 @@ describe('linkLiveGames', () => {
     assert.deepEqual(linkLiveGames(t, [liveGame], NOW), []);
   });
 
+  test('matches coach names regardless of accents', () => {
+    const t = tournament();
+    t.teams[0].coachName = 'Ménalque';
+    t.teams[1].coachName = 'Nîme';
+    const game = {
+      ...liveGame,
+      teams: [
+        { ...liveGame.teams[0], coach: 'menalque' },
+        { ...liveGame.teams[1], coach: 'NIME' },
+      ],
+    };
+    assert.equal(linkLiveGames(t, [game], NOW).length, 1);
+  });
+
   test('links a game where only one team carries the tag', () => {
     const halfTagged = { ...liveGame, teams: [liveGame.teams[0], { ...liveGame.teams[1], name: 'Theag' }] };
     assert.equal(linkLiveGames(tournament(), [halfTagged], NOW).length, 1);

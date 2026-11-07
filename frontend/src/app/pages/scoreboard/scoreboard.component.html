@@ -372,7 +372,7 @@
         <label for="find-coach">Nom du coach</label>
         <select id="find-coach" name="findCoachName" [(ngModel)]="findCoachName" required>
           <option value="" disabled selected>Choisir un coach</option>
-          <option *ngFor="let team of t.teams" [value]="team.coachName">
+          <option *ngFor="let team of teamsByCoachName" [value]="team.coachName">
             {{ team.coachName }} ({{ showTeamNames ? team.name : team.race }})
           </option>
         </select>

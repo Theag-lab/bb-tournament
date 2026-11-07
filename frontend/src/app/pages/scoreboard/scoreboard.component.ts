@@ -35,6 +35,8 @@ interface DerivedLookups {
   squadMemberCounts: Map<string, number>;
   squadRankIndex: Map<string, number>;
   poolMemberCounts: Map<string, number>;
+  /** Teams sorted by coach name (accent- and case-insensitive), for the "J'ai déjà une équipe" picker. */
+  teamsByCoachName: PublicTeam[];
 }
 
 export interface RoundMatchRow {
@@ -120,6 +122,7 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     squadMemberCounts: new Map(),
     squadRankIndex: new Map(),
     poolMemberCounts: new Map(),
+    teamsByCoachName: [],
   };
 
   /**
@@ -150,6 +153,9 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
       squadMemberCounts,
       squadRankIndex,
       poolMemberCounts,
+      teamsByCoachName: [...(this.tournament?.teams ?? [])].sort((a, b) =>
+        a.coachName.localeCompare(b.coachName, 'fr', { sensitivity: 'base' })
+      ),
     };
     return this.derivedCache;
   }
@@ -231,6 +237,10 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
 
   poolMemberCount(poolId: string): number {
     return this.derived.poolMemberCounts.get(poolId) ?? 0;
+  }
+
+  get teamsByCoachName(): PublicTeam[] {
+    return this.derived.teamsByCoachName;
   }
 
   poolStandings(poolId: string): StandingEntry[] {

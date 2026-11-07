@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 import type { PairRoundSquadsRequest, RerandomizeRoundRequest, SwapRoundMatchesRequest } from '@bb-tournament/shared';
 import * as storage from '../storage';
 import { requireAdmin } from '../auth';
-import { cancelRoundLaunch, generateNextRound, launchRound, pairRoundSquads, rerandomizeRound, swapRoundMatches } from '../rounds';
+import { cancelRound as cancelLastRound, generateNextRound, launchRound, pairRoundSquads, rerandomizeRound, swapRoundMatches } from '../rounds';
 import { launchKnockoutPhase } from '../bracket';
 import { toAdminTournamentView } from '../sanitize';
 import { badRequest } from '../errors';
@@ -106,14 +106,14 @@ export async function launch(c: Context) {
   return c.json(toAdminTournamentView(tournament));
 }
 
-export async function cancelLaunch(c: Context) {
+export async function cancelRound(c: Context) {
   const tournamentId = c.req.param('tournamentId')!;
   const roundNumber = parseRoundNumber(c);
   const token = c.req.query('token');
 
   await storage.updateTournament(tournamentId, (t) => {
     requireAdmin(t, token);
-    cancelRoundLaunch(t, roundNumber);
+    cancelLastRound(t, roundNumber);
   });
 
   const tournament = await storage.getTournament(tournamentId);

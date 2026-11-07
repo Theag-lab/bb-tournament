@@ -77,7 +77,7 @@ app.post('/tournaments/:tournamentId/rounds/:roundNumber/swap', rounds.swapMatch
 app.post('/tournaments/:tournamentId/rounds/:roundNumber/pair-squads', rounds.pairSquads);
 app.post('/tournaments/:tournamentId/rounds/:roundNumber/rerandomize', rounds.rerandomize);
 app.post('/tournaments/:tournamentId/rounds/:roundNumber/launch', rounds.launch);
-app.post('/tournaments/:tournamentId/rounds/:roundNumber/cancel-launch', rounds.cancelLaunch);
+app.post('/tournaments/:tournamentId/rounds/:roundNumber/cancel', rounds.cancelRound);
 app.post('/tournaments/:tournamentId/knockout/launch', rounds.launchKnockout);
 
 export const handler = handle(app);

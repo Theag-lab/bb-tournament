@@ -359,13 +359,13 @@
           </span>
         </div>
 
-        <div class="actions" style="margin-bottom: 0.75rem" *ngIf="canCancelRoundLaunch(r)">
-          <button type="button" class="btn btn-danger" [disabled]="roundBusy" (click)="cancelRoundLaunch(r.number)">
-            Annuler le lancement de la ronde {{ r.number }}
+        <div class="actions" style="margin-bottom: 0.75rem" *ngIf="canCancelRound(r)">
+          <button type="button" class="btn btn-danger" [disabled]="roundBusy" (click)="cancelRound(r.number)">
+            Annuler la ronde {{ r.number }}
           </button>
           <p class="muted" style="margin: 0.3rem 0 0">
-            Repasse la ronde en brouillon (aucun match n'a encore été joué) — permet par exemple d'inverser deux
-            adversaires avant de relancer.
+            Supprime la ronde et ses appariements (aucun match n'a encore été joué) — elle pourra être générée à
+            nouveau.
           </p>
         </div>
 

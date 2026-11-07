@@ -9,7 +9,7 @@ import {
   type Team,
   type Tournament,
 } from '@bb-tournament/shared';
-import { cancelRoundLaunch, generateNextRound, pairRoundSquads, rerandomizeRound, swapRoundMatches } from './rounds';
+import { cancelRound, generateNextRound, pairRoundSquads, rerandomizeRound, swapRoundMatches } from './rounds';
 import { launchKnockoutPhase } from './bracket';
 
 function team(id: string, poolId: string | null): Team {
@@ -253,7 +253,7 @@ describe('swapRoundMatches', () => {
   });
 });
 
-describe('cancelRoundLaunch', () => {
+describe('cancelRound', () => {
   function launchedRoundOfFour(): Tournament {
     return baseTournament({
       mode: 'swiss',
@@ -263,31 +263,57 @@ describe('cancelRoundLaunch', () => {
     });
   }
 
-  test('reverts the last launched round back to draft', () => {
+  test('deletes the last launched round and its matches, so it can be generated again', () => {
     const t = launchedRoundOfFour();
-    cancelRoundLaunch(t, 1);
-    assert.equal(t.rounds[0].status, 'draft');
+    t.roundCount = 3;
+    cancelRound(t, 1);
+    assert.equal(t.rounds.length, 0);
+    assert.equal(t.challenges.length, 0);
+    generateNextRound(t);
+    assert.equal(t.rounds.length, 1);
+    assert.equal(t.challenges.filter((c) => c.round === 1).length, 2);
   });
 
-  test('a cancelled round can be swapped again', () => {
-    const t = launchedRoundOfFour();
-    cancelRoundLaunch(t, 1);
-    swapRoundMatches(t, 1, 'theag', 'harti');
-    const m1 = t.challenges.find((c) => c.id === 'm1')!;
-    assert.deepEqual(new Set([m1.team1Id, m1.team2Id]), new Set(['theag', 'harti']));
-  });
-
-  test('rejects a round that is not launched (already draft)', () => {
+  test('deletes a draft round too', () => {
     const t = launchedRoundOfFour();
     t.rounds[0].status = 'draft';
-    assert.throws(() => cancelRoundLaunch(t, 1), /not launched/);
+    cancelRound(t, 1);
+    assert.equal(t.rounds.length, 0);
+  });
+
+  test('keeps earlier rounds and their matches', () => {
+    const t = launchedRoundOfFour();
+    t.rounds.push({ number: 2, status: 'draft' });
+    t.challenges.push(challenge('m3', 'pilaf', 'thot', 2));
+    cancelRound(t, 2);
+    assert.deepEqual(t.rounds.map((r) => r.number), [1]);
+    assert.deepEqual(t.challenges.map((c) => c.id), ['m1', 'm2']);
+  });
+
+  test('turns locked-in pre-round free challenges back into free challenges', () => {
+    const t = launchedRoundOfFour();
+    t.rounds[0].fixedChallengeIds = ['m1'];
+    cancelRound(t, 1);
+    assert.deepEqual(t.challenges.map((c) => [c.id, c.round]), [['m1', null]]);
+  });
+
+  test('cancelling the first knockout round un-launches the knockout phase', () => {
+    const t = poolsKnockoutTournament();
+    generateNextRound(t);
+    completeRound(t, 1);
+    launchKnockoutPhase(t);
+    cancelRound(t, 2);
+    assert.equal(t.knockoutSeeds, null);
+    assert.equal(t.rounds.length, 1);
+    launchKnockoutPhase(t);
+    assert.equal(t.rounds.length, 2);
   });
 
   test('rejects an earlier round once a later round already exists', () => {
     const t = launchedRoundOfFour();
     t.rounds.push({ number: 2, status: 'draft' });
     t.challenges.push(challenge('m3', 'pilaf', 'thot', 2));
-    assert.throws(() => cancelRoundLaunch(t, 1), /last round/);
+    assert.throws(() => cancelRound(t, 1), /last round/);
   });
 
   test('rejects once any match in the round has a result', () => {
@@ -311,12 +337,12 @@ describe('cancelRoundLaunch', () => {
       confirmedByTeamId: null,
       completedAt: null,
     };
-    assert.throws(() => cancelRoundLaunch(t, 1), /has been played/);
+    assert.throws(() => cancelRound(t, 1), /has been played/);
   });
 
   test('rejects a nonexistent round number', () => {
     const t = launchedRoundOfFour();
-    assert.throws(() => cancelRoundLaunch(t, 99), /last round/);
+    assert.throws(() => cancelRound(t, 99), /last round/);
   });
 });
 

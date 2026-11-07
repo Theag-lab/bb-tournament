@@ -323,10 +323,10 @@ export class ApiService {
     );
   }
 
-  cancelRoundLaunch(tournamentId: string, token: string, roundNumber: number) {
+  cancelRound(tournamentId: string, token: string, roundNumber: number) {
     return firstValueFrom(
       this.http.post<AdminTournamentView>(
-        `${API_BASE}/tournaments/${tournamentId}/rounds/${roundNumber}/cancel-launch`,
+        `${API_BASE}/tournaments/${tournamentId}/rounds/${roundNumber}/cancel`,
         {},
         { params: { token } }
       )

@@ -919,23 +919,23 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Cancelling a launch is only offered for the LAST round, and only while nothing in it has been
-   * played yet — see cancelRoundLaunch in the backend for why (an earlier round's pairing is
-   * already baked into any later round that exists, and un-launching doesn't undo a played match).
+   * Cancelling (deleting) a round is only offered for the LAST round, and only while nothing in it
+   * has been played yet — see cancelRound in the backend for why (an earlier round's pairing is
+   * already baked into any later round that exists, and cancelling doesn't undo a played match).
    */
-  canCancelRoundLaunch(round: RoundInfo): boolean {
-    if (round.status !== 'launched') return false;
+  canCancelRound(round: RoundInfo): boolean {
     const rounds = this.tournament?.rounds ?? [];
     const isLastRound = rounds.length > 0 && rounds[rounds.length - 1].number === round.number;
     if (!isLastRound) return false;
     return !this.roundMatches(round.number).some((c) => c.result !== null);
   }
 
-  async cancelRoundLaunch(roundNumber: number): Promise<void> {
+  async cancelRound(roundNumber: number): Promise<void> {
+    if (!confirm(`Supprimer la ronde ${roundNumber} et ses appariements ?`)) return;
     this.roundBusy = true;
     this.roundError = null;
     try {
-      this.tournament = await this.api.cancelRoundLaunch(this.tournamentId, this.token, roundNumber);
+      this.tournament = await this.api.cancelRound(this.tournamentId, this.token, roundNumber);
     } catch (err) {
       this.roundError = extractErrorMessage(err);
     } finally {

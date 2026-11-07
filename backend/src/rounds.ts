@@ -421,25 +421,34 @@ export function launchRound(t: Tournament, roundNumber: number): void {
 }
 
 /**
- * Reverts the tournament's LAST launched round back to 'draft' so its pairings can be edited again
- * (see swapRoundMatches, draft-only) — e.g. the admin launched it, then realised two coaches
- * should be swapped. Only ever the last round: an earlier round has later rounds generated from
- * its outcome, so un-launching it would leave those downstream rounds referencing a pairing that's
- * no longer settled. Refuses once any of its matches has a result — the pairing is the only thing
- * this undoes, not played results, and once that round's already being played it's too late to
- * reshuffle it.
+ * Deletes the tournament's LAST round (draft or launched) and its matches, so it can be generated
+ * again from scratch. Only ever the last round: an earlier round has later rounds generated from
+ * its outcome. Refuses once any of its matches has a result — this undoes a pairing, never a
+ * played match. Pre-round free challenges that round 1 had locked in (swiss with challenges) go
+ * back to being free challenges rather than being deleted, and cancelling the first knockout round
+ * also un-launches the knockout phase (its seeds are recomputed when it's launched again).
  */
-export function cancelRoundLaunch(t: Tournament, roundNumber: number): void {
+export function cancelRound(t: Tournament, roundNumber: number): void {
   const lastRound = t.rounds[t.rounds.length - 1];
   if (!lastRound || lastRound.number !== roundNumber) {
     throw forbidden('Only the last round can be cancelled', 'not_last_round');
-  }
-  if (lastRound.status !== 'launched') {
-    throw forbidden('This round is not launched', 'round_not_launched');
   }
   const anyPlayed = t.challenges.some((c) => c.round === roundNumber && c.result !== null);
   if (anyPlayed) {
     throw forbidden('Cannot cancel a round once a match has been played', 'round_already_played');
   }
-  lastRound.status = 'draft';
+
+  const now = new Date().toISOString();
+  const fixedIds = new Set(lastRound.fixedChallengeIds ?? []);
+  t.challenges = t.challenges.filter((c) => {
+    if (c.round !== roundNumber) return true;
+    if (!fixedIds.has(c.id)) return false;
+    c.round = null;
+    c.updatedAt = now;
+    return true;
+  });
+  t.rounds.pop();
+  if (t.mode === 'pools_knockout' && t.poolRoundCount !== null && roundNumber === t.poolRoundCount + 1) {
+    t.knockoutSeeds = null;
+  }
 }

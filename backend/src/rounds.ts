@@ -194,7 +194,8 @@ function buildSquadPairMatches(t: Tournament, squadPairs: Pair[], coachLocks: Pa
   for (const [squadA, squadB] of squadPairs) {
     const locks = coachLocks.filter(([x, y]) => isPair([squadOf(x) ?? '', squadOf(y) ?? ''], squadA, squadB));
     const lockedIds = new Set(locks.flat());
-    for (const [x, y] of locks) matches.push(newMatch(x, y, roundNumber, now));
+    // squadA always on the team1 side, so the confrontation renders the same way round the scoreboard.
+    for (const [x, y] of locks) matches.push(squadOf(x) === squadA ? newMatch(x, y, roundNumber, now) : newMatch(y, x, roundNumber, now));
     const membersA = memberOrder.filter((id) => squadOf(id) === squadA && !lockedIds.has(id));
     const membersB = memberOrder.filter((id) => squadOf(id) === squadB && !lockedIds.has(id));
     const pairCount = Math.min(membersA.length, membersB.length);
@@ -347,10 +348,15 @@ export function pairRoundSquads(t: Tournament, roundNumber: number, squadId1: st
   });
 
   const now = new Date().toISOString();
-  t.challenges = t.challenges.filter(
-    (c) => c.round !== roundNumber || (!affected.has(squadOf(c.team1Id) ?? '') && !affected.has(squadOf(c.team2Id) ?? ''))
-  );
-  t.challenges.push(...buildSquadPairMatches(t, newPairs, round.lockedPairs, roundNumber, now));
+  const isAffected = (c: Challenge) =>
+    c.round === roundNumber && (affected.has(squadOf(c.team1Id) ?? '') || affected.has(squadOf(c.team2Id) ?? ''));
+  // The new matches take the place of the ones they replace, so the other confrontations keep
+  // their table numbers (tables follow the round's match order).
+  const insertAt = t.challenges.findIndex(isAffected);
+  const kept = t.challenges.filter((c) => !isAffected(c));
+  const keptBefore = insertAt === -1 ? kept.length : t.challenges.slice(0, insertAt).filter((c) => !isAffected(c)).length;
+  kept.splice(keptBefore, 0, ...buildSquadPairMatches(t, newPairs, round.lockedPairs, roundNumber, now));
+  t.challenges = kept;
 }
 
 /**

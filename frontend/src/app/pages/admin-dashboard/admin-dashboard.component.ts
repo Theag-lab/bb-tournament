@@ -100,7 +100,6 @@ interface DerivedLookups {
   poolsById: Map<string, Pool>;
   teamsWithChallenges: Set<string>;
   squadMemberCounts: Map<string, number>;
-  squadRankIndex: Map<string, number>;
   poolMemberCounts: Map<string, number>;
 }
 
@@ -232,7 +231,6 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     poolsById: new Map(),
     teamsWithChallenges: new Set(),
     squadMemberCounts: new Map(),
-    squadRankIndex: new Map(),
     poolMemberCounts: new Map(),
   };
 
@@ -259,9 +257,6 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       if (team.squadId) squadMemberCounts.set(team.squadId, (squadMemberCounts.get(team.squadId) ?? 0) + 1);
       if (team.poolId) poolMemberCounts.set(team.poolId, (poolMemberCounts.get(team.poolId) ?? 0) + 1);
     }
-    // squadStandings is already ranked best-first — this just turns that into an O(1) rank lookup.
-    const squadRankIndex = new Map<string, number>();
-    (this.tournament?.squadStandings ?? []).forEach((s, i) => squadRankIndex.set(s.squadId, i));
     this.derivedCache = {
       tournament: this.tournament,
       teamsById,
@@ -269,7 +264,6 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       poolsById,
       teamsWithChallenges,
       squadMemberCounts,
-      squadRankIndex,
       poolMemberCounts,
     };
     return this.derivedCache;
@@ -740,18 +734,14 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     return [this.teamSquadId(c.team1Id) ?? '', this.teamSquadId(c.team2Id) ?? ''].sort().join('|');
   }
 
-  private squadRank(squadId: string | null): number {
-    if (!squadId) return Infinity;
-    return this.derived.squadRankIndex.get(squadId) ?? Infinity;
-  }
-
   /**
    * Clusters a round's matches by squad pairing so every member of a given squad-pair confrontation
    * renders stacked together, even if the underlying array isn't already in that order (e.g. after
    * an admin match swap) — this actively regroups rather than just detecting already-adjacent runs,
-   * so it can't be defeated by array order. Groups are then ordered by squad rank (the top-ranked
-   * squad's confrontation first), and within each group the higher-ranked squad always renders on
-   * the left, regardless of which side happens to be team1/team2 in the raw data. Same logic as the
+   * so it can't be defeated by array order. Groups keep the order the round was generated in (squad
+   * standings at generation time) and the left side is the squad of the group's first match's team1,
+   * so a table number and its sides never move while results come in — ordering by the live squad
+   * standings would renumber the tables after every result. Same logic as the
    * public scoreboard's roundMatchGroups.
    */
   /** Pool-phase rounds only (round number <= poolRoundCount) — groups matches by pool, in pool order. */
@@ -810,16 +800,13 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       groupsByKey.get(key)!.push(challenge);
     }
 
-    const orderedKeys = Array.from(groupsByKey.keys()).sort((a, b) => {
-      const bestRank = (key: string) => Math.min(...key.split('|').map((id) => this.squadRank(id)));
-      return bestRank(a) - bestRank(b);
-    });
-
+    // Map iteration follows insertion, i.e. each confrontation's first match in the round's array order.
     const rows: RoundMatchRow[] = [];
-    orderedKeys.forEach((key, groupIndex) => {
+    Array.from(groupsByKey.keys()).forEach((key, groupIndex) => {
       const [squadX, squadY] = key.split('|');
-      const anchorSquad = this.squadRank(squadX) <= this.squadRank(squadY) ? squadX : squadY;
-      groupsByKey.get(key)!.forEach((challenge, i) => {
+      const group = groupsByKey.get(key)!;
+      const anchorSquad = this.teamSquadId(group[0].team1Id) === squadY ? squadY : squadX;
+      group.forEach((challenge, i) => {
         const team1IsAnchor = this.teamSquadId(challenge.team1Id) === anchorSquad;
         const otherSquad = anchorSquad === squadX ? squadY : squadX;
         rows.push({

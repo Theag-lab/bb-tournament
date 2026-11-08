@@ -384,6 +384,18 @@ describe('team format round preparation', () => {
     assert.deepEqual(t.rounds[0].lockedSquadPairs, [['A', 'C']]);
   });
 
+  test('re-paired confrontations take the place of the ones they replace, others keep their table', () => {
+    const t = fourSquads();
+    t.squads.push(squad('E'), squad('F'));
+    t.teams.push(member('e1', 'E'), member('f1', 'F'));
+    t.challenges.push(challenge('m5', 'e1', 'f1', 1));
+    // Tables: 1 = A-B, 2 = C-D, 3 = E-F. Re-pairing C and E leaves table 1 (A-B) untouched and first.
+    pairRoundSquads(t, 1, 'C', 'E');
+    const order = t.challenges.map((c) => [squadOf(c.team1Id), squadOf(c.team2Id)].sort().join(''));
+    assert.deepEqual(order.slice(0, 2), ['AB', 'AB']);
+    assert.deepEqual(new Set(order.slice(2)), new Set(['CE', 'DF']));
+  });
+
   test('pairing two coaches stays inside their squad confrontation and locks it', () => {
     const t = fourSquads();
     swapRoundMatches(t, 1, 'a1', 'b2');

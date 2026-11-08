@@ -192,10 +192,6 @@
       Ce tournoi est en format rondes suisses : les rondes sont générées et appariées par l'organisateur, pas de
       défi libre.
     </p>
-    <p class="muted" *ngIf="tournament.mode === 'swiss_with_challenge'">
-      La ronde 1 a déjà été générée : les défis libres ne sont plus disponibles, les rondes suivantes sont
-      appariées par l'organisateur.
-    </p>
   </section>
 
   <ng-container *ngIf="myChallenges.length === 0" [ngTemplateOutlet]="challengesCard"></ng-container>

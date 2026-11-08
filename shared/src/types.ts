@@ -60,7 +60,7 @@ export interface Challenge {
   team1Id: string; // challenger
   team2Id: string; // challenged
   status: ChallengeStatus;
-  round: number | null; // null = free challenge (ladder, or pre-round-1 in swiss_with_challenge)
+  round: number | null; // null = free challenge (ladder)
   createdAt: string;
   updatedAt: string;
   result: MatchResult | null;
@@ -74,7 +74,7 @@ export interface RosterImage {
 // Only meaningful when the tournament's requireRosterValidation is true; otherwise ignored.
 export type RosterStatus = 'created' | 'submitted' | 'validated';
 
-export type TournamentMode = 'ladder' | 'swiss' | 'swiss_with_challenge' | 'pools_knockout';
+export type TournamentMode = 'ladder' | 'swiss' | 'pools_knockout';
 
 export type RoundStatus = 'draft' | 'launched'; // draft = admin-only, pairings can still be swapped
 
@@ -88,8 +88,6 @@ export interface RoundInfo {
    */
   lockedPairs?: [string, string][];
   lockedSquadPairs?: [string, string][];
-  /** swiss_with_challenge round 1: matches carried over from pre-round challenges, never re-randomized. */
-  fixedChallengeIds?: string[];
 }
 
 /**

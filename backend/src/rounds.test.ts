@@ -290,13 +290,6 @@ describe('cancelRound', () => {
     assert.deepEqual(t.challenges.map((c) => c.id), ['m1', 'm2']);
   });
 
-  test('turns locked-in pre-round free challenges back into free challenges', () => {
-    const t = launchedRoundOfFour();
-    t.rounds[0].fixedChallengeIds = ['m1'];
-    cancelRound(t, 1);
-    assert.deepEqual(t.challenges.map((c) => [c.id, c.round]), [['m1', null]]);
-  });
-
   test('cancelling the first knockout round un-launches the knockout phase', () => {
     const t = poolsKnockoutTournament();
     generateNextRound(t);
@@ -461,18 +454,5 @@ describe('rerandomizeRound — individual format', () => {
     const round1 = t.challenges.filter((c) => c.round === 1);
     assert.equal(round1.length, 3);
     assert.ok(round1.some((c) => new Set([c.team1Id, c.team2Id]).has('p1') && new Set([c.team1Id, c.team2Id]).has('p3')));
-  });
-
-  test('swiss_with_challenge: pre-round challenges always stay', () => {
-    const t = baseTournament({
-      mode: 'swiss_with_challenge',
-      roundCount: 3,
-      teams: ['p1', 'p2', 'p3', 'p4'].map((id) => team(id, null)),
-      challenges: [{ ...challenge('pre', 'p1', 'p2', 1), round: null }],
-    });
-    generateNextRound(t);
-    rerandomizeRound(t, 1, false);
-    assert.ok(t.challenges.some((c) => c.id === 'pre' && c.round === 1));
-    assert.equal(t.challenges.filter((c) => c.round === 1).length, 2);
   });
 });

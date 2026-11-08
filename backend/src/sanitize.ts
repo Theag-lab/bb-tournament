@@ -49,11 +49,10 @@ function poolStandingsOf(t: Tournament): PoolStandingEntry[] {
 }
 
 /**
- * Roster *image and race* stay hidden from other participants until round 1 launches, in both
- * swiss modes — this is the actual "scouting" concern (seeing an opponent's exact roster build
- * or race/matchup before pairings are locked in). Team name/coach are NOT hidden: in
- * swiss_with_challenge coaches need them to pick who to challenge, and knowing who's in the
- * tournament isn't a fairness issue the way seeing their race or roster sheet is.
+ * Roster *image and race* stay hidden from other participants until round 1 launches, in
+ * round-based modes — this is the actual "scouting" concern (seeing an opponent's exact roster
+ * build or race/matchup before pairings are locked in). Team name/coach are NOT hidden: knowing
+ * who's in the tournament isn't a fairness issue the way seeing their race or roster sheet is.
  */
 function rosterDetailsHiddenFromOthers(t: Tournament): boolean {
   if (t.mode === 'ladder') return false;

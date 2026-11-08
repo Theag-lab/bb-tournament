@@ -685,7 +685,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   /** Round 1 of a swiss tournament, still in draft, can be redrawn at random (see rerandomizeRound in the backend). */
   canRedrawRound(round: RoundInfo): boolean {
     const t = this.tournament;
-    if (!t || (t.mode !== 'swiss' && t.mode !== 'swiss_with_challenge')) return false;
+    if (!t || t.mode !== 'swiss') return false;
     return round.number === 1 && round.status === 'draft' && t.rounds.length === 1;
   }
 

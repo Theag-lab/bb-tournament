@@ -12,10 +12,6 @@ import { badRequest, forbidden, notFound } from './errors';
 import { assertPreviousRoundComplete, buildPriorOpponents, pairInOrder, shuffle } from './pairing';
 import { generateNextPoolsKnockoutRound } from './bracket';
 
-// Statuses that mean "this pre-round challenge represents a real commitment" — used when
-// reconciling round 1 for swiss_with_challenge: anything less than 'accepted' never happened.
-const LOCKED_IN_STATUSES = new Set(['accepted', 'awaiting_confirmation', 'completed']);
-
 type Pair = [string, string];
 
 const isPair = (pair: Pair, a: string, b: string) => (pair[0] === a && pair[1] === b) || (pair[0] === b && pair[1] === a);
@@ -40,8 +36,7 @@ function teamSquadLookup(t: Tournament): (teamId: string) => string | null {
 
 /**
  * Generates the next round's pairings and appends them to the tournament (mutates in place).
- * Round 1 pairs are random (except pre-locked challenges in swiss_with_challenge mode); rounds
- * 2+ pair teams adjacent in the current standings, avoiding rematches where possible.
+ * Round 1 pairs are random; rounds 2+ pair teams adjacent in the current standings, avoiding rematches where possible.
  */
 export function generateNextRound(t: Tournament): void {
   if (t.mode === 'ladder') throw forbidden('This tournament has no rounds (ladder mode)');
@@ -63,42 +58,18 @@ export function generateNextRound(t: Tournament): void {
   assertPreviousRoundComplete(t, roundNumber);
 
   const now = new Date().toISOString();
-  const lockedTeamIds = new Set<string>();
-  const fixedChallengeIds: string[] = [];
-
-  if (roundNumber === 1 && t.mode === 'swiss_with_challenge') {
-    // Lock in pre-round free challenges that reached at least "accepted" as round-1 matches.
-    for (const ch of t.challenges) {
-      if (ch.round !== null || !LOCKED_IN_STATUSES.has(ch.status)) continue;
-      if (lockedTeamIds.has(ch.team1Id) || lockedTeamIds.has(ch.team2Id)) continue; // defensive
-      ch.round = 1;
-      ch.updatedAt = now;
-      fixedChallengeIds.push(ch.id);
-      lockedTeamIds.add(ch.team1Id);
-      lockedTeamIds.add(ch.team2Id);
-    }
-    // Any still-pending free challenge didn't make it into round 1 — drop it.
-    for (const ch of t.challenges) {
-      if (ch.round === null && ch.status === 'pending') {
-        ch.status = 'cancelled';
-        ch.updatedAt = now;
-      }
-    }
-  }
-
   const priorOpponents = buildPriorOpponents(t.challenges);
-  let candidateIds = t.teams.map((tm) => tm.id).filter((id) => !lockedTeamIds.has(id));
-  candidateIds =
+  const candidateIds =
     roundNumber > 1
-      ? computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? [])
-          .map((s) => s.teamId)
-          .filter((id) => !lockedTeamIds.has(id))
-      : shuffle(candidateIds);
+      ? computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? []).map(
+          (s) => s.teamId
+        )
+      : shuffle(t.teams.map((tm) => tm.id));
 
   const pairs = pairInOrder(candidateIds, priorOpponents);
 
   t.challenges.push(...pairs.map(([team1Id, team2Id]) => newMatch(team1Id, team2Id, roundNumber, now)));
-  t.rounds.push({ number: roundNumber, status: 'draft', ...(fixedChallengeIds.length ? { fixedChallengeIds } : {}) });
+  t.rounds.push({ number: roundNumber, status: 'draft' });
 }
 
 function assertTeamsPairable(t: Tournament): void {
@@ -362,17 +333,15 @@ export function pairRoundSquads(t: Tournament, roundNumber: number, squadId1: st
 /**
  * Redraws round 1 (still in draft) at random — e.g. after late registrations, or simply for a new
  * draw. With `keepLocks`, every pairing the admin forced is kept (squad and coach level); without,
- * those are forgotten too. swiss_with_challenge's pre-round challenges always stay. Only round 1:
- * later rounds are paired from standings, not drawn.
+ * those are forgotten too. Only round 1: later rounds are paired from standings, not drawn.
  */
 export function rerandomizeRound(t: Tournament, roundNumber: number, keepLocks: boolean): void {
   const round = getDraftRound(t, roundNumber);
-  if ((t.mode !== 'swiss' && t.mode !== 'swiss_with_challenge') || roundNumber !== 1 || t.rounds.length !== 1) {
+  if (t.mode !== 'swiss' || roundNumber !== 1 || t.rounds.length !== 1) {
     throw forbidden('Only round 1 of a swiss tournament can be redrawn', 'round_not_redrawable');
   }
-  const fixedIds = new Set(round.fixedChallengeIds ?? []);
   const roundMatches = t.challenges.filter((c) => c.round === roundNumber);
-  if (roundMatches.some((c) => !fixedIds.has(c.id) && c.result !== null)) {
+  if (roundMatches.some((c) => c.result !== null)) {
     throw forbidden('Cannot redraw a round once a match has been played', 'round_already_played');
   }
   if (!keepLocks) {
@@ -401,8 +370,8 @@ export function rerandomizeRound(t: Tournament, roundNumber: number, keepLocks: 
   }
 
   assertTeamsPairable(t);
-  const kept = roundMatches.filter((c) => fixedIds.has(c.id));
-  const used = new Set(kept.flatMap((c) => [c.team1Id, c.team2Id]));
+  const kept: Challenge[] = [];
+  const used = new Set<string>();
   const teamIds = new Set(t.teams.map((tm) => tm.id));
   const validLocks: Pair[] = [];
   for (const [x, y] of round.lockedPairs ?? []) {
@@ -430,9 +399,7 @@ export function launchRound(t: Tournament, roundNumber: number): void {
  * Deletes the tournament's LAST round (draft or launched) and its matches, so it can be generated
  * again from scratch. Only ever the last round: an earlier round has later rounds generated from
  * its outcome. Refuses once any of its matches has a result — this undoes a pairing, never a
- * played match. Pre-round free challenges that round 1 had locked in (swiss with challenges) go
- * back to being free challenges rather than being deleted, and cancelling the first knockout round
- * also un-launches the knockout phase (its seeds are recomputed when it's launched again).
+ * played match. Cancelling the first knockout round also un-launches the knockout phase (its seeds are recomputed when it's launched again).
  */
 export function cancelRound(t: Tournament, roundNumber: number): void {
   const lastRound = t.rounds[t.rounds.length - 1];
@@ -444,15 +411,7 @@ export function cancelRound(t: Tournament, roundNumber: number): void {
     throw forbidden('Cannot cancel a round once a match has been played', 'round_already_played');
   }
 
-  const now = new Date().toISOString();
-  const fixedIds = new Set(lastRound.fixedChallengeIds ?? []);
-  t.challenges = t.challenges.filter((c) => {
-    if (c.round !== roundNumber) return true;
-    if (!fixedIds.has(c.id)) return false;
-    c.round = null;
-    c.updatedAt = now;
-    return true;
-  });
+  t.challenges = t.challenges.filter((c) => c.round !== roundNumber);
   t.rounds.pop();
   if (t.mode === 'pools_knockout' && t.poolRoundCount !== null && roundNumber === t.poolRoundCount + 1) {
     t.knockoutSeeds = null;

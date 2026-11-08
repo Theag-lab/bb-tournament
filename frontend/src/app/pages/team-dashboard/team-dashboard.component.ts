@@ -187,12 +187,9 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     );
   }
 
-  /** Free challenges (défier) are only available in ladder mode, or pre-round-1 in swiss_with_challenge. */
+  /** Free challenges (défier) are only available in ladder mode. */
   get canChallenge(): boolean {
-    if (!this.tournament) return false;
-    if (this.tournament.mode === 'ladder') return true;
-    if (this.tournament.mode === 'swiss_with_challenge') return this.tournament.rounds.length === 0;
-    return false;
+    return this.tournament?.mode === 'ladder';
   }
 
   matchLabel(c: PublicTournament['challenges'][number]): string {

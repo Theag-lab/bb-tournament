@@ -27,17 +27,9 @@ function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Free (non-round) challenges: always on for ladder, only pre-round-1 for swiss_with_challenge. */
+/** Free (non-round) challenges only exist in ladder mode. */
 function canCreateFreeChallenge(t: Tournament): boolean {
-  if (t.mode === 'ladder') return true;
-  if (t.mode === 'swiss_with_challenge') return t.rounds.length === 0;
-  return false;
-}
-
-function hasActiveFreeChallenge(t: Tournament, teamId: string): boolean {
-  return t.challenges.some(
-    (ch) => ch.round === null && ACTIVE_STATUSES.has(ch.status) && (ch.team1Id === teamId || ch.team2Id === teamId)
-  );
+  return t.mode === 'ladder';
 }
 
 /** Round-based matches can't be played until the admin has launched that round. */
@@ -68,15 +60,6 @@ export async function createChallenge(c: Context) {
     if (challenger.id === opponentTeamId) throw badRequest('A team cannot challenge itself');
     const opponent = t.teams.find((tm) => tm.id === opponentTeamId);
     if (!opponent) throw notFound('Opponent team not found');
-
-    if (t.mode === 'swiss_with_challenge') {
-      if (hasActiveFreeChallenge(t, challenger.id)) {
-        throw forbidden('You already have an active challenge; resolve it before creating another', 'challenge_limit_reached');
-      }
-      if (hasActiveFreeChallenge(t, opponent.id)) {
-        throw forbidden('This team already has an active challenge with someone else', 'opponent_unavailable');
-      }
-    }
 
     const alreadyActive = t.challenges.some(
       (ch) =>

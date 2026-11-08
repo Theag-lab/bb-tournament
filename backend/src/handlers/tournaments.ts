@@ -62,7 +62,7 @@ import { mergeSquadScoring } from './squads';
 import { AppError, badRequest, conflict } from '../errors';
 
 const MAX_NAME_LENGTH = 80;
-const VALID_MODES: TournamentMode[] = ['ladder', 'swiss', 'swiss_with_challenge', 'pools_knockout'];
+const VALID_MODES: TournamentMode[] = ['ladder', 'swiss', 'pools_knockout'];
 const VALID_FORMATS: TournamentFormat[] = ['individual', 'team'];
 const VALID_SCORING_MODES: IndividualScoringMode[] = ['points_tiebreaker', 'raw_points'];
 const VALID_STAT_BASES: RawPointsStatBasis[] = ['total', 'diff'];

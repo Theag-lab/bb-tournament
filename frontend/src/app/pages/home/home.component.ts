@@ -223,8 +223,6 @@ export class HomeComponent implements OnInit, OnDestroy {
         return 'Défi libre (ladder)';
       case 'swiss':
         return 'Rondes suisses';
-      case 'swiss_with_challenge':
-        return 'Rondes suisses avec défis en 1ère ronde';
       case 'pools_knockout':
         return 'Poules puis élimination directe';
     }

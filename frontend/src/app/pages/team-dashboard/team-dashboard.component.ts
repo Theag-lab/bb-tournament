@@ -192,6 +192,14 @@ export class TeamDashboardComponent implements OnInit, OnDestroy {
     return this.tournament?.mode === 'ladder';
   }
 
+  /**
+   * Keeps each challenge's DOM (and its open match-sheet form) alive across the 60s poll: without
+   * it, ngFor sees brand-new objects and recreates the form, resetting every typed field to 0.
+   */
+  trackById(_index: number, item: { id: string }): string {
+    return item.id;
+  }
+
   matchLabel(c: PublicTournament['challenges'][number]): string {
     return c.round === null ? 'Défi libre' : `Ronde ${c.round}`;
   }

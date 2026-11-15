@@ -202,7 +202,7 @@
 
     <p class="muted" *ngIf="myChallenges.length === 0">Aucun défi pour l'instant.</p>
 
-    <div class="challenge" *ngFor="let c of myChallenges">
+    <div class="challenge" *ngFor="let c of myChallenges; trackBy: trackById">
       <div class="challenge-head">
         <strong>vs {{ teamName(opponentId(c)) }}</strong>
         <span class="badge">{{ matchLabel(c) }}</span>

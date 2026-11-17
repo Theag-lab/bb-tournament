@@ -242,3 +242,48 @@
     width: auto;
   }
 }
+
+.launch-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin: 0.75rem 0 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--warning);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: rgba(212, 161, 58, 0.12);
+
+  strong {
+    color: var(--warning);
+  }
+
+  p {
+    margin: 0.25rem 0 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+}
+
+.launch-banner-text {
+  flex: 1 1 18rem;
+}
+
+// Mobile: no warning box, just the explicit green button, full width.
+@media (max-width: 640px) {
+  .launch-banner {
+    padding: 0;
+    border: none;
+    background: none;
+
+    .btn {
+      width: 100%;
+    }
+  }
+
+  .launch-banner-text {
+    display: none;
+  }
+}

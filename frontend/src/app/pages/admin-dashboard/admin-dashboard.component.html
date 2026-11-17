@@ -368,6 +368,19 @@
           </span>
         </div>
 
+        <div class="launch-banner" *ngIf="r.status === 'draft'">
+          <div class="launch-banner-text">
+            <strong>⚠️ Ronde {{ r.number }} en préparation : les coachs ne voient encore rien</strong>
+            <p>
+              Ces appariements n'apparaissent ni sur le tableau public ni dans « Gérer mon équipe », et aucun résultat ne
+              peut être saisi. Ajustez-les si besoin ci-dessous, puis lancez la ronde.
+            </p>
+          </div>
+          <button type="button" class="btn btn-success btn-lg" [disabled]="roundBusy" (click)="launchRound(r.number)">
+            ▶ Lancer la ronde {{ r.number }}
+          </button>
+        </div>
+
         <div class="actions" style="margin-bottom: 0.75rem" *ngIf="canCancelRound(r)">
           <button type="button" class="btn btn-danger" [disabled]="roundBusy" (click)="cancelRound(r.number)">
             Annuler la ronde {{ r.number }}
@@ -437,11 +450,6 @@
             </label>
           </div>
 
-          <div class="actions" style="margin-bottom: 0.75rem">
-            <button type="button" class="btn btn-primary" [disabled]="roundBusy" (click)="launchRound(r.number)">
-              Lancer la ronde {{ r.number }}
-            </button>
-          </div>
         </ng-container>
 
         <ng-container *ngFor="let row of roundMatchGroups(r.number); trackBy: trackByRoundMatchRow">

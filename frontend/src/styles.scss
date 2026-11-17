@@ -81,6 +81,22 @@ h3 {
   }
 }
 
+.btn-success {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+  font-weight: 600;
+
+  &:hover:not(:disabled) {
+    background: #34976b;
+  }
+}
+
+.btn-lg {
+  padding: 0.7rem 1.4rem;
+  font-size: 1.05rem;
+}
+
 .btn-danger {
   background: transparent;
   border-color: var(--primary);

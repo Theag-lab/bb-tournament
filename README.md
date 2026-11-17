@@ -125,6 +125,12 @@ npm run deploy                    # cdk deploy (assets Angular + Lambda inclus)
 La sortie `SiteUrl` du stack CDK est l'URL publique du site. Recommencer `npm run deploy` après chaque changement
 (le build Angular et la Lambda sont re-synchronisés automatiquement, avec invalidation CloudFront).
 
+Pour un changement de code seul (backend et/ou frontend), `npm run deploy:fast` est bien plus rapide : il passe par
+`cdk deploy --hotswap-fallback`, qui met à jour directement le code des Lambdas et les fichiers du site (avec
+l'invalidation CloudFront) sans passer par CloudFormation. Si le changement touche l'infra elle-même (nouvelle
+ressource, permissions, planification…), il retombe automatiquement sur un déploiement CloudFormation complet. Le stack
+CloudFormation garde l'ancienne version en mémoire : le prochain `npm run deploy` complet remet tout d'aplomb.
+
 Pour changer de région, positionner `CDK_DEFAULT_REGION` avant `cdk deploy` (par défaut `eu-west-1`).
 
 ## Migration de données existantes

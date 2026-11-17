@@ -7,6 +7,7 @@
     "synth": "cdk synth",
     "diff": "cdk diff",
     "deploy": "cdk deploy BbTournamentStack --require-approval never",
+    "deploy:fast": "cdk deploy BbTournamentStack --hotswap-fallback --require-approval never",
     "bootstrap": "cdk bootstrap"
   },
   "devDependencies": {

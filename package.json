@@ -20,6 +20,7 @@
     "test:backend": "npm run build:shared && npm run test -w backend",
     "test": "npm run test:shared && npm run test:backend",
     "deploy": "npm run build && npm run cdk:deploy",
+    "deploy:fast": "npm run build && npm run deploy:fast -w infra",
     "cdk:deploy": "npm run deploy -w infra",
     "cdk:diff": "npm run diff -w infra"
   }

@@ -8,10 +8,12 @@ import {
   PoolStandingEntry,
   PublicTournament,
   SquadStandingEntry,
+  StandingEntry,
   Tournament,
   computeCustomStatLeaderboards,
   computeSquadStandings,
   computeStandings,
+  replacedTeamIds,
   resolveRosterTiers,
   resolveSquadScoring,
 } from '@bb-tournament/shared';
@@ -31,7 +33,23 @@ function squadStandingsOf(t: Tournament): SquadStandingEntry[] {
 }
 
 function customStatLeaderboardsOf(t: Tournament): CustomStatLeaderboard[] {
-  return computeCustomStatLeaderboards(t.teams, t.challenges, t.customStatCategories ?? []);
+  const excluded = replacedTeamIds(t.replacements);
+  return computeCustomStatLeaderboards(t.teams, t.challenges, t.customStatCategories ?? []).map((board) => ({
+    ...board,
+    standings: board.standings.filter((s) => !excluded.has(s.teamId)),
+  }));
+}
+
+/**
+ * Individual standings, without replaced coaches and their substitutes (they didn't play every
+ * round). Computed over everyone first, so their results still weigh in their opponents'
+ * strength of schedule.
+ */
+function individualStandingsOf(t: Tournament): StandingEntry[] {
+  const excluded = replacedTeamIds(t.replacements);
+  return computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? [], t.rosterTiers).filter(
+    (s) => !excluded.has(s.teamId)
+  );
 }
 
 /** Pool-scoped standings, only populated for 'pools_knockout' mode tournaments. */
@@ -94,6 +112,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
     matchSheetConfig: t.matchSheetConfig ?? DEFAULT_MATCH_SHEET_CONFIG,
     customStatCategories: t.customStatCategories ?? [],
     rosterTiers: resolveRosterTiers(t.rosterTiers),
+    replacements: t.replacements ?? [],
     roundTimer: t.roundTimer ?? DEFAULT_ROUND_TIMER,
     createdAt: t.createdAt,
     teams: t.teams.map((team) => {
@@ -109,6 +128,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
         createdAt: team.createdAt,
         rosterImage: hideDetails ? null : team.rosterImage,
         rosterStatus: team.rosterStatus,
+        substitute: team.substitute ?? false,
       };
     }),
     challenges: t.challenges
@@ -124,7 +144,7 @@ export function toPublicTournament(t: Tournament, viewerTeamId: string | null = 
         result: c.result,
         fumbbl: c.fumbbl,
       })),
-    standings: computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? [], t.rosterTiers),
+    standings: individualStandingsOf(t),
     squadStandings: squadStandingsOf(t),
     poolStandings: poolStandingsOf(t),
     customStatLeaderboards: customStatLeaderboardsOf(t),
@@ -158,6 +178,7 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
     matchSheetConfig: t.matchSheetConfig ?? DEFAULT_MATCH_SHEET_CONFIG,
     customStatCategories: t.customStatCategories ?? [],
     rosterTiers: resolveRosterTiers(t.rosterTiers),
+    replacements: t.replacements ?? [],
     roundTimer: t.roundTimer ?? DEFAULT_ROUND_TIMER,
     fumbbl: t.fumbbl ?? null,
     createdAt: t.createdAt,
@@ -172,6 +193,7 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
       createdAt: team.createdAt,
       rosterImage: team.rosterImage,
       rosterStatus: team.rosterStatus,
+      substitute: team.substitute ?? false,
       password: team.password,
     })),
     challenges: t.challenges.map((c) => ({
@@ -185,7 +207,7 @@ export function toAdminTournamentView(t: Tournament): AdminTournamentView {
       result: c.result,
       fumbbl: c.fumbbl,
     })),
-    standings: computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? [], t.rosterTiers),
+    standings: individualStandingsOf(t),
     squadStandings: squadStandingsOf(t),
     poolStandings: poolStandingsOf(t),
     customStatLeaderboards: customStatLeaderboardsOf(t),

@@ -29,7 +29,7 @@ const s3 = new S3Client({});
 const MAX_FIELD_LENGTH = 40;
 
 /** Returns the trimmed NAF number, or null if omitted/blank. Throws 400 if present but malformed. */
-function validateNafNumber(raw: string | null | undefined): string | null {
+export function validateNafNumber(raw: string | null | undefined): string | null {
   if (raw === undefined || raw === null) return null;
   const nafNumber = raw.trim();
   if (!nafNumber) return null;
@@ -65,7 +65,7 @@ function validateTeamInput(body: Partial<CreateTeamRequest> | null): {
  * if needed, so `Team.name` (still required by the schema/storage) stays populated without
  * prompting for it.
  */
-function generateDefaultTeamName(existingTeams: Team[], coachName: string): string {
+export function generateDefaultTeamName(existingTeams: Team[], coachName: string): string {
   const base = coachName.slice(0, MAX_FIELD_LENGTH);
   let candidate = base;
   for (let suffix = 2; existingTeams.some((tm) => tm.name.toLowerCase() === candidate.toLowerCase()); suffix++) {
@@ -499,6 +499,9 @@ export async function deleteTeam(c: Context) {
     );
     if (hasNonDeclinedChallenges) {
       throw forbidden('Cannot delete a team that already has challenges; cancel/resolve them first');
+    }
+    if ((t.replacements ?? []).some((r) => r.outTeamId === teamId || r.inTeamId === teamId)) {
+      throw forbidden("Ce coach fait partie d'un remplacement : annulez d'abord le remplacement (onglet Urgences)", 'coach_in_replacement');
     }
     t.teams = t.teams.filter((tm) => tm.id !== teamId);
   });

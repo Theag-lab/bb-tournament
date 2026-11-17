@@ -5,6 +5,8 @@ import {
   DEFAULT_INDIVIDUAL_SCORING,
   DEFAULT_SQUAD_SCORING,
   Tournament,
+  activeCoaches,
+  activeSquadMembers,
   computeSquadStandings,
   computeStandings,
 } from '@bb-tournament/shared';
@@ -55,19 +57,15 @@ export function generateNextRound(t: Tournament): void {
     return;
   }
 
-  assertTeamsPairable(t);
-
   const roundNumber = t.rounds.length + 1;
+  assertTeamsPairable(t, roundNumber);
   assertPreviousRoundComplete(t, roundNumber);
 
   const now = new Date().toISOString();
-  const priorOpponents = buildPriorOpponents(t.challenges);
+  // A substitute takes the replaced coach's seat: combined results, and their opponents to avoid.
+  const priorOpponents = buildPriorOpponents(seatChallenges(t, roundNumber));
   const candidateIds =
-    roundNumber > 1
-      ? computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? [], t.rosterTiers).map(
-          (s) => s.teamId
-        )
-      : shuffle(t.teams.map((tm) => tm.id));
+    roundNumber > 1 ? pairingStandings(t, roundNumber) : shuffle([...activeCoaches(t.teams, t.replacements, roundNumber)]);
 
   const pairs = pairInOrder(candidateIds, priorOpponents);
 
@@ -75,9 +73,51 @@ export function generateNextRound(t: Tournament): void {
   t.rounds.push({ number: roundNumber, status: 'draft' });
 }
 
-function assertTeamsPairable(t: Tournament): void {
-  if (t.teams.length === 0) throw badRequest('No teams registered yet');
-  if (t.teams.length % 2 !== 0) {
+/**
+ * Each coach's seat holder for round `roundNumber`: a replaced coach and everyone who replaced them
+ * share one seat, held by whichever of them plays that round; other coaches hold their own seat.
+ */
+export function seatHolders(t: Tournament, roundNumber: number): Map<string, string> {
+  const parent = new Map<string, string>();
+  const find = (id: string): string => {
+    const p = parent.get(id) ?? id;
+    if (p === id) return id;
+    const root = find(p);
+    parent.set(id, root);
+    return root;
+  };
+  for (const r of t.replacements ?? []) parent.set(find(r.inTeamId), find(r.outTeamId));
+  const playing = activeCoaches(t.teams, t.replacements, roundNumber);
+  const holderOfRoot = new Map<string, string>();
+  for (const id of playing) holderOfRoot.set(find(id), id);
+  return new Map(t.teams.map((tm) => [tm.id, holderOfRoot.get(find(tm.id)) ?? tm.id]));
+}
+
+/** The tournament's matches with every coach replaced by its seat holder for round `roundNumber`. */
+function seatChallenges(t: Tournament, roundNumber: number): Challenge[] {
+  const holders = seatHolders(t, roundNumber);
+  return t.challenges.map((c) => ({ ...c, team1Id: holders.get(c.team1Id) ?? c.team1Id, team2Id: holders.get(c.team2Id) ?? c.team2Id }));
+}
+
+/**
+ * Coaches playing round `roundNumber`, ranked for pairing: each one with the combined results of
+ * its seat (a substitute ranks with the replaced coach's results plus its own).
+ */
+export function pairingStandings(t: Tournament, roundNumber: number): string[] {
+  const playing = activeCoaches(t.teams, t.replacements, roundNumber);
+  return computeStandings(
+    t.teams.filter((tm) => playing.has(tm.id)),
+    seatChallenges(t, roundNumber),
+    t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
+    t.customStatCategories ?? [],
+    t.rosterTiers
+  ).map((s) => s.teamId);
+}
+
+function assertTeamsPairable(t: Tournament, roundNumber: number): void {
+  const playing = activeCoaches(t.teams, t.replacements, roundNumber).size;
+  if (playing === 0) throw badRequest('No teams registered yet');
+  if (playing % 2 !== 0) {
     throw forbidden('An odd number of teams cannot be paired; wait for another team to register', 'odd_team_count');
   }
 }
@@ -222,12 +262,20 @@ function assertSquadsPairable(t: Tournament): void {
   }
 }
 
-/** Member order used to match coaches inside a squad confrontation: random in round 1, individual rank after. */
+/** Coaches playing round `roundNumber` for their squad, replacements applied (see activeSquadMembers). */
+export function playingCoaches(t: Tournament, roundNumber: number): Set<string> {
+  return new Set(t.squads.flatMap((sq) => [...activeSquadMembers(t.teams, t.replacements, sq.id, roundNumber)]));
+}
+
+/**
+ * Member order used to match coaches inside a squad confrontation: random in round 1, individual
+ * rank after (a substitute with its seat's combined results, see pairingStandings) — only the
+ * coaches playing that round.
+ */
 function teamMemberOrder(t: Tournament, roundNumber: number): string[] {
-  if (roundNumber === 1) return shuffle(t.teams.map((tm) => tm.id));
-  return computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? [], t.rosterTiers).map(
-    (s) => s.teamId
-  );
+  const playing = playingCoaches(t, roundNumber);
+  const order = roundNumber === 1 ? shuffle(t.teams.map((tm) => tm.id)) : pairingStandings(t, roundNumber);
+  return order.filter((id) => playing.has(id));
 }
 
 /**
@@ -432,6 +480,10 @@ export function swapRoundMatches(t: Tournament, roundNumber: number, teamId1: st
   }
 
   if (isTeamFormat) {
+    const playing = playingCoaches(t, roundNumber);
+    if (!playing.has(teamId1) || !playing.has(teamId2)) {
+      throw forbidden("Ce coach ne joue pas cette ronde (remplacé, ou remplaçant pas encore entré)", 'coach_not_playing');
+    }
     const squad1 = squadOf(teamId1);
     const squad2 = squadOf(teamId2);
     if (squad1 === squad2) {
@@ -595,10 +647,10 @@ export function rerandomizeRound(t: Tournament, roundNumber: number, keepLocks: 
     return;
   }
 
-  assertTeamsPairable(t);
+  assertTeamsPairable(t, roundNumber);
   const kept: Challenge[] = [];
   const used = new Set<string>();
-  const teamIds = new Set(t.teams.map((tm) => tm.id));
+  const teamIds = activeCoaches(t.teams, t.replacements, roundNumber);
   const validLocks: Pair[] = [];
   for (const [x, y] of round.lockedPairs ?? []) {
     if (!teamIds.has(x) || !teamIds.has(y) || used.has(x) || used.has(y)) continue;
@@ -608,7 +660,7 @@ export function rerandomizeRound(t: Tournament, roundNumber: number, keepLocks: 
     kept.push(roundMatches.find((c) => isPair([c.team1Id, c.team2Id], x, y)) ?? newMatch(x, y, roundNumber, now));
   }
   round.lockedPairs = validLocks;
-  const pairs = pairInOrder(shuffle(t.teams.map((tm) => tm.id).filter((id) => !used.has(id))), new Map());
+  const pairs = pairInOrder(shuffle([...teamIds].filter((id) => !used.has(id))), new Map());
 
   t.challenges = t.challenges.filter((c) => c.round !== roundNumber);
   t.challenges.push(...kept, ...pairs.map(([team1Id, team2Id]) => newMatch(team1Id, team2Id, roundNumber, now)));

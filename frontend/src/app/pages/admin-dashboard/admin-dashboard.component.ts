@@ -18,6 +18,8 @@ import {
   TOURNAMENT_DESCRIPTION_MAX_LENGTH,
   customTiebreakerCategoryId,
   customTiebreakerCriterion,
+  activeCoaches,
+  activeSquadMembers,
   resolveRosterTiers,
   type AdminTeamView,
   type AdminTournamentView,
@@ -27,6 +29,7 @@ import {
   type MatchSheetConfig,
   type Pool,
   type PublicTournament,
+  type Replacement,
   type RosterTier,
   type RoundInfo,
   type Squad,
@@ -691,7 +694,10 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       opponents.set(c.team1Id, c.team2Id);
       opponents.set(c.team2Id, c.team1Id);
     }
-    const teamIds = this.isTeamFormat ? (this.tournament?.teams ?? []).map((tm) => tm.id) : Array.from(opponents.keys());
+    // Team format: every coach playing this round (replacements applied), on a bye or not.
+    const teamIds = this.isTeamFormat
+      ? (this.tournament?.squads ?? []).flatMap((sq) => [...this.playingInRound(sq.id, roundNumber)])
+      : Array.from(opponents.keys());
     return teamIds.map((teamId) => {
       const opponentId = opponents.get(teamId);
       const versus = opponentId ? `vs ${this.teamCoach(opponentId)}` : 'exempt';
@@ -1326,6 +1332,111 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       this.individualScoringError = extractErrorMessage(err);
     } finally {
       this.savingIndividualScoring = false;
+    }
+  }
+
+  // ---- Replacements (team format, Urgences tab) ----
+
+  readonly raceOptions = RACES;
+  replaceOutTeamId = '';
+  replaceMode: 'new' | 'existing' = 'new';
+  replaceInTeamId = '';
+  replaceCoachName = '';
+  replaceRace = '';
+  replaceNafNumber = '';
+  replacementBusy = false;
+  replacementError: string | null = null;
+
+  /** The round a replacement made now applies to: the draft round if there is one, else the next one to generate (same rule as the backend). */
+  get nextReplacementRound(): number | null {
+    const t = this.tournament;
+    if (!t || t.mode !== 'swiss') return null;
+    const last = t.rounds[t.rounds.length - 1];
+    const round = last && last.status === 'draft' ? last.number : t.rounds.length + 1;
+    return t.roundCount !== null && round > t.roundCount ? null : round;
+  }
+
+  private playingInRound(squadId: string, round: number): Set<string> {
+    return activeSquadMembers(this.tournament?.teams ?? [], this.tournament?.replacements, squadId, round);
+  }
+
+  /** Coaches playing the next round, the ones that can be replaced, sorted by squad then coach. */
+  replaceableCoaches(): { teamId: string; label: string }[] {
+    const round = this.nextReplacementRound;
+    if (round === null || !this.tournament) return [];
+    if (!this.isTeamFormat) {
+      return [...activeCoaches(this.tournament.teams, this.tournament.replacements, round)]
+        .map((teamId) => ({ teamId, label: `${this.teamCoach(teamId)} (${this.teamRace(teamId)})` }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
+    return this.tournament.squads
+      .flatMap((sq) => [...this.playingInRound(sq.id, round)].map((teamId) => ({ teamId, label: `${this.squadName(sq.id)} — ${this.teamCoach(teamId)}` })))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  /** Coaches not playing that round (of the replaced coach's squad, in team format), e.g. the original coming back. */
+  benchCoaches(): { teamId: string; label: string }[] {
+    const round = this.nextReplacementRound;
+    if (round === null || !this.replaceOutTeamId || !this.tournament) return [];
+    const squadId = this.isTeamFormat ? this.teamSquadId(this.replaceOutTeamId) : null;
+    const playing = activeCoaches(this.tournament.teams, this.tournament.replacements, round);
+    return this.tournament.teams
+      .filter((tm) => (!this.isTeamFormat || tm.squadId === squadId) && !playing.has(tm.id))
+      .map((tm) => ({ teamId: tm.id, label: `${tm.coachName} (${tm.race})` }));
+  }
+
+  displayedRoundIsDraft(round: number): boolean {
+    return this.tournament?.rounds.find((r) => r.number === round)?.status === 'draft';
+  }
+
+  canSubmitReplacement(): boolean {
+    if (!this.replaceOutTeamId || this.replacementBusy) return false;
+    if (this.replaceMode === 'existing') return !!this.replaceInTeamId;
+    return !!this.replaceCoachName.trim() && !!this.replaceRace;
+  }
+
+  async submitReplacement(): Promise<void> {
+    if (!this.canSubmitReplacement()) return;
+    this.replacementBusy = true;
+    this.replacementError = null;
+    try {
+      this.tournament = await this.api.createReplacement(this.tournamentId, this.token, {
+        outTeamId: this.replaceOutTeamId,
+        ...(this.replaceMode === 'existing'
+          ? { inTeamId: this.replaceInTeamId }
+          : { substitute: { coachName: this.replaceCoachName.trim(), race: this.replaceRace, nafNumber: this.replaceNafNumber.trim() || null } }),
+      });
+      this.replaceOutTeamId = '';
+      this.replaceInTeamId = '';
+      this.replaceCoachName = '';
+      this.replaceRace = '';
+      this.replaceNafNumber = '';
+    } catch (err) {
+      this.replacementError = extractErrorMessage(err);
+    } finally {
+      this.replacementBusy = false;
+    }
+  }
+
+  /** Latest first. */
+  replacementsList(): Replacement[] {
+    return [...(this.tournament?.replacements ?? [])].sort((a, b) => b.round - a.round || b.createdAt.localeCompare(a.createdAt));
+  }
+
+  canRevertReplacement(r: Replacement): boolean {
+    return this.tournament?.rounds.find((round) => round.number === r.round)?.status !== 'launched';
+  }
+
+  async revertReplacement(r: Replacement): Promise<void> {
+    if (!confirm(`Annuler le remplacement de ${this.teamCoach(r.outTeamId)} par ${this.teamCoach(r.inTeamId)} ?`)) return;
+    this.replacementBusy = true;
+    this.replacementError = null;
+    try {
+      this.tournament = await this.api.deleteReplacement(this.tournamentId, this.token, r.id);
+    } catch (err) {
+      this.replacementError = extractErrorMessage(err);
+    } finally {
+      this.replacementBusy = false;
     }
   }
 

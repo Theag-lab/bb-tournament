@@ -26,6 +26,7 @@ import type {
   UpdateCustomStatCategoriesRequest,
   UpdateIndividualScoringRequest,
   UpdateRosterTiersRequest,
+  CreateReplacementRequest,
   UpdateMatchSheetConfigRequest,
   UpdateRoundTimerRequest,
   UpdateSquadRequest,
@@ -345,6 +346,20 @@ export class ApiService {
     const body: UpdateSquadRequest = { name };
     return firstValueFrom(
       this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/squads/${squadId}`, body, {
+        params: { token },
+      })
+    );
+  }
+
+  createReplacement(tournamentId: string, token: string, body: CreateReplacementRequest) {
+    return firstValueFrom(
+      this.http.post<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/replacements`, body, { params: { token } })
+    );
+  }
+
+  deleteReplacement(tournamentId: string, token: string, replacementId: string) {
+    return firstValueFrom(
+      this.http.delete<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/replacements/${replacementId}`, {
         params: { token },
       })
     );

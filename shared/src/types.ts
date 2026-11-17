@@ -391,6 +391,58 @@ export interface Team {
   createdAt: string;
   rosterImage: RosterImage | null;
   rosterStatus: RosterStatus;
+  /** Created by the admin as a substitute coach (see Replacement), not registered as a squad member. */
+  substitute?: boolean;
+}
+
+/**
+ * From round `round` on, `inTeamId` plays instead of `outTeamId` (in their squad, in team format):
+ * a coach replaced for the rest of the tournament, or only some rounds — a later replacement can
+ * bring the original back. Both keep their own results (NAF export, squad results) but leave the
+ * individual standings, having not played every round (see replacedTeamIds). For swiss pairing
+ * they share one "seat" whose results are combined (see the backend's seatHolders).
+ */
+export interface Replacement {
+  id: string;
+  round: number;
+  outTeamId: string;
+  inTeamId: string;
+  createdAt: string;
+}
+
+/** Coaches out of the individual standings: anyone replaced, or replacing someone. */
+export function replacedTeamIds(replacements: Replacement[] | null | undefined): Set<string> {
+  return new Set((replacements ?? []).flatMap((r) => [r.outTeamId, r.inTeamId]));
+}
+
+/**
+ * Coaches playing round `round`: the registered coaches, then every replacement up to that round
+ * applied in order.
+ */
+export function activeCoaches(
+  teams: Pick<Team, 'id' | 'substitute'>[],
+  replacements: Replacement[] | null | undefined,
+  round: number
+): Set<string> {
+  const active = new Set(teams.filter((tm) => !tm.substitute).map((tm) => tm.id));
+  const ordered = (replacements ?? []).filter((r) => r.round <= round).sort((a, b) => a.round - b.round || a.createdAt.localeCompare(b.createdAt));
+  for (const r of ordered) {
+    if (!active.has(r.outTeamId)) continue;
+    active.delete(r.outTeamId);
+    active.add(r.inTeamId);
+  }
+  return active;
+}
+
+/** Members of `squadId` playing round `round` (see activeCoaches). */
+export function activeSquadMembers(
+  teams: Pick<Team, 'id' | 'squadId' | 'substitute'>[],
+  replacements: Replacement[] | null | undefined,
+  squadId: string,
+  round: number
+): Set<string> {
+  const inSquad = new Set(teams.filter((tm) => tm.squadId === squadId).map((tm) => tm.id));
+  return new Set([...activeCoaches(teams, replacements, round)].filter((id) => inSquad.has(id)));
 }
 
 export interface Tournament {
@@ -441,6 +493,8 @@ export interface Tournament {
   challenges: Challenge[];
   /** Automatic FUMBBL result tracking (see FumbblTrackingConfig); absent on tournaments created before it. */
   fumbbl?: FumbblTrackingConfig | null;
+  /** Team format substitutions (see Replacement); absent on tournaments created before it. */
+  replacements?: Replacement[];
 }
 
 /**
@@ -479,6 +533,7 @@ export interface PublicTeam {
   createdAt: string;
   rosterImage: RosterImage | null;
   rosterStatus: RosterStatus;
+  substitute?: boolean;
 }
 
 export interface PublicChallenge {
@@ -604,6 +659,7 @@ export interface PublicTournament {
   matchSheetConfig: MatchSheetConfig;
   customStatCategories: CustomStatCategoryConfig[];
   rosterTiers: RosterTier[];
+  replacements: Replacement[];
   roundTimer: RoundTimerState;
   createdAt: string;
   teams: PublicTeam[];
@@ -643,6 +699,7 @@ export interface AdminTournamentView {
   matchSheetConfig: MatchSheetConfig;
   customStatCategories: CustomStatCategoryConfig[];
   rosterTiers: RosterTier[];
+  replacements: Replacement[];
   roundTimer: RoundTimerState;
   createdAt: string;
   teams: AdminTeamView[];
@@ -711,6 +768,17 @@ export interface CreateTournamentRequest {
 }
 
 export type UpdateIndividualScoringRequest = Partial<IndividualScoringConfig>;
+
+/**
+ * Replaces `outTeamId` from the next round on (the draft round if there is one, else the next one
+ * to generate): by a new substitute coach, or by `inTeamId`, a coach of the same squad not playing
+ * that round (e.g. the original coming back).
+ */
+export interface CreateReplacementRequest {
+  outTeamId: string;
+  inTeamId?: string;
+  substitute?: { coachName: string; race: string; nafNumber?: string | null };
+}
 
 export interface UpdateRosterTiersRequest {
   tiers: RosterTier[];

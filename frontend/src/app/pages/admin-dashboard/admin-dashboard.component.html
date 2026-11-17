@@ -585,7 +585,7 @@
           <tbody>
             <tr *ngFor="let team of t.teams; trackBy: trackById">
               <td>{{ team.name }}</td>
-              <td>{{ team.coachName }}</td>
+              <td>{{ team.coachName }} <span class="badge" *ngIf="team.substitute">remplaçant</span></td>
               <td>{{ team.race }}</td>
               <td>{{ team.nafNumber ?? '—' }}</td>
               <td *ngIf="t.format === 'team'">
@@ -1367,6 +1367,117 @@
   </ng-container>
 
   <ng-container *ngIf="activeAdminTab === 'backups'">
+    <section class="card" *ngIf="t.mode === 'swiss'">
+      <h2>🔁 Remplacements</h2>
+      <p class="muted">
+        Un coach remplacé en cours de tournoi (par un orga, ou un coach qui joue le samedi et un autre le dimanche) :
+        le remplaçant joue à sa place à partir de la ronde indiquée. Chacun garde ses propres résultats pour l'export
+        NAF<ng-container *ngIf="isTeamFormat">, et leurs matchs comptent pour le résultat de leur équipe</ng-container>,
+        mais <strong>les deux sortent du classement individuel</strong> dès le remplacement. Pour les appariements
+        suisses, le remplaçant reprend la place du remplacé avec leurs résultats combinés.
+      </p>
+      <div class="alert alert-error" *ngIf="replacementError">{{ replacementError }}</div>
+
+      <ng-container *ngIf="nextReplacementRound as round; else noReplacementRound">
+        <p><strong>Remplacement à partir de la ronde {{ round }}</strong>
+          <span class="muted" *ngIf="displayedRoundIsDraft(round)"> — ronde en préparation : le remplaçant reprend directement le match du coach remplacé.</span>
+        </p>
+
+        <div class="field">
+          <label for="replace-out">Coach remplacé</label>
+          <select id="replace-out" name="replaceOut" [(ngModel)]="replaceOutTeamId" (ngModelChange)="replaceInTeamId = ''">
+            <option value="">— choisir —</option>
+            <option *ngFor="let coach of replaceableCoaches()" [value]="coach.teamId">{{ coach.label }}</option>
+          </select>
+        </div>
+
+        <div class="field" *ngIf="replaceOutTeamId">
+          <label>Remplaçant</label>
+          <label class="checkbox-field">
+            <input type="radio" name="replaceMode" value="new" [(ngModel)]="replaceMode" />
+            <span>Nouveau coach</span>
+          </label>
+          <label class="checkbox-field">
+            <input type="radio" name="replaceMode" value="existing" [(ngModel)]="replaceMode" [disabled]="benchCoaches().length === 0" />
+            <span>
+              {{ isTeamFormat ? "Coach de l'équipe qui ne joue pas cette ronde" : 'Coach qui ne joue pas cette ronde' }} (ex. retour du titulaire)
+              <span class="muted" *ngIf="benchCoaches().length === 0">— aucun</span>
+            </span>
+          </label>
+        </div>
+
+        <ng-container *ngIf="replaceOutTeamId && replaceMode === 'new'">
+          <div class="field">
+            <label for="replace-coach">Nom du coach remplaçant</label>
+            <input id="replace-coach" type="text" name="replaceCoach" [(ngModel)]="replaceCoachName" maxlength="40" />
+          </div>
+          <div class="field">
+            <label for="replace-race">Race</label>
+            <select id="replace-race" name="replaceRace" [(ngModel)]="replaceRace">
+              <option value="">— choisir —</option>
+              <option *ngFor="let race of raceOptions" [value]="race">{{ raceLabel(race) }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="replace-naf">Numéro NAF (optionnel)</label>
+            <input id="replace-naf" type="text" inputmode="numeric" name="replaceNaf" [(ngModel)]="replaceNafNumber" />
+          </div>
+        </ng-container>
+
+        <div class="field" *ngIf="replaceOutTeamId && replaceMode === 'existing'">
+          <label for="replace-in">Coach qui entre</label>
+          <select id="replace-in" name="replaceIn" [(ngModel)]="replaceInTeamId">
+            <option value="">— choisir —</option>
+            <option *ngFor="let coach of benchCoaches()" [value]="coach.teamId">{{ coach.label }}</option>
+          </select>
+        </div>
+
+        <button type="button" class="btn btn-primary" [disabled]="!canSubmitReplacement()" (click)="submitReplacement()">
+          {{ replacementBusy ? 'Remplacement…' : 'Remplacer à partir de la ronde ' + round }}
+        </button>
+      </ng-container>
+      <ng-template #noReplacementRound>
+        <p class="muted">Toutes les rondes ont été jouées : plus de remplacement possible.</p>
+      </ng-template>
+
+      <div class="table-wrap" *ngIf="replacementsList().length > 0" style="margin-top: 1rem">
+        <table>
+          <thead>
+            <tr>
+              <th>Ronde</th>
+              <th *ngIf="isTeamFormat">Équipe</th>
+              <th>Sort</th>
+              <th>Entre</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of replacementsList(); trackBy: trackById">
+              <td>{{ r.round }}</td>
+              <td *ngIf="isTeamFormat">{{ squadName(teamSquadId(r.outTeamId)) }}</td>
+              <td>{{ teamCoach(r.outTeamId) }}</td>
+              <td>{{ teamCoach(r.inTeamId) }} <span class="muted">({{ raceLabel(teamRace(r.inTeamId)) }})</span></td>
+              <td>
+                <button
+                  type="button"
+                  class="btn btn-danger"
+                  *ngIf="canRevertReplacement(r)"
+                  [disabled]="replacementBusy"
+                  (click)="revertReplacement(r)"
+                >
+                  Annuler
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" style="margin-top: 0.5rem">
+        Le remplaçant a son propre lien « Gérer mon équipe » (onglet Équipes) pour
+        saisir ses résultats. Son mot de passe initial est son nom de coach.
+      </p>
+    </section>
+
     <section class="card">
       <h2>🚑 Urgences</h2>
       <p class="muted">

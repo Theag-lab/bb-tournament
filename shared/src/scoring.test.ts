@@ -908,3 +908,28 @@ describe('computeSquadStandings — triangle round (odd number of squads)', () =
     assert.equal(of('A').opponentScore, (w + l) / 2);
   });
 });
+
+describe('most_cas_caused tiebreaker', () => {
+  const teams = [{ id: 'a', squadId: 'A' }, { id: 'b', squadId: 'B' }] as Team[];
+  // One 0-0 draw: level on points and TD; a caused 1 casualty and suffered 3, b the reverse.
+  const draw = [completedChallenge('a', 'b', 1, matchResult({ team1Td: 0, team2Td: 0, team1Cas: 1, team2Cas: 3, team1Points: 2, team2Points: 2 }))];
+
+  test('individual: most casualties caused first, unlike the net differential', () => {
+    assert.deepEqual(computeStandings(teams, draw, config({ tiebreakers: ['most_cas_caused'] })).map((s) => s.teamId), ['b', 'a']);
+  });
+
+  test('squad: most casualties caused first', () => {
+    const squads: Squad[] = [
+      { id: 'A', name: 'A', createdAt: '2026-01-01' },
+      { id: 'B', name: 'B', createdAt: '2026-01-01' },
+    ];
+    const scoring = { ...DEFAULT_SQUAD_SCORING, tiebreakers: ['most_cas_caused' as const] };
+    assert.deepEqual(computeSquadStandings(squads, teams, draw, scoring).map((s) => s.squadId), ['B', 'A']);
+  });
+
+  test('Skinks: tier 4 by default', () => {
+    const skinks = [{ id: 's', race: 'Skinks' }, { id: 'l', race: 'Lizardmen' }] as Team[];
+    const level = [completedChallenge('s', 'l', 1, matchResult({ team1Td: 0, team2Td: 0, team1Points: 2, team2Points: 2 }))];
+    assert.equal(computeStandings(skinks, level, config({ tiebreakers: ['roster_tier'] }))[0].teamId, 's');
+  });
+});

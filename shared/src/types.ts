@@ -167,6 +167,7 @@ export type SquadTiebreakerCriterion =
   | 'net_agg'
   | 'most_td_scored'
   | 'fewest_td_conceded'
+  | 'most_cas_caused'
   | 'roster_tier'
   | 'random';
 
@@ -180,6 +181,7 @@ export const ALL_SQUAD_TIEBREAKER_CRITERIA: SquadTiebreakerCriterion[] = [
   'net_agg',
   'most_td_scored',
   'fewest_td_conceded',
+  'most_cas_caused',
   'roster_tier',
   'random',
 ];
@@ -257,6 +259,7 @@ export type TiebreakerCriterion =
   | 'net_td'
   | 'net_cas'
   | 'net_agg'
+  | 'most_cas_caused'
   | 'roster_tier'
   | 'random'
   | `custom:${string}`;
@@ -269,6 +272,7 @@ export const ALL_TIEBREAKER_CRITERIA: TiebreakerCriterion[] = [
   'net_td',
   'net_cas',
   'net_agg',
+  'most_cas_caused',
   'roster_tier',
   'random',
 ];
@@ -915,7 +919,7 @@ export const DEFAULT_ROSTER_TIERS: RosterTier[] = [
     ],
   },
   { races: ['Bretonnia', 'Chaos Chosen', 'Khorne', 'Chaos Dwarf', 'Imperial Nobility', 'Chaos Renegade'] },
-  { races: ['Goblins', 'Gnomes', 'Halflings', 'Ogres', 'Black Orc', 'Dwarf'] },
+  { races: ['Goblins', 'Gnomes', 'Halflings', 'Ogres', 'Black Orc', 'Dwarf', 'Skinks'] },
 ];
 
 /** The tournament's roster tiers, or the defaults for tournaments that never configured them. */
@@ -955,6 +959,7 @@ export const RACES = [
   'Orc',
   'Shambling Undead',
   'Skaven',
+  'Skinks',
   'Slann',
   'Snotlings',
   'Tomb Kings',
@@ -1003,6 +1008,9 @@ export const RACE_TO_NAF_TEAM: Record<(typeof RACES)[number], string | null> = {
   Orc: 'Orc',
   'Shambling Undead': 'Shambling Undead',
   Skaven: 'Skaven',
+  // Not a NAF roster: the Lizardmen roster without any Saurus, a tournament variant kept apart only
+  // so it can sit in its own roster tier. The NAF records it as Lizardmen.
+  Skinks: 'Lizardmen',
   Slann: 'Slann',
   Snotlings: 'Snotling',
   'Tomb Kings': 'Tomb Kings',

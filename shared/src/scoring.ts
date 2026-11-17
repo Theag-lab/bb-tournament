@@ -247,6 +247,7 @@ const TIEBREAKER_COMPARATORS: Record<
   net_td: (a, b) => b.tdFor - b.tdAgainst - (a.tdFor - a.tdAgainst),
   net_cas: (a, b) => b.casFor - b.casAgainst - (a.casFor - a.casAgainst),
   net_agg: (a, b) => b.aggFor - b.aggAgainst - (a.aggFor - a.aggAgainst),
+  most_cas_caused: (a, b) => b.casFor - a.casFor,
   random: (a, b) => stableRandomKey(a.teamId) - stableRandomKey(b.teamId),
 };
 
@@ -660,6 +661,7 @@ const SQUAD_TIEBREAKER_COMPARATORS: Record<
   net_agg: (a, b) => b.aggFor - b.aggAgainst - (a.aggFor - a.aggAgainst),
   most_td_scored: (a, b) => b.tdFor - a.tdFor,
   fewest_td_conceded: (a, b) => a.tdAgainst - b.tdAgainst,
+  most_cas_caused: (a, b) => b.casFor - a.casFor,
   random: (a, b) => stableRandomKey(a.squadId) - stableRandomKey(b.squadId),
 };
 

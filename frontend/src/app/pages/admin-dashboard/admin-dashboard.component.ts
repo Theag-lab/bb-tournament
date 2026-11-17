@@ -84,6 +84,7 @@ export const TIEBREAKER_LABELS: Record<Exclude<TiebreakerCriterion, `custom:${st
   net_td: 'Différentiel de TD',
   net_cas: 'Différentiel de sorties',
   net_agg: "Différentiel d'agressions",
+  most_cas_caused: 'Sorties causées (plus = mieux)',
   roster_tier: 'Tier du roster (plus élevé = mieux)',
   random: 'Au pif (stable)',
 };
@@ -98,6 +99,7 @@ export const SQUAD_TIEBREAKER_LABELS: Record<SquadTiebreakerCriterion, string> =
   net_agg: "Différentiel d'agressions",
   most_td_scored: 'TD marqués (plus = mieux)',
   fewest_td_conceded: 'TD encaissés (moins = mieux)',
+  most_cas_caused: 'Sorties causées (plus = mieux)',
   roster_tier: 'Somme des tiers des rosters (plus élevé = mieux)',
   random: 'Au pif (stable)',
 };

@@ -36,6 +36,7 @@ export const FRENCH_RACE_LABELS: Record<(typeof RACES)[number], string> = {
   Orc: 'Orques',
   'Shambling Undead': 'Morts-Vivants',
   Skaven: 'Skavens',
+  Skinks: 'Skinks',
   Slann: 'Slann',
   Snotlings: 'Snotlings',
   'Tomb Kings': 'Rois des Tombes',

@@ -192,3 +192,13 @@ describe('buildNafExport — non-NAF opponents (generic coach #9)', () => {
     assert.doesNotMatch(xml, /non-NAF/);
   });
 });
+
+describe('buildNafExport — Skinks', () => {
+  test('a Skinks coach is exported as Lizardmen', () => {
+    const t1 = team({ id: 't1', coachName: 'Alice', race: 'Skinks', nafNumber: '111' });
+    const t2 = team({ id: 't2', coachName: 'Bob', race: 'Dwarf', nafNumber: '222' });
+    const xml = buildNafExport(baseTournament({ teams: [t1, t2], challenges: [completedChallenge('t1', 't2')] }));
+    assert.match(xml, /Lizardmen/);
+    assert.doesNotMatch(xml, /Skinks/);
+  });
+});

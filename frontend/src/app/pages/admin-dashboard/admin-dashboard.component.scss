@@ -143,3 +143,102 @@
 .scope-squad {
   --scope-color: #a855f7;
 }
+
+.squad-points-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+
+  .field {
+    flex: 1 1 8rem;
+  }
+}
+
+.checkbox-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 1rem;
+  font-weight: 600;
+}
+
+.squad-outcomes {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.squad-outcome-col {
+  flex: 1 1 16rem;
+  min-width: 0;
+
+  h3 {
+    margin-bottom: 0.5rem;
+  }
+
+  .actions {
+    margin-bottom: 0.5rem;
+  }
+
+  table {
+    width: 100%;
+  }
+
+  td,
+  th {
+    text-align: center;
+  }
+
+  label {
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.outcome-selected {
+  background: var(--surface-2);
+  font-weight: 700;
+}
+
+.tier-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.tier-block {
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+
+.tier-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+
+  h3 {
+    margin: 0;
+  }
+}
+
+.tier-races {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.2rem 0;
+  }
+
+  select {
+    width: auto;
+  }
+}

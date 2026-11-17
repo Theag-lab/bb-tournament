@@ -372,6 +372,19 @@ table {
   margin-top: 1rem;
 }
 
+// Individual format: table number of each match in a round (no divider between tables).
+th.table-no,
+td.table-no {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+  font-weight: 700;
+}
+
+span.table-no {
+  color: var(--text-muted);
+}
+
 .link-copy {
   display: flex;
   align-items: center;

@@ -439,6 +439,87 @@ describe('team format round preparation', () => {
   });
 });
 
+describe('team format with an odd number of squads (triangle)', () => {
+  const squad = (id: string) => ({ id, name: id, createdAt: '2026-01-01T00:00:00.000Z' });
+  const member = (id: string, squadId: string) => ({ ...team(id, null), squadId });
+  const squadOf = (id: string) => id[0].toUpperCase();
+
+  /** `ids` squads of 4 members each (a1..a4, b1..b4, ...), swiss over 5 rounds, nothing generated yet. */
+  function squads(ids: string[]): Tournament {
+    return baseTournament({
+      mode: 'swiss',
+      format: 'team',
+      roundCount: 5,
+      squadSize: 4,
+      squads: ids.map(squad),
+      teams: ids.flatMap((s) => [1, 2, 3, 4].map((n) => member(`${s.toLowerCase()}${n}`, s))),
+    });
+  }
+
+  /** Opposing squads of each squad in the given round. */
+  function opponents(t: Tournament, round: number): Map<string, string[]> {
+    const map = new Map<string, string[]>();
+    for (const c of t.challenges.filter((ch) => ch.round === round)) {
+      const [x, y] = [squadOf(c.team1Id), squadOf(c.team2Id)];
+      map.set(x, [...(map.get(x) ?? []), y]);
+      map.set(y, [...(map.get(y) ?? []), x]);
+    }
+    return map;
+  }
+
+  test('every coach plays once; three squads play 2 boards against each of the two others', () => {
+    const t = squads(['A', 'B', 'C', 'D', 'E']);
+    generateNextRound(t);
+    const round = t.challenges.filter((c) => c.round === 1);
+    const playing = round.flatMap((c) => [c.team1Id, c.team2Id]);
+    assert.equal(playing.length, 20);
+    assert.equal(new Set(playing).size, 20);
+    const bySquad = opponents(t, 1);
+    const triangle = [...bySquad].filter(([, opp]) => new Set(opp).size === 2);
+    assert.equal(triangle.length, 3);
+    for (const [squadId, opp] of triangle) {
+      for (const other of new Set(opp)) assert.equal(opp.filter((o) => o === other).length, 2, `${squadId} vs ${other}`);
+    }
+    assert.ok(round.every((c) => squadOf(c.team1Id) !== squadOf(c.team2Id)));
+  });
+
+  test('the triangle rotates: a squad plays at most one triangle while others have not', () => {
+    const t = squads(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']);
+    const inTriangle = new Map<string, number>();
+    for (let r = 1; r <= 3; r++) {
+      generateNextRound(t);
+      t.rounds[r - 1].status = 'launched';
+      for (const [squadId, opp] of opponents(t, r)) {
+        if (new Set(opp).size === 2) inTriangle.set(squadId, (inTriangle.get(squadId) ?? 0) + 1);
+      }
+      completeRound(t, r);
+    }
+    assert.equal(inTriangle.size, 9);
+    assert.ok([...inTriangle.values()].every((n) => n === 1));
+  });
+
+  test('pairing a triangle squad with another confrontation forms a new triangle', () => {
+    const t = squads(['A', 'B', 'C', 'D', 'E']);
+    generateNextRound(t);
+    const bySquad = opponents(t, 1);
+    const inTriangle = [...bySquad].filter(([, opp]) => new Set(opp).size === 2).map(([id]) => id);
+    const outside = [...bySquad.keys()].find((id) => !inTriangle.includes(id))!;
+    pairRoundSquads(t, 1, inTriangle[0], outside);
+    const after = opponents(t, 1);
+    assert.deepEqual(new Set(after.get(inTriangle[0])), new Set([outside]));
+    assert.equal([...after].filter(([, opp]) => new Set(opp).size === 2).length, 3);
+    assert.equal(t.challenges.filter((c) => c.round === 1).length, 10);
+  });
+
+  test('redrawing round 1 keeps a triangle', () => {
+    const t = squads(['A', 'B', 'C']);
+    generateNextRound(t);
+    rerandomizeRound(t, 1, false);
+    const bySquad = opponents(t, 1);
+    assert.ok([...bySquad.values()].every((opp) => new Set(opp).size === 2));
+  });
+});
+
 describe('rerandomizeRound — individual format', () => {
   test('keeps forced pairings and includes late registrations', () => {
     const t = baseTournament({

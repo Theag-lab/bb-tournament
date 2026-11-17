@@ -102,6 +102,7 @@
         <table>
           <thead>
             <tr>
+              <th *ngIf="!isTeamFormat" class="table-no">Table</th>
               <th>Coach 1</th>
               <th>Score</th>
               <th>Coach 2</th>
@@ -111,12 +112,13 @@
           <tbody>
             <ng-container *ngFor="let row of roundMatchGroups(r.number); trackBy: trackByRoundMatchRow">
             <tr class="match-group-header" *ngIf="row.groupLabel">
-              <td colspan="4"><div class="group-divider">{{ row.groupLabel }}</div></td>
+              <td [attr.colspan]="isTeamFormat ? 4 : 5"><div class="group-divider">{{ row.groupLabel }}</div></td>
             </tr>
             <tr
               [class.match-group-start]="row.groupStart && !row.groupLabel"
               [class.match-group-alt]="row.groupIndex % 2 === 1"
             >
+              <td *ngIf="!isTeamFormat" class="table-no">{{ row.tableNumber }}</td>
               <td>
                 <strong>{{ matchPrimaryLabel(row.leftTeamId) }}</strong>
                 <div class="subtext">{{ matchSecondaryLabel(row.leftTeamId) }}</div>
@@ -133,7 +135,7 @@
             </tr>
             </ng-container>
             <tr *ngIf="roundMatches(r.number).length === 0">
-              <td colspan="4" class="muted">Aucun match dans cette ronde.</td>
+              <td [attr.colspan]="isTeamFormat ? 4 : 5" class="muted">Aucun match dans cette ronde.</td>
             </tr>
           </tbody>
         </table>
@@ -887,7 +889,7 @@
         <div class="table-wrap squad-round-block" *ngFor="let group of selectedSquadRoundGroups(); trackBy: trackByRoundGroup">
           <h4>
             Ronde {{ group.roundNumber }}
-            <ng-container *ngIf="group.opponentSquadId"> — vs {{ squadName(group.opponentSquadId) }}</ng-container>
+            <ng-container *ngIf="group.opponentSquadIds.length"> — vs {{ opponentSquadsLabel(group.opponentSquadIds) }}</ng-container>
           </h4>
           <table>
             <thead>

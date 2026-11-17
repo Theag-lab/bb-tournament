@@ -23,14 +23,14 @@
   "format": "team",
   "squadSize": 5,
   "squadScoring": {
-    "smallMarginMaxDiff": 1,
-    "bigMarginMinDiff": 3,
-    "pointsBigWin": 5,
-    "pointsWin": 4,
-    "pointsSmallWin": 3,
-    "pointsDraw": 2,
+    "pointsWin": 3,
+    "pointsDraw": 1,
+    "pointsLoss": 0,
+    "bonusTiers": false,
+    "pointsBigWin": 4,
     "pointsSmallLoss": 1,
-    "pointsLoss": 0
+    "bigWinOutcomes": [],
+    "smallLossOutcomes": []
   },
   "squads": [
     {

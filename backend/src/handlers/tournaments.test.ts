@@ -5,6 +5,7 @@ import {
   DEFAULT_MATCH_SHEET_CONFIG,
   DEFAULT_ROUND_TIMER,
   MAX_CUSTOM_STAT_CATEGORIES,
+  MAX_ROSTER_TIERS,
   MAX_ROUND_TIMER_SECONDS,
   MIN_ROUND_TIMER_SECONDS,
   ORGANIZER_COACH_NAME_MAX_LENGTH,
@@ -19,6 +20,7 @@ import {
   mergeMatchSheetConfig,
   resolvePoolsKnockoutConfig,
   validateOrganizerCoachName,
+  validateRosterTiers,
 } from './tournaments';
 import { AppError } from '../errors';
 
@@ -340,5 +342,23 @@ describe('computeNextRoundTimer', () => {
     const max = computeNextRoundTimer(DEFAULT_ROUND_TIMER, { durationSeconds: MAX_ROUND_TIMER_SECONDS }, fixedNow);
     assert.equal(min.durationSeconds, MIN_ROUND_TIMER_SECONDS);
     assert.equal(max.durationSeconds, MAX_ROUND_TIMER_SECONDS);
+  });
+});
+
+describe('validateRosterTiers', () => {
+  test('keeps tiers in order, trims races, allows empty tiers', () => {
+    assert.deepEqual(validateRosterTiers([{ races: [' Orc '] }, { races: [] }]), [{ races: ['Orc'] }, { races: [] }]);
+  });
+
+  test('rejects a race listed in two tiers', () => {
+    assert.throws(() => validateRosterTiers([{ races: ['Orc'] }, { races: ['Orc'] }]), AppError);
+  });
+
+  test('rejects no tier, too many tiers, or a malformed tier', () => {
+    assert.throws(() => validateRosterTiers([]), AppError);
+    assert.throws(() => validateRosterTiers(Array.from({ length: MAX_ROSTER_TIERS + 1 }, () => ({ races: [] }))), AppError);
+    assert.throws(() => validateRosterTiers([{ races: 'Orc' }]), AppError);
+    assert.throws(() => validateRosterTiers([{ races: [''] }]), AppError);
+    assert.throws(() => validateRosterTiers(null), AppError);
   });
 });

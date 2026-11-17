@@ -39,6 +39,7 @@ app.patch('/tournaments/:tournamentId/round-timer', tournaments.updateRoundTimer
 app.patch('/tournaments/:tournamentId/individual-scoring', tournaments.updateIndividualScoring);
 app.patch('/tournaments/:tournamentId/match-sheet-config', tournaments.updateMatchSheetConfig);
 app.put('/tournaments/:tournamentId/custom-stat-categories', tournaments.updateCustomStatCategories);
+app.put('/tournaments/:tournamentId/roster-tiers', tournaments.updateRosterTiers);
 app.put('/tournaments/:tournamentId/fumbbl', fumbbl.updateFumbblTracking);
 app.get('/tournaments/:tournamentId/naf-export', naf.exportNaf);
 

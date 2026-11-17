@@ -7,6 +7,10 @@ import {
   ALL_TIEBREAKER_CRITERIA,
   CUSTOM_STAT_NAME_MAX_LENGTH,
   CUSTOM_STAT_PRECISION_MAX_LENGTH,
+  DEFAULT_ROSTER_TIERS,
+  FRENCH_RACE_LABELS,
+  MAX_ROSTER_TIERS,
+  RACES,
   MAX_CUSTOM_STAT_CATEGORIES,
   MAX_SCORING_MULTIPLIER,
   MIN_SCORING_MULTIPLIER,
@@ -14,6 +18,7 @@ import {
   TOURNAMENT_DESCRIPTION_MAX_LENGTH,
   customTiebreakerCategoryId,
   customTiebreakerCriterion,
+  resolveRosterTiers,
   type AdminTeamView,
   type AdminTournamentView,
   type CustomStatCategoryConfig,
@@ -22,14 +27,18 @@ import {
   type MatchSheetConfig,
   type Pool,
   type PublicTournament,
+  type RosterTier,
   type RoundInfo,
   type Squad,
   type SquadScoringConfig,
+  squadOutcomeKey,
   type SquadTiebreakerCriterion,
   type StandingEntry,
   type SubmitResultRequest,
   type TiebreakerCriterion,
   type TournamentBackupSummary,
+  roundSquadOpponents,
+  triangleThirdSquad,
 } from '@bb-tournament/shared';
 import { CurrentTournamentService } from '../../core/current-tournament.service';
 import { ApiService } from '../../core/api.service';
@@ -45,7 +54,17 @@ import { FumbblLinkComponent } from '../../shared/fumbbl-link/fumbbl-link.compon
 
 const POLL_INTERVAL_MS = 60000;
 
-type AdminTab = 'overview' | 'rounds' | 'teams' | 'squads' | 'pools' | 'bracket' | 'challenges' | 'matchSheet' | 'backups';
+type AdminTab =
+  | 'overview'
+  | 'rounds'
+  | 'teams'
+  | 'squads'
+  | 'pools'
+  | 'bracket'
+  | 'challenges'
+  | 'matchSheet'
+  | 'tiering'
+  | 'backups';
 
 function cloneIndividualScoring(config: IndividualScoringConfig): IndividualScoringConfig {
   return {
@@ -65,6 +84,7 @@ export const TIEBREAKER_LABELS: Record<Exclude<TiebreakerCriterion, `custom:${st
   net_td: 'Différentiel de TD',
   net_cas: 'Différentiel de sorties',
   net_agg: "Différentiel d'agressions",
+  roster_tier: 'Tier du roster (plus élevé = mieux)',
   random: 'Au pif (stable)',
 };
 
@@ -78,11 +98,48 @@ export const SQUAD_TIEBREAKER_LABELS: Record<SquadTiebreakerCriterion, string> =
   net_agg: "Différentiel d'agressions",
   most_td_scored: 'TD marqués (plus = mieux)',
   fewest_td_conceded: 'TD encaissés (moins = mieux)',
+  roster_tier: 'Somme des tiers des rosters (plus élevé = mieux)',
   random: 'Au pif (stable)',
 };
 
 function cloneSquadScoring(config: SquadScoringConfig): SquadScoringConfig {
-  return { ...config, tiebreakers: [...(config.tiebreakers ?? [])] };
+  return {
+    ...config,
+    bigWinOutcomes: [...config.bigWinOutcomes],
+    smallLossOutcomes: [...config.smallLossOutcomes],
+    tiebreakers: [...(config.tiebreakers ?? [])],
+  };
+}
+
+export interface SquadOutcome {
+  key: string; // "W-D-L", as stored in SquadScoringConfig
+  wins: number;
+  draws: number;
+  losses: number;
+}
+
+export interface SquadOutcomeLists {
+  wins: SquadOutcome[];
+  draws: SquadOutcome[];
+  losses: SquadOutcome[];
+}
+
+/**
+ * Every board record a full squad can get in a round. Wins are listed fewest losses first, then
+ * most wins (5-0-0, 4-1-0, 3-2-0 … 4-0-1 …); losses closest first (2-0-3, 1-2-2, 0-4-1 … 0-0-5).
+ */
+function squadOutcomesFor(size: number): SquadOutcomeLists {
+  const lists: SquadOutcomeLists = { wins: [], draws: [], losses: [] };
+  for (let wins = size; wins >= 0; wins--) {
+    for (let losses = 0; wins + losses <= size; losses++) {
+      const draws = size - wins - losses;
+      const outcome = { key: squadOutcomeKey(wins, draws, losses), wins, draws, losses };
+      (wins > losses ? lists.wins : wins < losses ? lists.losses : lists.draws).push(outcome);
+    }
+  }
+  lists.wins.sort((a, b) => a.losses - b.losses || b.wins - a.wins);
+  lists.losses.sort((a, b) => a.losses - a.wins - (b.losses - b.wins) || b.wins - a.wins);
+  return lists;
 }
 
 function cloneMatchSheetConfig(config: MatchSheetConfig): MatchSheetConfig {
@@ -107,8 +164,13 @@ export interface RoundMatchRow {
   challenge: PublicTournament['challenges'][number];
   groupStart: boolean;
   groupIndex: number;
-  /** Team format, first row of each squad confrontation: "Table N : Squad A vs Squad B". */
+  /**
+   * First row of each group: "Table N : Squad A vs Squad B" (team format) or the pool name (pool
+   * rounds). Rendered as a red divider.
+   */
   groupLabel?: string;
+  /** Individual format (incl. pool rounds): the match's table number, 1-based across the round. */
+  tableNumber?: number;
   leftTeamId: string;
   rightTeamId: string;
   leftTd: number | null;
@@ -310,6 +372,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
         this.individualScoringDraft = cloneIndividualScoring(this.tournament.individualScoring);
         this.matchSheetDraft = cloneMatchSheetConfig(this.tournament.matchSheetConfig);
         this.customStatCategoriesDraft = cloneCustomStatCategories(this.tournament.customStatCategories);
+        this.rosterTiersDraft = resolveRosterTiers(this.tournament.rosterTiers);
         this.roundTimerDurationMinutesDraft = Math.round(this.tournament.roundTimer.durationSeconds / 60);
         this.fumbblEnabledDraft = this.tournament.fumbbl?.enabled ?? false;
         this.fumbblTagDraft = this.tournament.fumbbl?.tag ?? '';
@@ -762,6 +825,8 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
           challenge,
           groupStart: i === 0 && groupIndex > 0,
           groupIndex,
+          groupLabel: i === 0 ? this.poolName(poolId) : undefined,
+          tableNumber: rows.length + 1,
           leftTeamId: challenge.team1Id,
           rightTeamId: challenge.team2Id,
           leftTd: challenge.result?.team1Td ?? null,
@@ -774,16 +839,23 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     return rows;
   }
 
+  /** " — triangle avec X" when this confrontation is part of the round's triangle (odd number of squads). */
+  private triangleSuffix(opponents: Map<string, Set<string>>, squadA: string, squadB: string): string {
+    const third = triangleThirdSquad(opponents, squadA, squadB);
+    return third ? ` — triangle avec ${this.squadName(third)}` : '';
+  }
+
   roundMatchGroups(roundNumber: number): RoundMatchRow[] {
     const matches = this.roundMatches(roundNumber);
     if (this.isPoolsKnockout && this.tournament?.poolRoundCount !== null && roundNumber <= (this.tournament?.poolRoundCount ?? 0)) {
       return this.poolRoundMatchGroups(matches);
     }
     if (!this.isTeamFormat) {
-      return matches.map((challenge) => ({
+      return matches.map((challenge, i) => ({
         challenge,
         groupStart: false,
         groupIndex: 0,
+        tableNumber: i + 1,
         leftTeamId: challenge.team1Id,
         rightTeamId: challenge.team2Id,
         leftTd: challenge.result?.team1Td ?? null,
@@ -800,6 +872,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       groupsByKey.get(key)!.push(challenge);
     }
 
+    const opponents = roundSquadOpponents(matches, (teamId) => this.teamSquadId(teamId));
     // Map iteration follows insertion, i.e. each confrontation's first match in the round's array order.
     const rows: RoundMatchRow[] = [];
     Array.from(groupsByKey.keys()).forEach((key, groupIndex) => {
@@ -814,7 +887,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
           groupStart: i === 0 && groupIndex > 0,
           groupIndex,
           groupLabel:
-            i === 0 ? `Table ${groupIndex + 1} : ${this.squadName(anchorSquad)} vs ${this.squadName(otherSquad)}` : undefined,
+            i === 0 ? `Table ${groupIndex + 1} : ${this.squadName(anchorSquad)} vs ${this.squadName(otherSquad)}${this.triangleSuffix(opponents, anchorSquad, otherSquad)}` : undefined,
           leftTeamId: team1IsAnchor ? challenge.team1Id : challenge.team2Id,
           rightTeamId: team1IsAnchor ? challenge.team2Id : challenge.team1Id,
           leftTd: challenge.result ? (team1IsAnchor ? challenge.result.team1Td : challenge.result.team2Td) : null,
@@ -1032,6 +1105,51 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     [list[index], list[target]] = [list[target], list[index]];
   }
 
+  private squadOutcomesCache: { size: number; lists: SquadOutcomeLists } | null = null;
+
+  /** Board records of a full squad, for the big-win / small-loss pickers; null when the squad size is unknown. */
+  squadOutcomes(): SquadOutcomeLists | null {
+    const size = this.tournament?.squadSize;
+    if (!size) return null;
+    if (this.squadOutcomesCache?.size !== size) this.squadOutcomesCache = { size, lists: squadOutcomesFor(size) };
+    return this.squadOutcomesCache.lists;
+  }
+
+  isSquadOutcomeSelected(field: 'bigWinOutcomes' | 'smallLossOutcomes', key: string): boolean {
+    return this.squadScoringDraft?.[field].includes(key) ?? false;
+  }
+
+  toggleSquadOutcome(field: 'bigWinOutcomes' | 'smallLossOutcomes', key: string, selected: boolean): void {
+    const draft = this.squadScoringDraft;
+    if (!draft) return;
+    const rest = draft[field].filter((k) => k !== key);
+    draft[field] = selected ? [...rest, key] : rest;
+  }
+
+  /** Preset: every win without a single lost board is a big win (5-0-0, 4-1-0, 3-2-0 … in squads of 5). */
+  selectBigWinsWithoutLoss(): void {
+    const lists = this.squadOutcomes();
+    if (this.squadScoringDraft && lists) {
+      this.squadScoringDraft.bigWinOutcomes = lists.wins.filter((o) => o.losses === 0).map((o) => o.key);
+    }
+  }
+
+  /** Preset: every loss by a single board is a small loss (2-0-3, 1-2-2, 0-4-1 in squads of 5). */
+  selectSmallLossesByOne(): void {
+    const lists = this.squadOutcomes();
+    if (this.squadScoringDraft && lists) {
+      this.squadScoringDraft.smallLossOutcomes = lists.losses.filter((o) => o.losses - o.wins === 1).map((o) => o.key);
+    }
+  }
+
+  clearSquadOutcomes(field: 'bigWinOutcomes' | 'smallLossOutcomes'): void {
+    if (this.squadScoringDraft) this.squadScoringDraft[field] = [];
+  }
+
+  trackBySquadOutcome(_index: number, outcome: SquadOutcome): string {
+    return outcome.key;
+  }
+
   async saveSquadScoring(): Promise<void> {
     if (!this.squadScoringDraft) return;
     this.savingSquadScoring = true;
@@ -1206,6 +1324,72 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       this.individualScoringError = extractErrorMessage(err);
     } finally {
       this.savingIndividualScoring = false;
+    }
+  }
+
+  // ---- Roster tiers (the `roster_tier` tiebreaker) ----
+
+  rosterTiersDraft: RosterTier[] = resolveRosterTiers(null);
+  savingRosterTiers = false;
+  rosterTiersError: string | null = null;
+  readonly maxRosterTiers = MAX_ROSTER_TIERS;
+
+  /** The "Tiering" tab only shows once a roster-tier tiebreaker is picked (individual or squad). */
+  get showTieringTab(): boolean {
+    const individual = this.individualScoringDraft;
+    const individualUsesTier = individual?.mode === 'points_tiebreaker' && individual.tiebreakers.includes('roster_tier');
+    const squadUsesTier = this.tournament?.format === 'team' && !!this.squadScoringDraft?.tiebreakers?.includes('roster_tier');
+    return individualUsesTier || squadUsesTier;
+  }
+
+  raceLabel(race: string): string {
+    return FRENCH_RACE_LABELS[race as (typeof RACES)[number]] ?? race;
+  }
+
+  /** Coaches registered with this race, shown next to it so the admin sees which tiers actually matter. */
+  raceTeamCount(race: string): number {
+    return this.tournament?.teams.filter((tm) => tm.race === race).length ?? 0;
+  }
+
+  /** Known races plus any race typed by a registered coach, that sit in no tier (they count as tier 0). */
+  unassignedRaces(): string[] {
+    const assigned = new Set(this.rosterTiersDraft.flatMap((tier) => tier.races));
+    const all = new Set<string>([...RACES, ...(this.tournament?.teams.map((tm) => tm.race) ?? [])]);
+    return [...all].filter((race) => race && race !== '—' && !assigned.has(race)).sort((a, b) => this.raceLabel(a).localeCompare(this.raceLabel(b)));
+  }
+
+  /** Moves `race` to tier `target` (-1 = no tier). */
+  moveRace(race: string, target: number | string): void {
+    const targetIndex = Number(target);
+    for (const tier of this.rosterTiersDraft) tier.races = tier.races.filter((r) => r !== race);
+    this.rosterTiersDraft[targetIndex]?.races.push(race);
+  }
+
+  addRosterTier(): void {
+    if (this.rosterTiersDraft.length >= MAX_ROSTER_TIERS) return;
+    this.rosterTiersDraft.push({ races: [] });
+  }
+
+  /** Only empty tiers can be removed, so no race silently changes tier. */
+  removeRosterTier(index: number): void {
+    if (this.rosterTiersDraft.length <= 1 || this.rosterTiersDraft[index]?.races.length) return;
+    this.rosterTiersDraft.splice(index, 1);
+  }
+
+  resetRosterTiers(): void {
+    this.rosterTiersDraft = resolveRosterTiers(DEFAULT_ROSTER_TIERS);
+  }
+
+  async saveRosterTiers(): Promise<void> {
+    this.savingRosterTiers = true;
+    this.rosterTiersError = null;
+    try {
+      this.tournament = await this.api.updateRosterTiers(this.tournamentId, this.token, { tiers: this.rosterTiersDraft });
+      this.rosterTiersDraft = resolveRosterTiers(this.tournament.rosterTiers);
+    } catch (err) {
+      this.rosterTiersError = extractErrorMessage(err);
+    } finally {
+      this.savingRosterTiers = false;
     }
   }
 

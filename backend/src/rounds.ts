@@ -13,6 +13,9 @@ import { assertPreviousRoundComplete, buildPriorOpponents, pairInOrder, shuffle 
 import { generateNextPoolsKnockoutRound } from './bracket';
 
 type Pair = [string, string];
+type Triangle = [string, string, string];
+/** One round confrontation: two squads, or three playing a triangle (odd number of squads). */
+type SquadGroup = Pair | Triangle;
 
 const isPair = (pair: Pair, a: string, b: string) => (pair[0] === a && pair[1] === b) || (pair[0] === b && pair[1] === a);
 
@@ -61,7 +64,7 @@ export function generateNextRound(t: Tournament): void {
   const priorOpponents = buildPriorOpponents(t.challenges);
   const candidateIds =
     roundNumber > 1
-      ? computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? []).map(
+      ? computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? [], t.rosterTiers).map(
           (s) => s.teamId
         )
       : shuffle(t.teams.map((tm) => tm.id));
@@ -97,6 +100,72 @@ function buildPriorSquadOpponents(challenges: Challenge[], teamSquad: Map<string
   return map;
 }
 
+/** Squads that already played a triangle: in some earlier round, they met two different squads. */
+function priorTriangleSquads(t: Tournament): Set<string> {
+  const squadOf = teamSquadLookup(t);
+  const opponentsByRoundSquad = new Map<string, Set<string>>();
+  for (const c of t.challenges) {
+    if (c.round === null) continue;
+    const [x, y] = [squadOf(c.team1Id), squadOf(c.team2Id)];
+    if (!x || !y || x === y) continue;
+    for (const [squad, opponent] of [[x, y], [y, x]]) {
+      const key = `${c.round}:${squad}`;
+      if (!opponentsByRoundSquad.has(key)) opponentsByRoundSquad.set(key, new Set());
+      opponentsByRoundSquad.get(key)!.add(opponent);
+    }
+  }
+  const result = new Set<string>();
+  for (const [key, opponents] of opponentsByRoundSquad) {
+    if (opponents.size > 1) result.add(key.slice(key.indexOf(':') + 1));
+  }
+  return result;
+}
+
+/**
+ * Picks the three squads of the triangle from the bottom of `orderedIds`. Rotating the triangle
+ * comes first (squads that never played one), avoiding rematches second: three fresh squads that
+ * haven't met, else the bottom three fresh squads, else any three that haven't met, else the
+ * bottom three.
+ */
+export function pickTriangle(orderedIds: string[], priorOpponents: Map<string, Set<string>>, alreadyInTriangle: Set<string>): Triangle {
+  const bottomUp = orderedIds.slice().reverse();
+  const fresh = bottomUp.filter((id) => !alreadyInTriangle.has(id));
+  const met = (a: string, b: string) => priorOpponents.get(a)?.has(b) ?? false;
+  const firstUnmetTriple = (candidates: string[]): Triangle | null => {
+    for (let i = 0; i < candidates.length; i++) {
+      for (let j = i + 1; j < candidates.length; j++) {
+        if (met(candidates[i], candidates[j])) continue;
+        for (let k = j + 1; k < candidates.length; k++) {
+          if (!met(candidates[i], candidates[k]) && !met(candidates[j], candidates[k])) {
+            return [candidates[i], candidates[j], candidates[k]];
+          }
+        }
+      }
+    }
+    return null;
+  };
+  const all = [...fresh, ...bottomUp.filter((id) => alreadyInTriangle.has(id))];
+  return (
+    firstUnmetTriple(fresh) ??
+    (fresh.length >= 3 ? [fresh[0], fresh[1], fresh[2]] : null) ??
+    firstUnmetTriple(all) ?? [all[0], all[1], all[2]]
+  );
+}
+
+/** Pairs squads in order like `pairInOrder`; an odd count puts three of them in a triangle (listed last). */
+export function groupSquadsInOrder(
+  orderedIds: string[],
+  priorOpponents: Map<string, Set<string>>,
+  alreadyInTriangle: Set<string> = new Set()
+): SquadGroup[] {
+  if (orderedIds.length % 2 === 0) return pairInOrder(orderedIds, priorOpponents);
+  if (orderedIds.length < 3) {
+    throw forbidden('An odd number of squads needs at least three squads to form a triangle', 'odd_squad_count');
+  }
+  const triangle = pickTriangle(orderedIds, priorOpponents, alreadyInTriangle);
+  return [...pairInOrder(orderedIds.filter((id) => !triangle.includes(id)), priorOpponents), triangle];
+}
+
 /**
  * Double-swiss pairing for 'team' format tournaments: squads are paired like teams are in the
  * individual algorithm above (adjacent in squad standings, avoiding squad-level rematches via
@@ -114,31 +183,31 @@ function generateNextTeamRound(t: Tournament): void {
   assertPreviousRoundComplete(t, roundNumber);
 
   const now = new Date().toISOString();
-  const squadPairs =
+  const squadGroups =
     roundNumber === 1
-      ? pairInOrder(shuffle(t.squads.map((s) => s.id)), new Map())
-      : pairInOrder(
+      ? groupSquadsInOrder(shuffle(t.squads.map((s) => s.id)), new Map())
+      : groupSquadsInOrder(
           computeSquadStandings(
             t.squads,
             t.teams,
             t.challenges,
             t.squadScoring ?? DEFAULT_SQUAD_SCORING,
             t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING,
-            t.customStatCategories ?? []
+            t.customStatCategories ?? [],
+            t.rosterTiers
           ).map((s) => s.squadId),
-          buildPriorSquadOpponents(t.challenges, new Map(t.teams.map((tm) => [tm.id, tm.squadId])))
+          buildPriorSquadOpponents(t.challenges, new Map(t.teams.map((tm) => [tm.id, tm.squadId]))),
+          priorTriangleSquads(t)
         );
 
-  t.challenges.push(...buildSquadPairMatches(t, squadPairs, [], roundNumber, now));
+  t.challenges.push(...buildSquadPairMatches(t, squadGroups, [], roundNumber, now));
   t.rounds.push({ number: roundNumber, status: 'draft' });
 }
 
 function assertSquadsPairable(t: Tournament): void {
   if (t.teams.length === 0) throw badRequest('No teams registered yet');
   if (t.squads.length === 0) throw badRequest('No squads registered yet');
-  if (t.squads.length % 2 !== 0) {
-    throw forbidden('An odd number of squads cannot be paired; wait for another squad to register', 'odd_squad_count');
-  }
+  if (t.squads.length < 2) throw forbidden('At least two squads are needed', 'odd_squad_count');
   const emptySquad = t.squads.find((s) => !t.teams.some((tm) => tm.squadId === s.id));
   if (emptySquad) {
     throw forbidden(`Squad "${emptySquad.name}" has no members yet`, 'empty_squad');
@@ -148,7 +217,7 @@ function assertSquadsPairable(t: Tournament): void {
 /** Member order used to match coaches inside a squad confrontation: random in round 1, individual rank after. */
 function teamMemberOrder(t: Tournament, roundNumber: number): string[] {
   if (roundNumber === 1) return shuffle(t.teams.map((tm) => tm.id));
-  return computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? []).map(
+  return computeStandings(t.teams, t.challenges, t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, t.customStatCategories ?? [], t.rosterTiers).map(
     (s) => s.teamId
   );
 }
@@ -157,20 +226,42 @@ function teamMemberOrder(t: Tournament, roundNumber: number): string[] {
  * Coach-level matches for the given squad confrontations: the admin's forced coach pairs first,
  * then the remaining members of each side matched by position in `teamMemberOrder` (1st vs 1st,
  * ...); extra members of the bigger squad get a bye.
+ *
+ * A triangle [A, B, C] splits each squad's remaining members in two alternating halves by rank
+ * (1st, 3rd, ... / 2nd, 4th, ...): A's first half faces B's first half, B's second half C's first
+ * half, and C's second half A's second half — so with squads of 4, every squad plays 2 boards
+ * against each of the two others.
  */
-function buildSquadPairMatches(t: Tournament, squadPairs: Pair[], coachLocks: Pair[], roundNumber: number, now: string): Challenge[] {
+function buildSquadPairMatches(t: Tournament, squadGroups: SquadGroup[], coachLocks: Pair[], roundNumber: number, now: string): Challenge[] {
   const squadOf = teamSquadLookup(t);
   const memberOrder = teamMemberOrder(t, roundNumber);
   const matches: Challenge[] = [];
-  for (const [squadA, squadB] of squadPairs) {
-    const locks = coachLocks.filter(([x, y]) => isPair([squadOf(x) ?? '', squadOf(y) ?? ''], squadA, squadB));
-    const lockedIds = new Set(locks.flat());
-    // squadA always on the team1 side, so the confrontation renders the same way round the scoreboard.
-    for (const [x, y] of locks) matches.push(squadOf(x) === squadA ? newMatch(x, y, roundNumber, now) : newMatch(y, x, roundNumber, now));
-    const membersA = memberOrder.filter((id) => squadOf(id) === squadA && !lockedIds.has(id));
-    const membersB = memberOrder.filter((id) => squadOf(id) === squadB && !lockedIds.has(id));
+  const pairSides = (squadA: string, squadB: string, membersA: string[], membersB: string[]) => {
     const pairCount = Math.min(membersA.length, membersB.length);
     for (let i = 0; i < pairCount; i++) matches.push(newMatch(membersA[i], membersB[i], roundNumber, now));
+  };
+  for (const group of squadGroups) {
+    const locks = coachLocks.filter(([x, y]) => {
+      const [sx, sy] = [squadOf(x) ?? '', squadOf(y) ?? ''];
+      return sx !== sy && group.includes(sx) && group.includes(sy);
+    });
+    const lockedIds = new Set(locks.flat());
+    // The group's first squad always on the team1 side, so the confrontation renders the same way round the scoreboard.
+    for (const [x, y] of locks) {
+      matches.push(group.indexOf(squadOf(x)!) < group.indexOf(squadOf(y)!) ? newMatch(x, y, roundNumber, now) : newMatch(y, x, roundNumber, now));
+    }
+    const membersOf = (squadId: string) => memberOrder.filter((id) => squadOf(id) === squadId && !lockedIds.has(id));
+    if (group.length === 2) {
+      pairSides(group[0], group[1], membersOf(group[0]), membersOf(group[1]));
+      continue;
+    }
+    const [halvesA, halvesB, halvesC] = group.map((squadId) => {
+      const members = membersOf(squadId);
+      return [members.filter((_, i) => i % 2 === 0), members.filter((_, i) => i % 2 === 1)];
+    });
+    pairSides(group[0], group[1], halvesA[0], halvesB[0]);
+    pairSides(group[1], group[2], halvesB[1], halvesC[0]);
+    pairSides(group[2], group[0], halvesC[1], halvesA[1]);
   }
   return matches;
 }
@@ -309,13 +400,19 @@ export function pairRoundSquads(t: Tournament, roundNumber: number, squadId1: st
 
   const affected = new Set([squadId1, squadId2, ...opponents1, ...opponentsOf(squadId2)]);
   const freedUp = [...affected].filter((id) => id !== squadId1 && id !== squadId2);
-  if (freedUp.length % 2 !== 0) throw forbidden('An odd number of squads cannot be paired', 'odd_squad_count');
-  const newPairs: Pair[] = [[squadId1, squadId2], ...pairInOrder(freedUp, new Map())];
+  if (freedUp.length % 2 !== 0 && freedUp.length < 3) {
+    throw forbidden(
+      "Impossible : avec un nombre impair d'équipes, trois équipes doivent jouer en triangle. Faites plutôt affronter une équipe du triangle à une équipe d'une autre rencontre.",
+      'odd_squad_count'
+    );
+  }
+  // An odd number of freed-up squads (a triangle was broken up) forms a new triangle.
+  const newPairs: SquadGroup[] = [[squadId1, squadId2], ...groupSquadsInOrder(freedUp, new Map())];
 
   round.lockedSquadPairs = [...(round.lockedSquadPairs ?? []).filter(([x, y]) => !affected.has(x) && !affected.has(y)), [squadId1, squadId2]];
   round.lockedPairs = (round.lockedPairs ?? []).filter(([x, y]) => {
     const [sx, sy] = [squadOf(x) ?? '', squadOf(y) ?? ''];
-    return (!affected.has(sx) && !affected.has(sy)) || newPairs.some((p) => isPair(p, sx, sy));
+    return (!affected.has(sx) && !affected.has(sy)) || newPairs.some((p) => sx !== sy && p.includes(sx) && p.includes(sy));
   });
 
   const now = new Date().toISOString();
@@ -361,11 +458,20 @@ export function rerandomizeRound(t: Tournament, roundNumber: number, keepLocks: 
       usedSquads.add(x);
       usedSquads.add(y);
     }
+    // An odd count needs three free squads for the triangle: drop the last forced pairing if only one is left.
+    if (t.squads.length % 2 === 1 && t.squads.length - usedSquads.size < 3) {
+      const [x, y] = squadPairs.pop()!;
+      usedSquads.delete(x);
+      usedSquads.delete(y);
+    }
     round.lockedSquadPairs = squadPairs.slice();
-    squadPairs.push(...pairInOrder(shuffle(t.squads.map((s) => s.id).filter((id) => !usedSquads.has(id))), new Map()));
+    const squadGroups: SquadGroup[] = [
+      ...squadPairs,
+      ...groupSquadsInOrder(shuffle(t.squads.map((s) => s.id).filter((id) => !usedSquads.has(id))), new Map()),
+    ];
 
     t.challenges = t.challenges.filter((c) => c.round !== roundNumber);
-    t.challenges.push(...buildSquadPairMatches(t, squadPairs, round.lockedPairs ?? [], roundNumber, now));
+    t.challenges.push(...buildSquadPairMatches(t, squadGroups, round.lockedPairs ?? [], roundNumber, now));
     return;
   }
 

@@ -32,24 +32,38 @@ function assertSquadNameFree(squads: Squad[], name: string, excludeSquadId?: str
   if (clash) throw conflict(`A squad named "${name}" already exists in this tournament`, 'squad_name_taken');
 }
 
-const SCORING_NUMBER_FIELDS = [
-  'pointsBigWin',
-  'pointsWin',
-  'pointsSmallWin',
-  'pointsDraw',
-  'pointsSmallLoss',
-  'pointsLoss',
-] as const;
+const SCORING_NUMBER_FIELDS = ['pointsWin', 'pointsDraw', 'pointsLoss', 'pointsBigWin', 'pointsSmallLoss'] as const;
+
+const OUTCOME_KEY = /^(\d+)-(\d+)-(\d+)$/;
+
+/** Validates a list of "W-D-L" board records, all on the expected side (win: W > L, loss: W < L). */
+function validateOutcomes(raw: unknown, field: string, side: 'win' | 'loss'): string[] {
+  if (!Array.isArray(raw)) throw badRequest(`${field} must be an array`, 'invalid_squad_scoring');
+  const keys = new Set<string>();
+  for (const value of raw) {
+    const m = typeof value === 'string' ? OUTCOME_KEY.exec(value) : null;
+    if (!m) throw badRequest(`${field} entries must look like "W-D-L"`, 'invalid_squad_scoring');
+    const wins = Number(m[1]);
+    const losses = Number(m[3]);
+    if (side === 'win' ? wins <= losses : wins >= losses) {
+      throw badRequest(`${field}: "${value}" is not a ${side}`, 'invalid_squad_scoring');
+    }
+    keys.add(`${wins}-${Number(m[2])}-${losses}`);
+  }
+  return Array.from(keys);
+}
 
 /** Merges a partial scoring override onto a base config, validating every field it touches. */
 export function mergeSquadScoring(
-  base: SquadScoringConfig,
+  base: Partial<SquadScoringConfig>,
   partial: Partial<SquadScoringConfig> | null | undefined
 ): SquadScoringConfig {
-  if (partial?.tiebreakers !== undefined && !Array.isArray(partial.tiebreakers)) {
-    throw badRequest('tiebreakers must be an array', 'invalid_squad_scoring');
+  for (const field of ['tiebreakers', 'bigWinOutcomes', 'smallLossOutcomes'] as const) {
+    if (partial?.[field] !== undefined && !Array.isArray(partial[field])) {
+      throw badRequest(`${field} must be an array`, 'invalid_squad_scoring');
+    }
   }
-  const merged = resolveSquadScoring({ ...base, ...(partial ?? {}) });
+  const merged = resolveSquadScoring({ ...resolveSquadScoring(base), ...(partial ?? {}) });
 
   const { tiebreakers } = merged;
   if (
@@ -59,17 +73,11 @@ export function mergeSquadScoring(
     throw badRequest('tiebreakers must be a list of distinct squad tiebreaker criteria', 'invalid_squad_scoring');
   }
 
-  if (
-    !Number.isInteger(merged.smallMarginMaxDiff) ||
-    merged.smallMarginMaxDiff < 1 ||
-    !Number.isInteger(merged.bigMarginMinDiff) ||
-    merged.bigMarginMinDiff <= merged.smallMarginMaxDiff
-  ) {
-    throw badRequest(
-      'smallMarginMaxDiff must be a positive integer and bigMarginMinDiff a larger integer',
-      'invalid_squad_scoring'
-    );
+  if (typeof merged.bonusTiers !== 'boolean') {
+    throw badRequest('bonusTiers must be a boolean', 'invalid_squad_scoring');
   }
+  merged.bigWinOutcomes = validateOutcomes(merged.bigWinOutcomes, 'bigWinOutcomes', 'win');
+  merged.smallLossOutcomes = validateOutcomes(merged.smallLossOutcomes, 'smallLossOutcomes', 'loss');
   for (const field of SCORING_NUMBER_FIELDS) {
     const value = merged[field];
     if (!Number.isInteger(value) || value < 0) {

@@ -12,6 +12,8 @@ import {
   type Squad,
   type SquadStandingEntry,
   type StandingEntry,
+  roundSquadOpponents,
+  triangleThirdSquad,
 } from '@bb-tournament/shared';
 import { CurrentTournamentService } from '../../core/current-tournament.service';
 import { ApiService } from '../../core/api.service';
@@ -42,8 +44,13 @@ export interface RoundMatchRow {
   challenge: PublicTournament['challenges'][number];
   groupStart: boolean;
   groupIndex: number;
-  /** Team format, first row of each squad confrontation: "Table N : Squad A vs Squad B". */
+  /**
+   * First row of each group: "Table N : Squad A vs Squad B" (team format) or the pool name (pool
+   * rounds). Rendered as a red divider.
+   */
   groupLabel?: string;
+  /** Individual format (incl. pool rounds): the match's table number, 1-based across the round. */
+  tableNumber?: number;
   leftTeamId: string;
   rightTeamId: string;
   leftTd: number | null;
@@ -281,14 +288,16 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     const rows: PdfRow[] = [];
     for (const row of this.roundMatchGroups(roundNumber)) {
       if (row.groupLabel) rows.push({ group: row.groupLabel });
-      rows.push([
+      const cells = [
         `${this.matchPrimaryLabel(row.leftTeamId)}\n${this.matchSecondaryLabel(row.leftTeamId)}`,
         row.leftTd !== null ? `${row.leftTd} - ${row.rightTd}` : '—',
         `${this.matchPrimaryLabel(row.rightTeamId)}\n${this.matchSecondaryLabel(row.rightTeamId)}`,
         PDF_STATUS_LABELS[row.challenge.status],
-      ]);
+      ];
+      rows.push(this.isTeamFormat ? cells : [row.tableNumber ?? '', ...cells]);
     }
-    await this.runPdfExport(`Ronde ${roundNumber}`, [{ head: ['Coach 1', 'Score', 'Coach 2', 'Statut'], rows }]);
+    const head = ['Coach 1', 'Score', 'Coach 2', 'Statut'];
+    await this.runPdfExport(`Ronde ${roundNumber}`, [{ head: this.isTeamFormat ? head : ['Table', ...head], rows }]);
   }
 
   /** Every standings table of the scores tab, in the same order: squads, then pools or the individual ranking. */
@@ -444,6 +453,8 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
           challenge,
           groupStart: i === 0 && groupIndex > 0,
           groupIndex,
+          groupLabel: i === 0 ? this.poolName(poolId) : undefined,
+          tableNumber: rows.length + 1,
           leftTeamId: challenge.team1Id,
           rightTeamId: challenge.team2Id,
           leftTd: challenge.result?.team1Td ?? null,
@@ -454,16 +465,23 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
     return rows;
   }
 
+  /** " — triangle avec X" when this confrontation is part of the round's triangle (odd number of squads). */
+  private triangleSuffix(opponents: Map<string, Set<string>>, squadA: string, squadB: string): string {
+    const third = triangleThirdSquad(opponents, squadA, squadB);
+    return third ? ` — triangle avec ${this.squadName(third)}` : '';
+  }
+
   roundMatchGroups(roundNumber: number): RoundMatchRow[] {
     const matches = this.roundMatches(roundNumber);
     if (this.isPoolsKnockout && this.tournament?.poolRoundCount !== null && roundNumber <= (this.tournament?.poolRoundCount ?? 0)) {
       return this.poolRoundMatchGroups(matches);
     }
     if (!this.isTeamFormat) {
-      return matches.map((challenge) => ({
+      return matches.map((challenge, i) => ({
         challenge,
         groupStart: false,
         groupIndex: 0,
+        tableNumber: i + 1,
         leftTeamId: challenge.team1Id,
         rightTeamId: challenge.team2Id,
         leftTd: challenge.result?.team1Td ?? null,
@@ -478,6 +496,7 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
       groupsByKey.get(key)!.push(challenge);
     }
 
+    const opponents = roundSquadOpponents(matches, (teamId) => this.teamSquadId(teamId));
     // Map iteration follows insertion, i.e. each confrontation's first match in the round's array order.
     const rows: RoundMatchRow[] = [];
     Array.from(groupsByKey.keys()).forEach((key, groupIndex) => {
@@ -492,7 +511,7 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
           groupStart: i === 0 && groupIndex > 0,
           groupIndex,
           groupLabel:
-            i === 0 ? `Table ${groupIndex + 1} : ${this.squadName(anchorSquad)} vs ${this.squadName(otherSquad)}` : undefined,
+            i === 0 ? `Table ${groupIndex + 1} : ${this.squadName(anchorSquad)} vs ${this.squadName(otherSquad)}${this.triangleSuffix(opponents, anchorSquad, otherSquad)}` : undefined,
           leftTeamId: team1IsAnchor ? challenge.team1Id : challenge.team2Id,
           rightTeamId: team1IsAnchor ? challenge.team2Id : challenge.team1Id,
           leftTd: challenge.result ? (team1IsAnchor ? challenge.result.team1Td : challenge.result.team2Td) : null,
@@ -712,20 +731,20 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
    * One group per round the selected squad played, last round first — each group's `matches` is
    * every board (one per member who played that round), `teamId` always the squad's own member and
    * `opponentTeamId` the other side, regardless of which one is team1/team2 on the underlying
-   * challenge. `opponentSquadId` is the same for every board in a round (a squad plays exactly one
-   * opposing squad per round), so it's resolved once per group for the round's title. Free
+   * challenge. `opponentSquadIds` is the round's opposing squad, or the two others of a triangle
+   * (odd number of squads), for the round's title. Free
    * (non-round) challenges don't apply here (squads only play round-based squad-vs-squad matchups).
    */
   selectedSquadRoundGroups(): {
     roundNumber: number;
-    opponentSquadId: string | null;
+    opponentSquadIds: string[];
     matches: { challenge: PublicTournament['challenges'][number]; teamId: string; opponentTeamId: string }[];
   }[] {
     if (!this.selectedSquad) return [];
     const squadId = this.selectedSquad.id;
     const groups = new Map<
       number,
-      { roundNumber: number; opponentSquadId: string | null; matches: { challenge: PublicTournament['challenges'][number]; teamId: string; opponentTeamId: string }[] }
+      { roundNumber: number; opponentSquadIds: string[]; matches: { challenge: PublicTournament['challenges'][number]; teamId: string; opponentTeamId: string }[] }
     >();
     for (const c of this.tournament?.challenges ?? []) {
       if (c.round === null) continue;
@@ -736,13 +755,20 @@ export class ScoreboardComponent implements OnInit, OnDestroy {
       const opponentTeamId = isTeam1 ? c.team2Id : c.team1Id;
       let group = groups.get(c.round);
       if (!group) {
-        group = { roundNumber: c.round, opponentSquadId: this.teamSquadId(opponentTeamId), matches: [] };
+        group = { roundNumber: c.round, opponentSquadIds: [], matches: [] };
         groups.set(c.round, group);
       }
+      const opponentSquadId = this.teamSquadId(opponentTeamId);
+      if (opponentSquadId && !group.opponentSquadIds.includes(opponentSquadId)) group.opponentSquadIds.push(opponentSquadId);
       group.matches.push({ challenge: c, teamId, opponentTeamId });
     }
     for (const group of groups.values()) group.matches.sort((a, b) => a.teamId.localeCompare(b.teamId));
     return Array.from(groups.values()).sort((a, b) => b.roundNumber - a.roundNumber);
+  }
+
+  opponentSquadsLabel(squadIds: string[]): string {
+    const names = squadIds.map((id) => this.squadName(id));
+    return names.length > 1 ? `${names.join(' et ')} (triangle)` : names.join('');
   }
 
   trackByRoundGroup(_index: number, group: { roundNumber: number }): number {

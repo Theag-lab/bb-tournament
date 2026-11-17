@@ -9,6 +9,7 @@ import {
   DEFAULT_ROUND_TIMER,
   DEFAULT_SQUAD_SCORING,
   MAX_CUSTOM_STAT_CATEGORIES,
+  MAX_ROSTER_TIERS,
   MAX_POOL_SIZE,
   MAX_QUALIFIERS_PER_POOL,
   MAX_ROUND_COUNT,
@@ -48,6 +49,8 @@ import {
   type TournamentMode,
   type UpdateCustomStatCategoriesRequest,
   type UpdateIndividualScoringRequest,
+  type RosterTier,
+  type UpdateRosterTiersRequest,
   type UpdateMatchSheetConfigRequest,
   type UpdateRoundTimerRequest,
   type UpdateTournamentDescriptionRequest,
@@ -464,6 +467,48 @@ export async function updateIndividualScoring(c: Context) {
     const customStatCategoryIds = (t.customStatCategories ?? []).map((c) => c.id);
     t.individualScoring = mergeIndividualScoring(t.individualScoring ?? DEFAULT_INDIVIDUAL_SCORING, body, customStatCategoryIds);
     recomputeAllMatchPoints(t);
+  });
+
+  const tournament = await storage.getTournament(id);
+  return c.json(toAdminTournamentView(tournament));
+}
+
+const ROSTER_TIER_RACE_MAX_LENGTH = 60;
+
+/**
+ * Validates a full roster tier list: 1 to MAX_ROSTER_TIERS tiers (empty tiers allowed, the admin
+ * may just have added one), each race a non-empty string listed in at most one tier.
+ */
+export function validateRosterTiers(value: unknown): RosterTier[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_ROSTER_TIERS) {
+    throw badRequest(`tiers must be an array of 1 to ${MAX_ROSTER_TIERS} tiers`, 'invalid_roster_tiers');
+  }
+  const seen = new Set<string>();
+  return value.map((tier) => {
+    const races = (tier as RosterTier | null)?.races;
+    if (!Array.isArray(races)) throw badRequest('each tier must have a races array', 'invalid_roster_tiers');
+    return {
+      races: races.map((race) => {
+        const name = typeof race === 'string' ? race.trim() : '';
+        if (!name || name.length > ROSTER_TIER_RACE_MAX_LENGTH) {
+          throw badRequest('invalid race name in tiers', 'invalid_roster_tiers');
+        }
+        if (seen.has(name)) throw badRequest(`Race "${name}" is listed in several tiers`, 'invalid_roster_tiers');
+        seen.add(name);
+        return name;
+      }),
+    };
+  });
+}
+
+export async function updateRosterTiers(c: Context) {
+  const id = c.req.param('tournamentId')!;
+  const token = c.req.query('token');
+  const body = await c.req.json<UpdateRosterTiersRequest>().catch(() => null);
+
+  await storage.updateTournament(id, (t) => {
+    requireAdmin(t, token);
+    t.rosterTiers = validateRosterTiers(body?.tiers);
   });
 
   const tournament = await storage.getTournament(id);

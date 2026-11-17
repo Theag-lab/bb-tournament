@@ -7,6 +7,7 @@ import {
   IndividualScoringConfig,
   MatchResult,
   RawPointsComponent,
+  RosterTier,
   Squad,
   SquadScoringConfig,
   SquadStandingEntry,
@@ -17,7 +18,10 @@ import {
   TiebreakerCriterion,
   customTiebreakerCategoryId,
   isCustomTiebreakerCriterion,
+  resolveRosterTiers,
   resolveSquadScoring,
+  rosterTierOf,
+  squadOutcomeKey,
 } from './types';
 
 export const CONCESSION_SCORE = 3;
@@ -229,11 +233,12 @@ export function stableRandomKey(teamId: string): number {
 }
 
 /** One comparator per selectable built-in TiebreakerCriterion except 'head_to_head' (needs the
- * match list rather than just the two aggregate StandingEntry) and `custom:${id}` (needs the
- * category id, handled separately below) — both handled separately in computeStandings.
+ * match list rather than just the two aggregate StandingEntry), 'roster_tier' (needs the teams'
+ * races and the tournament's tiers) and `custom:${id}` (needs the category id) — all handled
+ * separately in computeStandings.
  * More info wins (returns < 0 means `a` ranks first). */
 const TIEBREAKER_COMPARATORS: Record<
-  Exclude<TiebreakerCriterion, 'head_to_head' | `custom:${string}`>,
+  Exclude<TiebreakerCriterion, 'head_to_head' | 'roster_tier' | `custom:${string}`>,
   (a: StandingEntry, b: StandingEntry) => number
 > = {
   fewest_td_conceded: (a, b) => a.tdAgainst - b.tdAgainst,
@@ -296,8 +301,11 @@ export function computeStandings(
   teams: Team[],
   challenges: Challenge[],
   config: IndividualScoringConfig,
-  customStatCategories: CustomStatCategoryConfig[] = []
+  customStatCategories: CustomStatCategoryConfig[] = [],
+  rosterTiers: RosterTier[] | null = null
 ): StandingEntry[] {
+  const tiers = resolveRosterTiers(rosterTiers);
+  const tierOfTeam = new Map(teams.map((t) => [t.id, rosterTierOf(t.race, tiers)]));
   const byTeam = new Map<string, StandingEntry>();
   for (const team of teams) {
     byTeam.set(team.id, {
@@ -386,7 +394,9 @@ export function computeStandings(
         ? compareCustomStat(customTiebreakerCategoryId(criterion)!, a, b)
         : criterion === 'head_to_head'
           ? compareHeadToHead(challenges, a, b)
-          : TIEBREAKER_COMPARATORS[criterion](a, b);
+          : criterion === 'roster_tier'
+            ? (tierOfTeam.get(b.teamId) ?? 0) - (tierOfTeam.get(a.teamId) ?? 0)
+            : TIEBREAKER_COMPARATORS[criterion](a, b);
       if (cmp !== 0) return cmp;
     }
     // Final deterministic fallback so equal totals never leave the order ambiguous, even if
@@ -437,44 +447,46 @@ export function computeCustomStatLeaderboards(
 }
 
 /**
- * Maps one side's net board differential for a round (boards won minus boards lost, positive =
- * that side won more boards) to its squad points for that round's tier, per the
- * organiser-configured SquadScoringConfig. Asymmetric by design: the win side has 3 tiers
- * (small/plain/total), the loss side only 2 (small/plain) — see SquadScoringConfig's doc comment.
+ * Squad points for one side's board record in a round (W-D-L from that side's point of view):
+ * win/draw/loss by boards won vs lost, upgraded to "grande victoire" or "petite défaite" when
+ * bonus tiers are on and that exact record is listed — see SquadScoringConfig.
  */
-function squadPointsForDiff(diff: number, cfg: SquadScoringConfig): number {
-  if (diff === 0) return cfg.pointsDraw;
-  const abs = Math.abs(diff);
-  if (diff > 0) {
-    if (abs >= cfg.bigMarginMinDiff) return cfg.pointsBigWin;
-    if (abs > cfg.smallMarginMaxDiff) return cfg.pointsWin;
-    return cfg.pointsSmallWin;
-  }
-  return abs > cfg.smallMarginMaxDiff ? cfg.pointsLoss : cfg.pointsSmallLoss;
+export function squadPointsForOutcome(wins: number, draws: number, losses: number, cfg: SquadScoringConfig): number {
+  const key = squadOutcomeKey(wins, draws, losses);
+  if (wins > losses) return cfg.bonusTiers && cfg.bigWinOutcomes.includes(key) ? cfg.pointsBigWin : cfg.pointsWin;
+  if (wins < losses) return cfg.bonusTiers && cfg.smallLossOutcomes.includes(key) ? cfg.pointsSmallLoss : cfg.pointsLoss;
+  return cfg.pointsDraw;
 }
 
 /**
  * Squad-level standings for 'team' format tournaments: aggregates every completed match played
- * by each squad's member teams. Squad score/tier comes from `squadPointsForDiff`, not the
+ * by each squad's member teams. Squad score comes from `squadPointsForOutcome`, not the
  * individual W/D/L points used by `computeStandings` — the two are independent scoring systems.
  *
- * W/D/L and tier points are per ROUND, not per individual match: each round a squad plays exactly
+ * W/D/L and squad points are per ROUND, not per individual match: each round a squad plays exactly
  * one opposing squad (its members' matches are the "boards" of that one round-matchup, like a
- * chess team match). A round's tier is decided by the squad's net BOARD differential — boards won
- * minus boards lost that round, each board's own win/draw/loss always by plain TD comparison — not
- * by TD-difference or points margin of any single match. E.g. sweeping 5-0-0 (diff +5) is a bigger
- * win than squeaking by 3-2-0 (diff +1), even though both are "the squad won more boards than it
- * lost"; `squadPointsForDiff` buckets that differential into the 6 configured tiers.
+ * chess team match). A round's result is decided by the squad's BOARD record — boards won / drawn /
+ * lost that round, each board by plain TD comparison — not by the TD-difference of any single
+ * match; `squadPointsForOutcome` turns that record into points.
  */
 export function computeSquadStandings(
   squads: Squad[],
   teams: Team[],
   challenges: Challenge[],
-  scoring: SquadScoringConfig,
+  rawScoring: Partial<SquadScoringConfig>,
   individualScoring: IndividualScoringConfig = DEFAULT_INDIVIDUAL_SCORING,
-  customStatCategories: CustomStatCategoryConfig[] = []
+  customStatCategories: CustomStatCategoryConfig[] = [],
+  rosterTiers: RosterTier[] | null = null
 ): SquadStandingEntry[] {
+  const scoring = resolveSquadScoring(rawScoring);
   const squadOfTeam = new Map(teams.map((t) => [t.id, t.squadId]));
+  // Sum of the members' roster tiers, for the `roster_tier` squad tiebreaker.
+  const tiers = resolveRosterTiers(rosterTiers);
+  const tierSumOfSquad = new Map<string, number>();
+  for (const team of teams) {
+    if (!team.squadId) continue;
+    tierSumOfSquad.set(team.squadId, (tierSumOfSquad.get(team.squadId) ?? 0) + rosterTierOf(team.race, tiers));
+  }
   const byId = new Map<string, SquadStandingEntry>();
   for (const squad of squads) {
     byId.set(squad.id, {
@@ -496,14 +508,14 @@ export function computeSquadStandings(
     });
   }
 
-  for (const standing of computeStandings(teams, challenges, individualScoring, customStatCategories)) {
+  for (const standing of computeStandings(teams, challenges, individualScoring, customStatCategories, rosterTiers)) {
     const squadId = squadOfTeam.get(standing.teamId);
     const entry = squadId ? byId.get(squadId) : undefined;
     if (entry) entry.memberPoints += standing.points;
   }
 
-  // Per-round squad-vs-squad matchup board tallies, keyed so both member pairings of the same
-  // round land in the same bucket regardless of which squad is team1/team2 on a given match.
+  // Per-round squad-vs-squad pair board tallies (head-to-head only), keyed so both member pairings
+  // of the same round land in the same bucket regardless of which squad is team1/team2.
   interface RoundMatchup {
     squadA: string;
     squadB: string;
@@ -511,6 +523,31 @@ export function computeSquadStandings(
     boardLossesA: number;
   }
   const roundMatchups = new Map<string, RoundMatchup>();
+
+  // One squad's whole board record for one round, whoever the boards were against: with an odd
+  // number of squads, three of them play a "triangle" (half their boards against each of the two
+  // others) and their round result is the record over all their boards, scored like any other.
+  // Free challenges (no round) keep one record per opponent squad.
+  interface RoundRecord {
+    squadId: string;
+    wins: number;
+    draws: number;
+    losses: number;
+    opponents: Set<string>;
+  }
+  const roundRecords = new Map<string, RoundRecord>();
+  const recordBoard = (round: number | null, squadId: string, opponentSquadId: string, outcome: number) => {
+    const key = round === null ? `null:${squadId}:${opponentSquadId}` : `${round}:${squadId}`;
+    let record = roundRecords.get(key);
+    if (!record) {
+      record = { squadId, wins: 0, draws: 0, losses: 0, opponents: new Set() };
+      roundRecords.set(key, record);
+    }
+    record.opponents.add(opponentSquadId);
+    if (outcome > 0) record.wins += 1;
+    else if (outcome < 0) record.losses += 1;
+    else record.draws += 1;
+  };
 
   for (const challenge of challenges) {
     if (challenge.status !== 'completed' || !challenge.result) continue;
@@ -552,47 +589,45 @@ export function computeSquadStandings(
     const boardOutcomeForA = squad1Id === squadA ? boardOutcomeForSquad1 : -boardOutcomeForSquad1;
     if (boardOutcomeForA > 0) matchup.boardWinsA += 1;
     else if (boardOutcomeForA < 0) matchup.boardLossesA += 1;
+    recordBoard(challenge.round, squad1Id, squad2Id, boardOutcomeForSquad1);
+    recordBoard(challenge.round, squad2Id, squad1Id, -boardOutcomeForSquad1);
   }
 
-  // Head-to-head: round wins of squadA minus round wins of squadB, over every round they met.
+  // Head-to-head: round wins of squadA minus round wins of squadB, over every round they met (in a
+  // triangle, only the boards the two squads played against each other).
   const headToHeadNetA = new Map<string, number>();
-
   for (const { squadA, squadB, boardWinsA, boardLossesA } of roundMatchups.values()) {
-    const eA = byId.get(squadA);
-    const eB = byId.get(squadB);
-    if (!eA || !eB) continue;
-    const netBoardsA = boardWinsA - boardLossesA;
     const pairKey = `${squadA}:${squadB}`;
-    headToHeadNetA.set(pairKey, (headToHeadNetA.get(pairKey) ?? 0) + Math.sign(netBoardsA));
-    eA.points += squadPointsForDiff(netBoardsA, scoring);
-    eB.points += squadPointsForDiff(-netBoardsA, scoring);
-    if (netBoardsA > 0) {
-      eA.wins += 1;
-      eB.losses += 1;
-    } else if (netBoardsA < 0) {
-      eB.wins += 1;
-      eA.losses += 1;
-    } else {
-      eA.draws += 1;
-      eB.draws += 1;
-    }
+    headToHeadNetA.set(pairKey, (headToHeadNetA.get(pairKey) ?? 0) + Math.sign(boardWinsA - boardLossesA));
   }
 
-  // Strength of schedule, from final squad points: needs every round tallied first.
-  for (const { squadA, squadB } of roundMatchups.values()) {
-    const eA = byId.get(squadA);
-    const eB = byId.get(squadB);
-    if (!eA || !eB) continue;
-    eA.opponentScore += eB.points;
-    eB.opponentScore += eA.points;
+  for (const { squadId, wins, draws, losses } of roundRecords.values()) {
+    const entry = byId.get(squadId)!;
+    entry.points += squadPointsForOutcome(wins, draws, losses, scoring);
+    if (wins > losses) entry.wins += 1;
+    else if (wins < losses) entry.losses += 1;
+    else entry.draws += 1;
   }
 
-  const criteria = resolveSquadScoring(scoring).tiebreakers;
+  // Strength of schedule, from final squad points: needs every round tallied first. A triangle
+  // round counts the average of its two opponents, so it weighs like any other round.
+  for (const { squadId, opponents } of roundRecords.values()) {
+    const entry = byId.get(squadId)!;
+    let sum = 0;
+    for (const opponentId of opponents) sum += byId.get(opponentId)?.points ?? 0;
+    entry.opponentScore += sum / opponents.size;
+  }
+
+  const criteria = scoring.tiebreakers;
   return Array.from(byId.values()).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     for (const criterion of criteria) {
       const cmp =
-        criterion === 'head_to_head' ? compareSquadHeadToHead(headToHeadNetA, a, b) : SQUAD_TIEBREAKER_COMPARATORS[criterion](a, b);
+        criterion === 'head_to_head'
+          ? compareSquadHeadToHead(headToHeadNetA, a, b)
+          : criterion === 'roster_tier'
+            ? (tierSumOfSquad.get(b.squadId) ?? 0) - (tierSumOfSquad.get(a.squadId) ?? 0)
+            : SQUAD_TIEBREAKER_COMPARATORS[criterion](a, b);
       if (cmp !== 0) return cmp;
     }
     // Final deterministic fallback so equal squads never leave the order ambiguous.
@@ -614,7 +649,7 @@ function compareSquadHeadToHead(headToHeadNetA: Map<string, number>, a: SquadSta
 
 /** Squad equivalent of TIEBREAKER_COMPARATORS — more info wins (returns < 0 means `a` ranks first). */
 const SQUAD_TIEBREAKER_COMPARATORS: Record<
-  Exclude<SquadTiebreakerCriterion, 'head_to_head'>,
+  Exclude<SquadTiebreakerCriterion, 'head_to_head' | 'roster_tier'>,
   (a: SquadStandingEntry, b: SquadStandingEntry) => number
 > = {
   member_points: (a, b) => b.memberPoints - a.memberPoints,
@@ -627,3 +662,31 @@ const SQUAD_TIEBREAKER_COMPARATORS: Record<
   fewest_td_conceded: (a, b) => a.tdAgainst - b.tdAgainst,
   random: (a, b) => stableRandomKey(a.squadId) - stableRandomKey(b.squadId),
 };
+
+/**
+ * Each squad's opposing squads among one round's matches. A squad with two opponents plays that
+ * round's triangle (odd number of squads); the third squad of a confrontation's triangle is the
+ * one both of its squads face besides each other.
+ */
+export function roundSquadOpponents(
+  matches: { team1Id: string; team2Id: string }[],
+  squadOf: (teamId: string) => string | null
+): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  for (const m of matches) {
+    const [x, y] = [squadOf(m.team1Id), squadOf(m.team2Id)];
+    if (!x || !y || x === y) continue;
+    if (!map.has(x)) map.set(x, new Set());
+    if (!map.has(y)) map.set(y, new Set());
+    map.get(x)!.add(y);
+    map.get(y)!.add(x);
+  }
+  return map;
+}
+
+/** The third squad of the triangle `squadA` and `squadB` play in, or null for a plain confrontation. */
+export function triangleThirdSquad(opponents: Map<string, Set<string>>, squadA: string, squadB: string): string | null {
+  for (const id of opponents.get(squadA) ?? []) if (id !== squadB) return id;
+  for (const id of opponents.get(squadB) ?? []) if (id !== squadA) return id;
+  return null;
+}

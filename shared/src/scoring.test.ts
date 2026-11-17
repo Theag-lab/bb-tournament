@@ -466,61 +466,57 @@ describe('computeSquadStandings — board-diff round tiering', () => {
     assert.deepEqual([b.wins, b.draws, b.losses], [0, 1, 1]);
   });
 
-  test('board-diff of exactly +1 lands in the smallWin tier', () => {
-    const teams = [...squadTeams(5, 'A', 'a'), ...squadTeams(5, 'B', 'b')];
-    // 3 wins, 2 losses -> net +1
-    const round: Challenge[] = [
-      completedChallenge('a0', 'b0', 1, matchResult({ team1Td: 2, team2Td: 0 })),
-      completedChallenge('a1', 'b1', 1, matchResult({ team1Td: 2, team2Td: 0 })),
-      completedChallenge('a2', 'b2', 1, matchResult({ team1Td: 2, team2Td: 0 })),
-      completedChallenge('a3', 'b3', 1, matchResult({ team1Td: 0, team2Td: 2 })),
-      completedChallenge('a4', 'b4', 1, matchResult({ team1Td: 0, team2Td: 2 })),
-    ];
-    const standings = computeSquadStandings(squads, teams, round, DEFAULT_SQUAD_SCORING);
-    const a = standings.find((s) => s.squadId === 'A')!;
-    assert.equal(a.points, DEFAULT_SQUAD_SCORING.pointsSmallWin);
+  // Board records for squads of 5: [team1Td, team2Td] per board, squad A always team1.
+  const W: [number, number] = [2, 0];
+  const D: [number, number] = [1, 1];
+  const L: [number, number] = [0, 2];
+  const roundOf = (boards: [number, number][]): Challenge[] =>
+    boards.map(([t1, t2], i) => completedChallenge(`a${i}`, `b${i}`, 1, matchResult({ team1Td: t1, team2Td: t2 })));
+  const pointsOf = (boards: [number, number][], scoring: Partial<SquadScoringConfig>) => {
+    const teams = [...squadTeams(boards.length, 'A', 'a'), ...squadTeams(boards.length, 'B', 'b')];
+    const standings = computeSquadStandings(squads, teams, roundOf(boards), scoring);
+    return [standings.find((s) => s.squadId === 'A')!.points, standings.find((s) => s.squadId === 'B')!.points];
+  };
+  const bonus: Partial<SquadScoringConfig> = {
+    ...DEFAULT_SQUAD_SCORING,
+    bonusTiers: true,
+    pointsBigWin: 5,
+    pointsSmallLoss: 1,
+    bigWinOutcomes: ['5-0-0', '4-1-0', '3-2-0'],
+    smallLossOutcomes: ['2-0-3', '1-2-2'],
+  };
+
+  test('simple system by default: any win is a plain win, any loss a plain loss', () => {
+    assert.deepEqual(pointsOf([W, W, W, W, W], DEFAULT_SQUAD_SCORING), [3, 0]);
+    assert.deepEqual(pointsOf([W, W, W, L, L], DEFAULT_SQUAD_SCORING), [3, 0]);
+    assert.deepEqual(pointsOf([W, W, D, L, L], DEFAULT_SQUAD_SCORING), [1, 1]);
   });
 
-  test('board-diff of +2 (above smallMarginMaxDiff, below bigMarginMinDiff) lands in the plain win tier', () => {
-    const teams = [...squadTeams(5, 'A', 'a'), ...squadTeams(5, 'B', 'b')];
-    // 3 wins, 1 draw, 1 loss -> net +2
-    const round: Challenge[] = [
-      completedChallenge('a0', 'b0', 1, matchResult({ team1Td: 2, team2Td: 0 })),
-      completedChallenge('a1', 'b1', 1, matchResult({ team1Td: 2, team2Td: 0 })),
-      completedChallenge('a2', 'b2', 1, matchResult({ team1Td: 2, team2Td: 0 })),
-      completedChallenge('a3', 'b3', 1, matchResult({ team1Td: 1, team2Td: 1 })),
-      completedChallenge('a4', 'b4', 1, matchResult({ team1Td: 0, team2Td: 2 })),
-    ];
-    const standings = computeSquadStandings(squads, teams, round, DEFAULT_SQUAD_SCORING);
-    const a = standings.find((s) => s.squadId === 'A')!;
-    assert.equal(a.points, DEFAULT_SQUAD_SCORING.pointsWin);
+  test('bonus tiers: only the listed board records are a big win / small loss', () => {
+    assert.deepEqual(pointsOf([W, W, W, D, D], bonus), [5, 0]); // 3-2-0 listed; mirror 0-2-3 not a small loss
+    assert.deepEqual(pointsOf([W, W, W, W, L], bonus), [3, 0]); // 4-0-1 not listed, same +3 as 3-2-0
+    assert.deepEqual(pointsOf([W, W, W, L, L], bonus), [3, 1]); // 3-0-2 plain win, 2-0-3 small loss
+    assert.deepEqual(pointsOf([W, W, D, D, L], bonus), [3, 1]); // 2-2-1 plain win, 1-2-2 small loss
   });
 
-  test('board-diff at/above bigMarginMinDiff (3) lands in the "victoire totale" tier', () => {
-    const teams = [...squadTeams(5, 'A', 'a'), ...squadTeams(5, 'B', 'b')];
-    const round: Challenge[] = [
-      completedChallenge('a0', 'b0', 1, matchResult({ team1Td: 2, team2Td: 0 })),
-      completedChallenge('a1', 'b1', 1, matchResult({ team1Td: 2, team2Td: 0 })),
-      completedChallenge('a2', 'b2', 1, matchResult({ team1Td: 2, team2Td: 0 })),
-      completedChallenge('a3', 'b3', 1, matchResult({ team1Td: 2, team2Td: 0 })),
-      completedChallenge('a4', 'b4', 1, matchResult({ team1Td: 0, team2Td: 2 })),
-    ];
-    const standings = computeSquadStandings(squads, teams, round, DEFAULT_SQUAD_SCORING);
-    const a = standings.find((s) => s.squadId === 'A')!;
-    assert.equal(a.points, DEFAULT_SQUAD_SCORING.pointsBigWin);
+  test('listed records are ignored while bonus tiers are off', () => {
+    assert.deepEqual(pointsOf([W, W, W, D, D], { ...bonus, bonusTiers: false }), [3, 0]);
   });
 
-  test('squad of size 2: "victoire totale" is unreachable, a full sweep lands in the plain win tier', () => {
-    const smallSquads: Squad[] = squads;
-    const teams = [...squadTeams(2, 'A', 'a'), ...squadTeams(2, 'B', 'b')];
-    const round: Challenge[] = [
-      completedChallenge('a0', 'b0', 1, matchResult({ team1Td: 2, team2Td: 0 })),
-      completedChallenge('a1', 'b1', 1, matchResult({ team1Td: 2, team2Td: 0 })),
-    ];
-    const standings = computeSquadStandings(smallSquads, teams, round, DEFAULT_SQUAD_SCORING);
-    const a = standings.find((s) => s.squadId === 'A')!;
-    assert.equal(a.points, DEFAULT_SQUAD_SCORING.pointsWin);
-    assert.notEqual(a.points, DEFAULT_SQUAD_SCORING.pointsBigWin);
+  test('a stored board-diff config comes back as the simple system with its own win/draw/loss points', () => {
+    const legacy = {
+      smallMarginMaxDiff: 1,
+      bigMarginMinDiff: 3,
+      pointsBigWin: 5,
+      pointsWin: 4,
+      pointsSmallWin: 3,
+      pointsDraw: 2,
+      pointsSmallLoss: 1,
+      pointsLoss: 0,
+    } as Partial<SquadScoringConfig>;
+    assert.deepEqual(pointsOf([W, W, W, W, W], legacy), [4, 0]);
+    assert.deepEqual(pointsOf([W, W, W, L, L], legacy), [4, 0]);
+    assert.deepEqual(pointsOf([W, W, D, L, L], legacy), [2, 2]);
   });
 
   test('board result is always the plain TD comparison, independent of any individual scoring config', () => {
@@ -545,8 +541,10 @@ describe('computeSquadStandings — board-diff round tiering', () => {
     ];
     const standings = computeSquadStandings(squads, teams, round, DEFAULT_SQUAD_SCORING);
     const a = standings.find((s) => s.squadId === 'A')!;
-    // Only 1 board completed -> net +1 -> smallWin, not a bigger tier from the other (uncounted) boards.
-    assert.equal(a.points, DEFAULT_SQUAD_SCORING.pointsSmallWin);
+    // Only 1 board completed -> 1-0-0, not 3-0-0 from the other (uncounted) boards.
+    const bigOnly3 = { ...DEFAULT_SQUAD_SCORING, bonusTiers: true, bigWinOutcomes: ['3-0-0'] };
+    assert.equal(a.points, DEFAULT_SQUAD_SCORING.pointsWin);
+    assert.equal(computeSquadStandings(squads, teams, round, bigOnly3).find((s) => s.squadId === 'A')!.points, DEFAULT_SQUAD_SCORING.pointsWin);
     assert.equal(a.gamesPlayed, 1);
   });
 
@@ -831,5 +829,82 @@ describe('computeSquadStandings — fewest individual losses', () => {
       const ab = standings.map((s) => s.squadId).filter((id) => id === 'A' || id === 'B');
       assert.deepEqual(ab, ['A', 'B']);
     }
+  });
+});
+
+describe('roster_tier tiebreaker', () => {
+  // Orc is tier 0, Human tier 2, Halflings tier 4 in the default tiers.
+  const teams = [
+    { id: 'orc', race: 'Orc', squadId: 'A' },
+    { id: 'human', race: 'Human', squadId: 'A' },
+    { id: 'flings', race: 'Halflings', squadId: 'B' },
+    { id: 'mystery', race: 'Homebrew', squadId: 'B' },
+  ] as Team[];
+  // Every team ends on one draw 0-0: all level on points, TD and casualties.
+  const draws: Challenge[] = [
+    completedChallenge('orc', 'flings', 1, matchResult({ team1Td: 0, team2Td: 0, team1Points: 2, team2Points: 2 })),
+    completedChallenge('human', 'mystery', 1, matchResult({ team1Td: 0, team2Td: 0, team1Points: 2, team2Points: 2 })),
+  ];
+
+  test('individual: the higher tier ranks first, a race in no tier counts as tier 0', () => {
+    const standings = computeStandings(teams, draws, config({ tiebreakers: ['roster_tier'] }));
+    assert.deepEqual(standings.slice(0, 2).map((s) => s.teamId), ['flings', 'human']);
+  });
+
+  test('individual: uses the tournament tiers when given', () => {
+    const tiers = [{ races: ['Halflings'] }, { races: ['Orc'] }];
+    const standings = computeStandings(teams, draws, config({ tiebreakers: ['roster_tier'] }), [], tiers);
+    assert.equal(standings[0].teamId, 'orc');
+  });
+
+  test('squad: sums the members\' tiers', () => {
+    const squads: Squad[] = [
+      { id: 'A', name: 'A', createdAt: '2026-01-01' },
+      { id: 'B', name: 'B', createdAt: '2026-01-01' },
+    ];
+    const scoring = { ...DEFAULT_SQUAD_SCORING, tiebreakers: ['roster_tier' as const] };
+    // A = 0 + 2 = 2, B = 4 + 0 = 4.
+    assert.deepEqual(computeSquadStandings(squads, teams, draws, scoring).map((s) => s.squadId), ['B', 'A']);
+    // Swapped tiers: A = Orc(2) + Human(0) = 2, B = Halflings(0) = 0.
+    const tiers = [{ races: ['Halflings', 'Human'] }, { races: [] }, { races: ['Orc'] }];
+    assert.deepEqual(
+      computeSquadStandings(squads, teams, draws, scoring, DEFAULT_INDIVIDUAL_SCORING, [], tiers).map((s) => s.squadId),
+      ['A', 'B']
+    );
+  });
+});
+
+describe('computeSquadStandings — triangle round (odd number of squads)', () => {
+  const squads: Squad[] = ['A', 'B', 'C'].map((id) => ({ id, name: id, createdAt: '2026-01-01' }));
+  const teams = ['A', 'B', 'C'].flatMap((s) => [1, 2, 3, 4].map((n) => ({ id: `${s.toLowerCase()}${n}`, squadId: s }))) as Team[];
+  const win = matchResult({ team1Td: 1, team2Td: 0 });
+  const draw = matchResult({ team1Td: 0, team2Td: 0 });
+  // A: 1-0-1 against B and 1-1-0 against C -> 2-1-1 over the round: a win.
+  // B: 1-0-1 against A, 2-0-0 against C -> 3-0-1: a win. C: 0-1-1 vs A, 0-0-2 vs B -> 0-1-3: a loss.
+  const round: Challenge[] = [
+    completedChallenge('a1', 'b1', 1, win),
+    completedChallenge('b2', 'a3', 1, win),
+    completedChallenge('b3', 'c1', 1, win),
+    completedChallenge('b4', 'c2', 1, win),
+    completedChallenge('c3', 'a2', 1, draw),
+    completedChallenge('a4', 'c4', 1, win),
+  ];
+
+  test('each squad is scored on its record over all its boards of the round', () => {
+    const standings = computeSquadStandings(squads, teams, round, DEFAULT_SQUAD_SCORING);
+    const of = (id: string) => standings.find((s) => s.squadId === id)!;
+    assert.deepEqual([of('A').wins, of('A').draws, of('A').losses], [1, 0, 0]);
+    assert.deepEqual([of('B').wins, of('B').draws, of('B').losses], [1, 0, 0]);
+    assert.deepEqual([of('C').wins, of('C').draws, of('C').losses], [0, 0, 1]);
+    assert.equal(of('A').points, DEFAULT_SQUAD_SCORING.pointsWin);
+    assert.equal(of('C').points, DEFAULT_SQUAD_SCORING.pointsLoss);
+  });
+
+  test('opponent score averages the two opponents of the triangle', () => {
+    const standings = computeSquadStandings(squads, teams, round, DEFAULT_SQUAD_SCORING);
+    const of = (id: string) => standings.find((s) => s.squadId === id)!;
+    const { pointsWin: w, pointsLoss: l } = DEFAULT_SQUAD_SCORING;
+    assert.equal(of('C').opponentScore, (w + w) / 2);
+    assert.equal(of('A').opponentScore, (w + l) / 2);
   });
 });

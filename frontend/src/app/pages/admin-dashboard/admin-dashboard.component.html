@@ -92,6 +92,15 @@
     >
       Score et Feuille de match
     </button>
+    <button
+      *ngIf="showTieringTab"
+      type="button"
+      class="tab-btn"
+      [class.active]="activeAdminTab === 'tiering'"
+      (click)="activeAdminTab = 'tiering'"
+    >
+      Tiering
+    </button>
     <button type="button" class="tab-btn" [class.active]="activeAdminTab === 'backups'" (click)="openBackupsTab()">
       🚑 Urgences
     </button>
@@ -444,6 +453,7 @@
         >
           <div class="challenge-head">
             <strong>
+              <span class="table-no" *ngIf="row.tableNumber">Table {{ row.tableNumber }} ·</span>
               {{ matchPrimaryLabel(row.leftTeamId) }} vs {{ matchPrimaryLabel(row.rightTeamId) }}
               <span *ngIf="isLockedMatch(r, row.leftTeamId, row.rightTeamId)" title="Appariement forcé par l'admin">🔒</span>
             </strong>
@@ -456,9 +466,6 @@
           </div>
           <div class="subtext" *ngIf="!isTeamFormat">
             {{ teamRace(row.leftTeamId) }} vs {{ teamRace(row.rightTeamId) }}
-          </div>
-          <div class="subtext" *ngIf="isPoolsKnockout && r.number <= (t.poolRoundCount || 0)">
-            {{ poolName(teamPoolId(row.leftTeamId)) }}
           </div>
 
           <p *ngIf="row.challenge.result" class="muted">
@@ -1120,43 +1127,112 @@
     <section class="card scope-card scope-squad" *ngIf="squadScoringDraft as scoring">
       <h2><span class="scope-tag">Équipe</span> Barème de score d'équipe</h2>
       <p class="muted">
-        Points attribués à l'escouade selon l'écart de touchdowns du match (indépendant des points individuels
-        W/N/D). "Victoire totale" s'applique à partir du seuil haut ; en dessous du seuil bas, il s'agit d'une
-        "petite" victoire/défaite.
+        Chaque ronde, l'équipe gagne si ses coachs remportent plus de matchs qu'ils n'en perdent, fait nul s'ils en
+        remportent autant, et perd sinon (indépendant des points individuels).
       </p>
 
-      <div class="field">
-        <label for="scoring-small-margin">Écart maximum pour une "petite" victoire/défaite</label>
-        <input id="scoring-small-margin" type="number" name="smallMarginMaxDiff" [(ngModel)]="scoring.smallMarginMaxDiff" min="1" />
+      <div class="squad-points-row">
+        <div class="field">
+          <label for="scoring-win">Victoire</label>
+          <input id="scoring-win" type="number" name="pointsWin" [(ngModel)]="scoring.pointsWin" min="0" />
+        </div>
+        <div class="field">
+          <label for="scoring-draw">Nul</label>
+          <input id="scoring-draw" type="number" name="pointsDraw" [(ngModel)]="scoring.pointsDraw" min="0" />
+        </div>
+        <div class="field">
+          <label for="scoring-loss">Défaite</label>
+          <input id="scoring-loss" type="number" name="pointsLoss" [(ngModel)]="scoring.pointsLoss" min="0" />
+        </div>
       </div>
-      <div class="field">
-        <label for="scoring-big-margin">Écart minimum pour une "victoire totale"</label>
-        <input id="scoring-big-margin" type="number" name="bigMarginMinDiff" [(ngModel)]="scoring.bigMarginMinDiff" min="2" />
-      </div>
-      <div class="field">
-        <label for="scoring-big-win">Points — victoire totale</label>
-        <input id="scoring-big-win" type="number" name="pointsBigWin" [(ngModel)]="scoring.pointsBigWin" min="0" />
-      </div>
-      <div class="field">
-        <label for="scoring-win">Points — victoire</label>
-        <input id="scoring-win" type="number" name="pointsWin" [(ngModel)]="scoring.pointsWin" min="0" />
-      </div>
-      <div class="field">
-        <label for="scoring-small-win">Points — petite victoire</label>
-        <input id="scoring-small-win" type="number" name="pointsSmallWin" [(ngModel)]="scoring.pointsSmallWin" min="0" />
-      </div>
-      <div class="field">
-        <label for="scoring-draw">Points — nul</label>
-        <input id="scoring-draw" type="number" name="pointsDraw" [(ngModel)]="scoring.pointsDraw" min="0" />
-      </div>
-      <div class="field">
-        <label for="scoring-small-loss">Points — petite défaite</label>
-        <input id="scoring-small-loss" type="number" name="pointsSmallLoss" [(ngModel)]="scoring.pointsSmallLoss" min="0" />
-      </div>
-      <div class="field">
-        <label for="scoring-loss">Points — défaite</label>
-        <input id="scoring-loss" type="number" name="pointsLoss" [(ngModel)]="scoring.pointsLoss" min="0" />
-      </div>
+
+      <label class="checkbox-line">
+        <input type="checkbox" name="bonusTiers" [(ngModel)]="scoring.bonusTiers" />
+        Activer les grandes victoires / petites défaites
+      </label>
+
+      <ng-container *ngIf="scoring.bonusTiers">
+        <ng-container *ngIf="squadOutcomes() as outcomes; else noSquadSize">
+          <p class="muted">
+            Cochez les résultats (matchs gagnés / nuls / perdus par les coachs de l'équipe) qui valent une grande
+            victoire ou une petite défaite ; les autres restent des victoires ou défaites simples. Seuls les
+            résultats d'une équipe complète ({{ t.squadSize }} coachs) sont listés.
+          </p>
+          <div class="squad-points-row">
+            <div class="field">
+              <label for="scoring-big-win">Grande victoire</label>
+              <input id="scoring-big-win" type="number" name="pointsBigWin" [(ngModel)]="scoring.pointsBigWin" min="0" />
+            </div>
+            <div class="field">
+              <label for="scoring-small-loss">Petite défaite</label>
+              <input id="scoring-small-loss" type="number" name="pointsSmallLoss" [(ngModel)]="scoring.pointsSmallLoss" min="0" />
+            </div>
+          </div>
+
+          <div class="squad-outcomes">
+            <div class="squad-outcome-col">
+              <h3>Victoires</h3>
+              <div class="actions">
+                <button type="button" class="btn" (click)="selectBigWinsWithoutLoss()">Sans match perdu</button>
+                <button type="button" class="btn" (click)="clearSquadOutcomes('bigWinOutcomes')">Tout décocher</button>
+              </div>
+              <table>
+                <thead>
+                  <tr><th>G / N / P</th><th>Grande ?</th><th>Points</th></tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let o of outcomes.wins; trackBy: trackBySquadOutcome" [class.outcome-selected]="isSquadOutcomeSelected('bigWinOutcomes', o.key)">
+                    <td><label [for]="'big-' + o.key">{{ o.wins }} / {{ o.draws }} / {{ o.losses }}</label></td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        [id]="'big-' + o.key"
+                        [checked]="isSquadOutcomeSelected('bigWinOutcomes', o.key)"
+                        (change)="toggleSquadOutcome('bigWinOutcomes', o.key, $any($event.target).checked)"
+                      />
+                    </td>
+                    <td>{{ isSquadOutcomeSelected('bigWinOutcomes', o.key) ? scoring.pointsBigWin : scoring.pointsWin }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="squad-outcome-col">
+              <h3>Défaites</h3>
+              <div class="actions">
+                <button type="button" class="btn" (click)="selectSmallLossesByOne()">Un seul match d'écart</button>
+                <button type="button" class="btn" (click)="clearSquadOutcomes('smallLossOutcomes')">Tout décocher</button>
+              </div>
+              <table>
+                <thead>
+                  <tr><th>G / N / P</th><th>Petite ?</th><th>Points</th></tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let o of outcomes.losses; trackBy: trackBySquadOutcome" [class.outcome-selected]="isSquadOutcomeSelected('smallLossOutcomes', o.key)">
+                    <td><label [for]="'small-' + o.key">{{ o.wins }} / {{ o.draws }} / {{ o.losses }}</label></td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        [id]="'small-' + o.key"
+                        [checked]="isSquadOutcomeSelected('smallLossOutcomes', o.key)"
+                        (change)="toggleSquadOutcome('smallLossOutcomes', o.key, $any($event.target).checked)"
+                      />
+                    </td>
+                    <td>{{ isSquadOutcomeSelected('smallLossOutcomes', o.key) ? scoring.pointsSmallLoss : scoring.pointsLoss }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <p class="muted">
+            Nuls ({{ scoring.pointsDraw }} pt) :
+            <ng-container *ngFor="let o of outcomes.draws; let last = last">{{ o.wins }} / {{ o.draws }} / {{ o.losses }}{{ last ? '' : ', ' }}</ng-container>
+          </p>
+        </ng-container>
+        <ng-template #noSquadSize>
+          <p class="muted">Définissez une taille d'équipe pour choisir les grandes victoires et petites défaites.</p>
+        </ng-template>
+      </ng-container>
 
       <h3>Ordre de départage des équipes</h3>
       <p class="muted">Appliqué dans cet ordre quand deux équipes sont à égalité de points d'équipe.</p>
@@ -1209,6 +1285,76 @@
         [matchSheetConfig]="previewSheet"
         [customStatCategories]="customStatCategoriesDraft"
       ></app-match-result-form>
+    </section>
+  </ng-container>
+
+  <ng-container *ngIf="activeAdminTab === 'tiering' && showTieringTab">
+    <section class="card">
+      <h2>Tiering des rosters</h2>
+      <p class="muted">
+        Utilisé par le critère de départage « tier du roster » : à égalité, le coach qui joue le tier le plus élevé
+        passe devant<ng-container *ngIf="t.format === 'team'"> ; en équipe, on additionne les tiers des rosters des
+        membres</ng-container>. Une race qui n'est dans aucun tier compte comme tier 0.
+      </p>
+      <div class="alert alert-error" *ngIf="rosterTiersError">{{ rosterTiersError }}</div>
+
+      <div class="tier-grid">
+        <div class="tier-block" *ngFor="let tier of rosterTiersDraft; let i = index">
+          <div class="tier-header">
+            <h3>Tier {{ i }}</h3>
+            <button
+              type="button"
+              class="btn btn-danger"
+              *ngIf="rosterTiersDraft.length > 1 && tier.races.length === 0"
+              (click)="removeRosterTier(i)"
+            >
+              Supprimer
+            </button>
+          </div>
+          <ul class="tier-races">
+            <li *ngFor="let race of tier.races">
+              <span [title]="race">
+                {{ raceLabel(race) }}
+                <span class="muted" *ngIf="raceTeamCount(race) as n">({{ n }})</span>
+              </span>
+              <select [ngModel]="i" (ngModelChange)="moveRace(race, $event)" [attr.aria-label]="'Tier de ' + raceLabel(race)">
+                <option *ngFor="let _ of rosterTiersDraft; let j = index" [ngValue]="j">Tier {{ j }}</option>
+                <option [ngValue]="-1">Aucun tier</option>
+              </select>
+            </li>
+            <li *ngIf="tier.races.length === 0" class="muted">Aucune race.</li>
+          </ul>
+        </div>
+
+        <ng-container *ngIf="unassignedRaces() as unassigned">
+          <div class="tier-block" *ngIf="unassigned.length > 0">
+          <div class="tier-header"><h3>Sans tier (compte comme tier 0)</h3></div>
+          <ul class="tier-races">
+            <li *ngFor="let race of unassigned">
+              <span [title]="race">
+                {{ raceLabel(race) }}
+                <span class="muted" *ngIf="raceTeamCount(race) as n">({{ n }})</span>
+              </span>
+              <select [ngModel]="-1" (ngModelChange)="moveRace(race, $event)" [attr.aria-label]="'Tier de ' + raceLabel(race)">
+                <option *ngFor="let _ of rosterTiersDraft; let j = index" [ngValue]="j">Tier {{ j }}</option>
+                <option [ngValue]="-1">Aucun tier</option>
+              </select>
+            </li>
+          </ul>
+          </div>
+        </ng-container>
+      </div>
+      <p class="muted">Entre parenthèses : nombre de coachs inscrits avec cette race.</p>
+
+      <div class="actions">
+        <button type="button" class="btn" [disabled]="rosterTiersDraft.length >= maxRosterTiers" (click)="addRosterTier()">
+          Ajouter un tier
+        </button>
+        <button type="button" class="btn" (click)="resetRosterTiers()">Revenir aux tiers par défaut</button>
+        <button type="button" class="btn btn-primary" [disabled]="savingRosterTiers" (click)="saveRosterTiers()">
+          {{ savingRosterTiers ? 'Enregistrement…' : 'Enregistrer les tiers' }}
+        </button>
+      </div>
     </section>
   </ng-container>
 

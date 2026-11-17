@@ -141,16 +141,15 @@ export interface Pool {
 
 /**
  * Squad-level round scoring, independent from the individual W/D/L points (see
- * IndividualScoringConfig in this file). A squad plays exactly one
- * opposing squad per round (its members' matches are that round's "boards", like a chess team
- * match); the round's outcome is bucketed into one of 6 tiers by the squad's net board
- * differential (boards won minus boards lost that round — NOT the TD-difference of any single
- * match) exactly as specified by the tournament organiser: victoire totale / victoire / petite
- * victoire / nul / petite défaite / défaite — asymmetric by design (3 win tiers, only 2 loss
- * tiers; a crushing win is called out specially but any non-small loss is just "défaite", no
- * separate "big loss" tier). E.g. winning 5 boards to 0 (diff +5) is "victoire totale" while
- * winning 3-2 (diff +1) is only "petite victoire" — both used to count as the same plain "win"
- * before this became board-diff-based.
+ * IndividualScoringConfig in this file). A squad plays exactly one opposing squad per round (its
+ * members' matches are that round's "boards", like a chess team match). The round's result is the
+ * squad's board record "W-D-L" (boards won / drawn / lost, each board by plain TD comparison):
+ * more boards won than lost is a win, as many is a draw, fewer is a loss.
+ *
+ * Simple system by default (victoire / nul / défaite). With `bonusTiers` on, the organiser lists
+ * the exact board records that count as a "grande victoire" (e.g. 5-0-0, 4-1-0, 3-2-0 in squads of
+ * 5) or a "petite défaite" (e.g. 2-0-3, 1-2-2); every other win/loss is a plain one. A board-diff
+ * threshold can't express this: 3-2-0 and 4-0-1 are both +3.
  */
 /**
  * Squad-standings tiebreaker criteria, applied in the order given by `SquadScoringConfig.tiebreakers`
@@ -168,6 +167,7 @@ export type SquadTiebreakerCriterion =
   | 'net_agg'
   | 'most_td_scored'
   | 'fewest_td_conceded'
+  | 'roster_tier'
   | 'random';
 
 export const ALL_SQUAD_TIEBREAKER_CRITERIA: SquadTiebreakerCriterion[] = [
@@ -180,39 +180,62 @@ export const ALL_SQUAD_TIEBREAKER_CRITERIA: SquadTiebreakerCriterion[] = [
   'net_agg',
   'most_td_scored',
   'fewest_td_conceded',
+  'roster_tier',
   'random',
 ];
 
 export interface SquadScoringConfig {
-  smallMarginMaxDiff: number; // board-diff in [1, this] => "petite" tier (win or loss side)
-  bigMarginMinDiff: number; // board-diff >= this => "victoire totale" (win side only)
-  pointsBigWin: number;
   pointsWin: number;
-  pointsSmallWin: number;
   pointsDraw: number;
-  pointsSmallLoss: number;
   pointsLoss: number;
+  /** Enables the "grande victoire" / "petite défaite" tiers below. */
+  bonusTiers: boolean;
+  pointsBigWin: number;
+  pointsSmallLoss: number;
+  /** Board records ("W-D-L", squad's point of view) worth `pointsBigWin`; each has W > L. */
+  bigWinOutcomes: string[];
+  /** Board records ("W-D-L", squad's point of view) worth `pointsSmallLoss`; each has W < L. */
+  smallLossOutcomes: string[];
   /** Optional in stored data: tournaments created before it existed fall back to the default order. */
   tiebreakers?: SquadTiebreakerCriterion[];
 }
 
 export const DEFAULT_SQUAD_SCORING: SquadScoringConfig = {
-  smallMarginMaxDiff: 1,
-  bigMarginMinDiff: 3,
-  pointsBigWin: 5,
-  pointsWin: 4,
-  pointsSmallWin: 3,
-  pointsDraw: 2,
-  pointsSmallLoss: 1,
+  pointsWin: 3,
+  pointsDraw: 1,
   pointsLoss: 0,
+  bonusTiers: false,
+  pointsBigWin: 4,
+  pointsSmallLoss: 1,
+  bigWinOutcomes: [],
+  smallLossOutcomes: [],
   // The order that used to be hardcoded in computeSquadStandings, so existing tournaments keep their ranking.
   tiebreakers: ['net_td', 'net_cas', 'random'],
 };
 
+/** "W-D-L" key of a squad's board record for one round. */
+export function squadOutcomeKey(wins: number, draws: number, losses: number): string {
+  return `${wins}-${draws}-${losses}`;
+}
+
 /** A squad scoring config with `tiebreakers` always filled in (defaults for configs stored before it existed). */
-export function resolveSquadScoring(config: SquadScoringConfig | null | undefined): Required<SquadScoringConfig> {
-  const base = config ?? DEFAULT_SQUAD_SCORING;
-  return { ...base, tiebreakers: [...(base.tiebreakers ?? DEFAULT_SQUAD_SCORING.tiebreakers!)] };
+export function resolveSquadScoring(config: Partial<SquadScoringConfig> | null | undefined): Required<SquadScoringConfig> {
+  // Fields are picked one by one so configs stored with the former board-diff system
+  // (smallMarginMaxDiff, bigMarginMinDiff, pointsSmallWin) come back as the simple system, keeping
+  // their win/draw/loss points and dropping the obsolete fields.
+  const c = config ?? {};
+  const d = DEFAULT_SQUAD_SCORING;
+  return {
+    pointsWin: c.pointsWin ?? d.pointsWin,
+    pointsDraw: c.pointsDraw ?? d.pointsDraw,
+    pointsLoss: c.pointsLoss ?? d.pointsLoss,
+    bonusTiers: c.bonusTiers ?? d.bonusTiers,
+    pointsBigWin: c.pointsBigWin ?? d.pointsBigWin,
+    pointsSmallLoss: c.pointsSmallLoss ?? d.pointsSmallLoss,
+    bigWinOutcomes: [...(c.bigWinOutcomes ?? d.bigWinOutcomes)],
+    smallLossOutcomes: [...(c.smallLossOutcomes ?? d.smallLossOutcomes)],
+    tiebreakers: [...(c.tiebreakers ?? d.tiebreakers!)],
+  };
 }
 
 /**
@@ -234,6 +257,7 @@ export type TiebreakerCriterion =
   | 'net_td'
   | 'net_cas'
   | 'net_agg'
+  | 'roster_tier'
   | 'random'
   | `custom:${string}`;
 
@@ -245,6 +269,7 @@ export const ALL_TIEBREAKER_CRITERIA: TiebreakerCriterion[] = [
   'net_td',
   'net_cas',
   'net_agg',
+  'roster_tier',
   'random',
 ];
 
@@ -403,6 +428,8 @@ export interface Tournament {
   individualScoring: IndividualScoringConfig;
   matchSheetConfig: MatchSheetConfig;
   customStatCategories: CustomStatCategoryConfig[];
+  /** Roster tiers for the `roster_tier` tiebreaker; absent on tournaments created before it (see resolveRosterTiers). */
+  rosterTiers?: RosterTier[] | null;
   roundTimer: RoundTimerState;
   adminToken: string;
   createdAt: string;
@@ -572,6 +599,7 @@ export interface PublicTournament {
   individualScoring: IndividualScoringConfig;
   matchSheetConfig: MatchSheetConfig;
   customStatCategories: CustomStatCategoryConfig[];
+  rosterTiers: RosterTier[];
   roundTimer: RoundTimerState;
   createdAt: string;
   teams: PublicTeam[];
@@ -610,6 +638,7 @@ export interface AdminTournamentView {
   individualScoring: IndividualScoringConfig;
   matchSheetConfig: MatchSheetConfig;
   customStatCategories: CustomStatCategoryConfig[];
+  rosterTiers: RosterTier[];
   roundTimer: RoundTimerState;
   createdAt: string;
   teams: AdminTeamView[];
@@ -678,6 +707,10 @@ export interface CreateTournamentRequest {
 }
 
 export type UpdateIndividualScoringRequest = Partial<IndividualScoringConfig>;
+
+export interface UpdateRosterTiersRequest {
+  tiers: RosterTier[];
+}
 
 export interface UpdateMatchSheetConfigRequest {
   td?: Partial<MatchSheetConfig['td']>;
@@ -850,6 +883,50 @@ export interface SubmitResultRequest {
   // since older clients (and the concession path) never send it.
   customStats?: Record<string, CustomStatValue>;
   concededByTeamId: string | null;
+}
+
+/**
+ * One roster tier for the `roster_tier` tiebreaker. Tiers are ordered: index 0 is "Tier 0" (the
+ * strongest rosters), and a higher index means a harder roster to win with — so on a tie, the coach
+ * playing the higher tier ranks first (in squads: the squad whose members' tiers add up higher).
+ * A race listed in no tier counts as tier 0.
+ */
+export interface RosterTier {
+  races: string[];
+}
+
+export const MAX_ROSTER_TIERS = 10;
+
+export const DEFAULT_ROSTER_TIERS: RosterTier[] = [
+  { races: ['Amazon', 'Old World Alliance', 'Dark Elf', 'Orc'] },
+  { races: ['Wood Elf', 'High Elf', 'Lizardmen', 'Tomb Kings', 'Vampire'] },
+  {
+    races: [
+      'Underworld Denizens',
+      'Necromantic Horror',
+      'Human',
+      'Shambling Undead',
+      'Norse',
+      'Nurgle',
+      'Skaven',
+      'Slann',
+      'Snotlings',
+      'Elven Union',
+    ],
+  },
+  { races: ['Bretonnia', 'Chaos Chosen', 'Khorne', 'Chaos Dwarf', 'Imperial Nobility', 'Chaos Renegade'] },
+  { races: ['Goblins', 'Gnomes', 'Halflings', 'Ogres', 'Black Orc', 'Dwarf'] },
+];
+
+/** The tournament's roster tiers, or the defaults for tournaments that never configured them. */
+export function resolveRosterTiers(tiers: RosterTier[] | null | undefined): RosterTier[] {
+  return (tiers ?? DEFAULT_ROSTER_TIERS).map((tier) => ({ races: [...tier.races] }));
+}
+
+/** Tier number (index) of `race` in `tiers`; 0 when the race is in no tier. */
+export function rosterTierOf(race: string, tiers: RosterTier[]): number {
+  const index = tiers.findIndex((tier) => tier.races.includes(race));
+  return index < 0 ? 0 : index;
 }
 
 export const RACES = [

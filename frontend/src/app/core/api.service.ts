@@ -25,6 +25,7 @@ import type {
   SubmitResultRequest,
   UpdateCustomStatCategoriesRequest,
   UpdateIndividualScoringRequest,
+  UpdateRosterTiersRequest,
   UpdateMatchSheetConfigRequest,
   UpdateRoundTimerRequest,
   UpdateSquadRequest,
@@ -377,6 +378,14 @@ export class ApiService {
   updateIndividualScoring(tournamentId: string, token: string, body: UpdateIndividualScoringRequest) {
     return firstValueFrom(
       this.http.patch<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/individual-scoring`, body, {
+        params: { token },
+      })
+    );
+  }
+
+  updateRosterTiers(tournamentId: string, token: string, body: UpdateRosterTiersRequest) {
+    return firstValueFrom(
+      this.http.put<AdminTournamentView>(`${API_BASE}/tournaments/${tournamentId}/roster-tiers`, body, {
         params: { token },
       })
     );

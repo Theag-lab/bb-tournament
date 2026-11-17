@@ -100,79 +100,82 @@ function buildPriorSquadOpponents(challenges: Challenge[], teamSquad: Map<string
   return map;
 }
 
-/** Squads that already played a triangle: in some earlier round, they met two different squads. */
-function priorTriangleSquads(t: Tournament): Set<string> {
-  const squadOf = teamSquadLookup(t);
-  const opponentsByRoundSquad = new Map<string, Set<string>>();
-  for (const c of t.challenges) {
-    if (c.round === null) continue;
-    const [x, y] = [squadOf(c.team1Id), squadOf(c.team2Id)];
-    if (!x || !y || x === y) continue;
-    for (const [squad, opponent] of [[x, y], [y, x]]) {
-      const key = `${c.round}:${squad}`;
-      if (!opponentsByRoundSquad.has(key)) opponentsByRoundSquad.set(key, new Set());
-      opponentsByRoundSquad.get(key)!.add(opponent);
+/**
+ * Picks the three squads of the triangle from the bottom of `orderedIds` (squad standings), so the
+ * triangle stays at the bottom of the table — a squad may play several triangles. What matters is
+ * that no two coaches meet twice: trios are tried bottom-up (the lowest-ranked squad with the next
+ * lowest ones first) and the first one whose coaches can all face new opponents
+ * (`coachRematches` = 0) is taken; otherwise the one with the fewest coach rematches.
+ */
+export function pickTriangle(orderedIds: string[], coachRematches: (group: SquadGroup) => number = () => 0): Triangle {
+  const bottomUp = orderedIds.slice().reverse();
+  let best: Triangle = [bottomUp[0], bottomUp[1], bottomUp[2]];
+  let bestCost = Infinity;
+  for (let i = 0; i < bottomUp.length; i++) {
+    for (let j = i + 1; j < bottomUp.length; j++) {
+      for (let k = j + 1; k < bottomUp.length; k++) {
+        const triangle: Triangle = [bottomUp[i], bottomUp[j], bottomUp[k]];
+        const cost = coachRematches(triangle);
+        if (cost === 0) return triangle;
+        if (cost < bestCost) [best, bestCost] = [triangle, cost];
+      }
     }
   }
-  const result = new Set<string>();
-  for (const [key, opponents] of opponentsByRoundSquad) {
-    if (opponents.size > 1) result.add(key.slice(key.indexOf(':') + 1));
-  }
-  return result;
+  return best;
 }
 
 /**
- * Picks the three squads of the triangle from the bottom of `orderedIds`. Rotating the triangle
- * comes first (squads that never played one), avoiding rematches second: three fresh squads that
- * haven't met, else the bottom three fresh squads, else any three that haven't met, else the
- * bottom three.
+ * Pairs squads walking down `orderedIds` (squad standings), each one with the nearest squad below
+ * it, preferring in this order: a squad it never met; one it met but whose coaches can all face
+ * new opponents (`coachRematches` = 0); then the fewest coach rematches. Without `coachRematches`
+ * this is plain `pairInOrder`.
  */
-export function pickTriangle(orderedIds: string[], priorOpponents: Map<string, Set<string>>, alreadyInTriangle: Set<string>): Triangle {
-  const bottomUp = orderedIds.slice().reverse();
-  const fresh = bottomUp.filter((id) => !alreadyInTriangle.has(id));
-  const met = (a: string, b: string) => priorOpponents.get(a)?.has(b) ?? false;
-  const firstUnmetTriple = (candidates: string[]): Triangle | null => {
-    for (let i = 0; i < candidates.length; i++) {
-      for (let j = i + 1; j < candidates.length; j++) {
-        if (met(candidates[i], candidates[j])) continue;
-        for (let k = j + 1; k < candidates.length; k++) {
-          if (!met(candidates[i], candidates[k]) && !met(candidates[j], candidates[k])) {
-            return [candidates[i], candidates[j], candidates[k]];
-          }
-        }
-      }
+export function pairSquadsInOrder(
+  orderedIds: string[],
+  priorOpponents: Map<string, Set<string>>,
+  coachRematches: (pair: Pair) => number = () => 0
+): Pair[] {
+  const pairs: Pair[] = [];
+  const used = new Set<string>();
+  for (const a of orderedIds) {
+    if (used.has(a)) continue;
+    used.add(a);
+    let best: string | null = null;
+    let bestScore = Infinity;
+    for (const b of orderedIds) {
+      if (used.has(b)) continue;
+      const score = coachRematches([a, b]) * 2 + (priorOpponents.get(a)?.has(b) ? 1 : 0);
+      if (score < bestScore) [best, bestScore] = [b, score];
+      if (score === 0) break;
     }
-    return null;
-  };
-  const all = [...fresh, ...bottomUp.filter((id) => alreadyInTriangle.has(id))];
-  return (
-    firstUnmetTriple(fresh) ??
-    (fresh.length >= 3 ? [fresh[0], fresh[1], fresh[2]] : null) ??
-    firstUnmetTriple(all) ?? [all[0], all[1], all[2]]
-  );
+    if (best) {
+      used.add(best);
+      pairs.push([a, best]);
+    }
+  }
+  return pairs;
 }
 
-/** Pairs squads in order like `pairInOrder`; an odd count puts three of them in a triangle (listed last). */
+/** Pairs squads (see pairSquadsInOrder); an odd count puts three of them in a triangle (listed last, see pickTriangle). */
 export function groupSquadsInOrder(
   orderedIds: string[],
   priorOpponents: Map<string, Set<string>>,
-  alreadyInTriangle: Set<string> = new Set()
+  coachRematches?: (group: SquadGroup) => number
 ): SquadGroup[] {
-  if (orderedIds.length % 2 === 0) return pairInOrder(orderedIds, priorOpponents);
+  if (orderedIds.length % 2 === 0) return pairSquadsInOrder(orderedIds, priorOpponents, coachRematches);
   if (orderedIds.length < 3) {
     throw forbidden('An odd number of squads needs at least three squads to form a triangle', 'odd_squad_count');
   }
-  const triangle = pickTriangle(orderedIds, priorOpponents, alreadyInTriangle);
-  return [...pairInOrder(orderedIds.filter((id) => !triangle.includes(id)), priorOpponents), triangle];
+  const triangle = pickTriangle(orderedIds, coachRematches);
+  return [...pairSquadsInOrder(orderedIds.filter((id) => !triangle.includes(id)), priorOpponents, coachRematches), triangle];
 }
 
 /**
- * Double-swiss pairing for 'team' format tournaments: squads are paired like teams are in the
- * individual algorithm above (adjacent in squad standings, avoiding squad-level rematches via
- * the same `pairInOrder`), then within each squad pairing, members are matched by their
- * individual rank inside their own squad (1st vs 1st, 2nd vs 2nd, ...) — no individual-level
- * rematch avoidance, squad-level avoidance is considered sufficient (confirmed with the
- * organiser). Uneven squad sizes leave the extra lower-ranked members without a match that round
+ * Double-swiss pairing for 'team' format tournaments: squads are paired adjacent in squad
+ * standings (see pairSquadsInOrder; an odd count adds a triangle, see pickTriangle), then within
+ * each confrontation members are matched by their individual rank inside their own squad (1st vs
+ * 1st, 2nd vs 2nd, ...). The rule above all: two coaches never meet twice where it can be avoided
+ * — it steers both which squads face each other and which coaches. Uneven squad sizes leave the extra lower-ranked members without a match that round
  * (implicit bye, no challenge created for them). Round 1 has no standings yet, so both squads and
  * members are drawn at random instead.
  */
@@ -183,6 +186,11 @@ function generateNextTeamRound(t: Tournament): void {
   assertPreviousRoundComplete(t, roundNumber);
 
   const now = new Date().toISOString();
+  const squadOf = teamSquadLookup(t);
+  const memberOrder = teamMemberOrder(t, roundNumber);
+  const priorCoaches = priorCoachOpponents(t, roundNumber);
+  const membersOf = (squadId: string) => memberOrder.filter((id) => squadOf(id) === squadId);
+  const coachRematches = (group: SquadGroup) => planGroup(group, membersOf, squadOf, priorCoaches).rematches;
   const squadGroups =
     roundNumber === 1
       ? groupSquadsInOrder(shuffle(t.squads.map((s) => s.id)), new Map())
@@ -197,10 +205,10 @@ function generateNextTeamRound(t: Tournament): void {
             t.rosterTiers
           ).map((s) => s.squadId),
           buildPriorSquadOpponents(t.challenges, new Map(t.teams.map((tm) => [tm.id, tm.squadId]))),
-          priorTriangleSquads(t)
+          coachRematches
         );
 
-  t.challenges.push(...buildSquadPairMatches(t, squadGroups, [], roundNumber, now));
+  t.challenges.push(...buildSquadPairMatches(t, squadGroups, [], roundNumber, now, memberOrder));
   t.rounds.push({ number: roundNumber, status: 'draft' });
 }
 
@@ -224,22 +232,25 @@ function teamMemberOrder(t: Tournament, roundNumber: number): string[] {
 
 /**
  * Coach-level matches for the given squad confrontations: the admin's forced coach pairs first,
- * then the remaining members of each side matched by position in `teamMemberOrder` (1st vs 1st,
- * ...); extra members of the bigger squad get a bye.
+ * then the remaining members of each side matched so that no two coaches meet again where
+ * possible, by position in `teamMemberOrder` otherwise (1st vs 1st, ...); extra members of the
+ * bigger squad get a bye.
  *
- * A triangle [A, B, C] splits each squad's remaining members in two alternating halves by rank
- * (1st, 3rd, ... / 2nd, 4th, ...): A's first half faces B's first half, B's second half C's first
- * half, and C's second half A's second half — so with squads of 4, every squad plays 2 boards
- * against each of the two others.
+ * A triangle [A, B, C] splits each squad's remaining members in two halves, one per opposing squad
+ * (with squads of 4, 2 boards against each of the two others) — see planTriangle for how coaches
+ * who already met are kept apart.
  */
-function buildSquadPairMatches(t: Tournament, squadGroups: SquadGroup[], coachLocks: Pair[], roundNumber: number, now: string): Challenge[] {
+function buildSquadPairMatches(
+  t: Tournament,
+  squadGroups: SquadGroup[],
+  coachLocks: Pair[],
+  roundNumber: number,
+  now: string,
+  memberOrder: string[] = teamMemberOrder(t, roundNumber)
+): Challenge[] {
   const squadOf = teamSquadLookup(t);
-  const memberOrder = teamMemberOrder(t, roundNumber);
   const matches: Challenge[] = [];
-  const pairSides = (squadA: string, squadB: string, membersA: string[], membersB: string[]) => {
-    const pairCount = Math.min(membersA.length, membersB.length);
-    for (let i = 0; i < pairCount; i++) matches.push(newMatch(membersA[i], membersB[i], roundNumber, now));
-  };
+  let priorOpponents: Map<string, Set<string>> | null = null; // only computed when there's a triangle
   for (const group of squadGroups) {
     const locks = coachLocks.filter(([x, y]) => {
       const [sx, sy] = [squadOf(x) ?? '', squadOf(y) ?? ''];
@@ -251,19 +262,128 @@ function buildSquadPairMatches(t: Tournament, squadGroups: SquadGroup[], coachLo
       matches.push(group.indexOf(squadOf(x)!) < group.indexOf(squadOf(y)!) ? newMatch(x, y, roundNumber, now) : newMatch(y, x, roundNumber, now));
     }
     const membersOf = (squadId: string) => memberOrder.filter((id) => squadOf(id) === squadId && !lockedIds.has(id));
-    if (group.length === 2) {
-      pairSides(group[0], group[1], membersOf(group[0]), membersOf(group[1]));
-      continue;
-    }
-    const [halvesA, halvesB, halvesC] = group.map((squadId) => {
-      const members = membersOf(squadId);
-      return [members.filter((_, i) => i % 2 === 0), members.filter((_, i) => i % 2 === 1)];
-    });
-    pairSides(group[0], group[1], halvesA[0], halvesB[0]);
-    pairSides(group[1], group[2], halvesB[1], halvesC[0]);
-    pairSides(group[2], group[0], halvesC[1], halvesA[1]);
+    priorOpponents ??= priorCoachOpponents(t, roundNumber);
+    for (const [x, y] of planGroup(group, membersOf, squadOf, priorOpponents).pairs) matches.push(newMatch(x, y, roundNumber, now));
   }
   return matches;
+}
+
+/** Every coach's opponents in earlier rounds (and free challenges), to keep triangle coaches from meeting again. */
+function priorCoachOpponents(t: Tournament, roundNumber: number): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  for (const c of t.challenges) {
+    if (c.round !== null && c.round >= roundNumber) continue;
+    for (const [x, y] of [[c.team1Id, c.team2Id], [c.team2Id, c.team1Id]]) {
+      if (!map.has(x)) map.set(x, new Set());
+      map.get(x)!.add(y);
+    }
+  }
+  return map;
+}
+
+/** Every way to pick `k` of the indices 0..n-1, in lexicographic order. */
+function combinations(n: number, k: number): number[][] {
+  if (k === 0) return [[]];
+  const result: number[][] = [];
+  for (let first = 0; first <= n - k; first++) {
+    for (const rest of combinations(n - first - 1, k - 1)) result.push([first, ...rest.map((i) => i + first + 1)]);
+  }
+  return result;
+}
+
+/**
+ * The ways to split `members` (rank order) into the ones facing the squad's first opponent (the
+ * bigger half when odd) and the ones facing its second: the plain alternating split by rank
+ * (1st, 3rd, ... / 2nd, 4th, ...) first, then every other split.
+ */
+function triangleSplits(members: string[]): [string[], string[]][] {
+  const firstSize = Math.ceil(members.length / 2);
+  const alternating = members.map((_, i) => i).filter((i) => i % 2 === 0);
+  const others = combinations(members.length, firstSize).filter((c) => c.join() !== alternating.join());
+  return [alternating, ...others].map((first) => [members.filter((_, i) => first.includes(i)), members.filter((_, i) => !first.includes(i))]);
+}
+
+/** Coach matches of one confrontation (pair or triangle) and how many of them are coach rematches. */
+export function planGroup(
+  group: SquadGroup,
+  membersOf: (squadId: string) => string[],
+  squadOf: (teamId: string) => string | null,
+  priorOpponents: Map<string, Set<string>>
+): { pairs: [string, string][]; rematches: number } {
+  if (group.length === 3) return planTriangle(group, membersOf, squadOf, priorOpponents);
+  const faced = (x: string, y: string) => priorOpponents.get(x)?.has(y) ?? false;
+  const pairs = pairAvoidingRematches(membersOf(group[0]), membersOf(group[1]), faced);
+  return { pairs, rematches: pairs.filter(([x, y]) => faced(x, y)).length };
+}
+
+/**
+ * Coach matches of the triangle [A, B, C] (A vs B, B vs C, C vs A boards), choosing which coaches
+ * of each squad face which opposing squad, and who faces whom, so that:
+ *  1. as few coaches as possible meet an opponent they already played (`rematches`, the number of
+ *     such matches — what pickTriangle minimises),
+ *  2. then as few as possible face a squad they already played (e.g. A1 and A2 already faced B:
+ *     this time they face C),
+ *  3. then the plain order by rank (alternating halves, 1st vs 1st).
+ */
+export function planTriangle(
+  [a, b, c]: Triangle,
+  membersOf: (squadId: string) => string[],
+  squadOf: (teamId: string) => string | null,
+  priorOpponents: Map<string, Set<string>>
+): { pairs: [string, string][]; rematches: number } {
+  const facedCoach = (x: string, y: string) => priorOpponents.get(x)?.has(y) ?? false;
+  const facedSquad = (coach: string, squadId: string) => [...(priorOpponents.get(coach) ?? [])].some((id) => squadOf(id) === squadId);
+  const splitsA = triangleSplits(membersOf(a)); // [facing B, facing C]
+  const splitsB = triangleSplits(membersOf(b)); // [facing A, facing C]
+  const splitsC = triangleSplits(membersOf(c)); // [facing B, facing A]
+  let best: { pairs: [string, string][]; rematches: number } = { pairs: [], rematches: Infinity };
+  let bestScore = Infinity;
+  for (const [aToB, aToC] of splitsA) {
+    for (const [bToA, bToC] of splitsB) {
+      for (const [cToB, cToA] of splitsC) {
+        const pairs = [
+          ...pairAvoidingRematches(aToB, bToA, facedCoach),
+          ...pairAvoidingRematches(bToC, cToB, facedCoach),
+          ...pairAvoidingRematches(cToA, aToC, facedCoach),
+        ];
+        const rematches = pairs.filter(([x, y]) => facedCoach(x, y)).length;
+        const squadRepeats = pairs.filter(([x, y]) => facedSquad(x, squadOf(y)!) || facedSquad(y, squadOf(x)!)).length;
+        const score = rematches * 1000 + squadRepeats;
+        if (score < bestScore) [best, bestScore] = [{ pairs, rematches }, score];
+        if (bestScore === 0) return best;
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * Pairs `xs` with `ys` (both in rank order) with as few rematches between two coaches as possible;
+ * ties keep the rank order (1st vs 1st, ...). Extra coaches on the longer side get a bye.
+ */
+export function pairAvoidingRematches(xs: string[], ys: string[], faced: (x: string, y: string) => boolean): [string, string][] {
+  const count = Math.min(xs.length, ys.length);
+  let best: string[] = ys.slice(0, count);
+  let bestCost = Infinity;
+  const used = new Set<number>();
+  const chosen: string[] = [];
+  const search = (i: number, costSoFar: number) => {
+    if (costSoFar >= bestCost) return;
+    if (i === count) {
+      [best, bestCost] = [chosen.slice(), costSoFar];
+      return;
+    }
+    for (let j = 0; j < ys.length && bestCost > 0; j++) {
+      if (used.has(j)) continue;
+      used.add(j);
+      chosen.push(ys[j]);
+      search(i + 1, costSoFar + (faced(xs[i], ys[j]) ? 1 : 0));
+      chosen.pop();
+      used.delete(j);
+    }
+  };
+  search(0, 0);
+  return best.map((y, i) => [xs[i], y]);
 }
 
 function getDraftRound(t: Tournament, roundNumber: number): RoundInfo {

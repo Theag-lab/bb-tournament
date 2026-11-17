@@ -9,7 +9,17 @@ import {
   type Team,
   type Tournament,
 } from '@bb-tournament/shared';
-import { cancelRound, generateNextRound, pairRoundSquads, rerandomizeRound, swapRoundMatches } from './rounds';
+import {
+  cancelRound,
+  generateNextRound,
+  pairAvoidingRematches,
+  pairRoundSquads,
+  pairSquadsInOrder,
+  pickTriangle,
+  rerandomizeRound,
+  planTriangle,
+  swapRoundMatches,
+} from './rounds';
 import { launchKnockoutPhase } from './bracket';
 
 function team(id: string, poolId: string | null): Team {
@@ -483,19 +493,105 @@ describe('team format with an odd number of squads (triangle)', () => {
     assert.ok(round.every((c) => squadOf(c.team1Id) !== squadOf(c.team2Id)));
   });
 
-  test('the triangle rotates: a squad plays at most one triangle while others have not', () => {
-    const t = squads(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']);
-    const inTriangle = new Map<string, number>();
-    for (let r = 1; r <= 3; r++) {
+  test('rounds 2+: no two coaches of the triangle meet again', () => {
+    const t = squads(['A', 'B', 'C', 'D', 'E', 'F', 'G']);
+    for (let r = 1; r <= 4; r++) {
       generateNextRound(t);
       t.rounds[r - 1].status = 'launched';
-      for (const [squadId, opp] of opponents(t, r)) {
-        if (new Set(opp).size === 2) inTriangle.set(squadId, (inTriangle.get(squadId) ?? 0) + 1);
+      const tri = new Set([...opponents(t, r)].filter(([, opp]) => new Set(opp).size === 2).map(([id]) => id));
+      assert.equal(tri.size, 3);
+      for (const m of t.challenges.filter((c) => c.round === r && tri.has(squadOf(c.team1Id)))) {
+        const before = t.challenges.filter((c) => c.round !== null && c.round < r);
+        assert.ok(
+          !before.some((c) => [c.team1Id, c.team2Id].sort().join() === [m.team1Id, m.team2Id].sort().join()),
+          `${m.team1Id} and ${m.team2Id} meet again in round ${r}`
+        );
       }
       completeRound(t, r);
     }
-    assert.equal(inTriangle.size, 9);
-    assert.ok([...inTriangle.values()].every((n) => n === 1));
+  });
+
+  test('pickTriangle: bottom trio first, moving up while its coaches would meet again', () => {
+    // Standings A..G (G last). Any trio with both G and F forces a coach rematch.
+    const rematches = (tri: string[]) => (tri.includes('G') && tri.includes('F') ? 1 : 0);
+    assert.deepEqual(pickTriangle(['A', 'B', 'C', 'D', 'E', 'F', 'G'], rematches), ['G', 'E', 'D']);
+    // No rematch anywhere: plain bottom three, whether or not they already played a triangle.
+    assert.deepEqual(pickTriangle(['A', 'B', 'C', 'D', 'E']), ['E', 'D', 'C']);
+    // Every trio forces rematches: the one with the fewest.
+    assert.deepEqual(pickTriangle(['A', 'B', 'C', 'D'], (tri) => (tri.includes('A') ? 1 : 2)), ['D', 'C', 'A']);
+  });
+
+  test('planTriangle: coaches who already faced B face C this time, nobody meets again', () => {
+    const members: Record<string, string[]> = { A: ['A1', 'A2', 'A3', 'A4'], B: ['B1', 'B2', 'B3', 'B4'], C: ['C1', 'C2', 'C3', 'C4'] };
+    const prior = new Map([
+      ['A1', new Set(['B1'])],
+      ['A2', new Set(['B2'])],
+      ['B1', new Set(['A1'])],
+      ['B2', new Set(['A2'])],
+    ]);
+    const { pairs, rematches } = planTriangle(['A', 'B', 'C'], (sq) => members[sq], (id) => id[0], prior);
+    assert.equal(rematches, 0);
+    const opponentOf = (coach: string) => pairs.find((p) => p.includes(coach))!.find((x) => x !== coach)!;
+    assert.equal(opponentOf('A1')[0], 'C');
+    assert.equal(opponentOf('A2')[0], 'C');
+    assert.equal(pairs.length, 6);
+    // No history: alternating halves by rank, 1st vs 1st.
+    const plain = planTriangle(['A', 'B', 'C'], (sq) => members[sq], (id) => id[0], new Map()).pairs;
+    assert.deepEqual(plain.slice(0, 2), [['A1', 'B1'], ['A3', 'B3']]);
+  });
+
+  test('pairAvoidingRematches: avoids two coaches meeting again, rank order otherwise', () => {
+    const faced = (x: string, y: string) => x === 'A1' && y === 'B1';
+    assert.deepEqual(pairAvoidingRematches(['A1', 'A2'], ['B1', 'B2'], faced), [['A1', 'B2'], ['A2', 'B1']]);
+    assert.deepEqual(pairAvoidingRematches(['A1', 'A2'], ['B1', 'B2'], () => false), [['A1', 'B1'], ['A2', 'B2']]);
+  });
+
+  test('the same triangle again (rematch fallback): every coach faces the other squad, no coach rematch', () => {
+    const t = squads(['A', 'B', 'C']);
+    generateNextRound(t);
+    t.rounds[0].status = 'launched';
+    completeRound(t, 1);
+    generateNextRound(t);
+    const round1 = t.challenges.filter((c) => c.round === 1);
+    const round2 = t.challenges.filter((c) => c.round === 2);
+    assert.equal(round2.length, 6);
+    const opponentIn = (round: Challenge[], coach: string) => {
+      const c = round.find((m) => m.team1Id === coach || m.team2Id === coach)!;
+      return c.team1Id === coach ? c.team2Id : c.team1Id;
+    };
+    for (const coach of t.teams.map((tm) => tm.id)) {
+      assert.notEqual(squadOf(opponentIn(round2, coach)), squadOf(opponentIn(round1, coach)), `${coach} faces the same squad again`);
+    }
+  });
+
+  test('even number of squads: no two coaches meet twice over the rounds', () => {
+    // 4 squads of 4 over 5 rounds: squads must meet again, coaches never.
+    const t = squads(['A', 'B', 'C', 'D']);
+    t.roundCount = 5;
+    const seen = new Set<string>();
+    for (let r = 1; r <= 5; r++) {
+      generateNextRound(t);
+      t.rounds[r - 1].status = 'launched';
+      for (const c of t.challenges.filter((m) => m.round === r)) {
+        const key = [c.team1Id, c.team2Id].sort().join();
+        assert.ok(!seen.has(key), `${key} meet again in round ${r}`);
+        seen.add(key);
+      }
+      completeRound(t, r);
+    }
+  });
+
+  test('pairSquadsInOrder: a never-met squad first, then a met one without coach rematch', () => {
+    const met = new Map([
+      ['A', new Set(['B', 'C'])],
+      ['B', new Set(['A'])],
+      ['C', new Set(['A'])],
+    ]);
+    // A met B and C; B would force coach rematches, C would not.
+    const rematches = (pair: string[]) => (pair.includes('A') && pair.includes('B') ? 2 : 0);
+    assert.deepEqual(pairSquadsInOrder(['A', 'B', 'C', 'D'], met, rematches), [['A', 'D'], ['B', 'C']]);
+    const metD = new Map([...met, ['A', new Set(['B', 'C', 'D'])]]);
+    assert.deepEqual(pairSquadsInOrder(['A', 'B', 'C', 'D'], metD, rematches), [['A', 'C'], ['B', 'D']]);
   });
 
   test('pairing a triangle squad with another confrontation forms a new triangle', () => {
